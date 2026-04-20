@@ -39,12 +39,29 @@ Prove that a basic 3D canvas can run inside the existing React/Vite app. This ph
 
 #### Implementation spec
 
-- Choose the rendering stack. The likely default is Three.js with React Three Fiber because the app is already React and Vite.
-- Install only the minimum packages needed for a spike, such as `three`, `@react-three/fiber`, and possibly `@react-three/drei`.
-- Create a temporary full-screen 3D canvas with a camera, floor, and one simple cube.
-- Confirm that the canvas can mount and unmount without breaking the current timer app.
-- Measure rough performance on a normal desktop browser before adding richer visuals.
-- Keep this phase intentionally disposable if the rendering approach needs to change.
+- Install only `three` and `@react-three/fiber`; do not add `@react-three/drei` unless unavoidable.
+- Add a disposable `RenderingStackSpike` component with a full-screen React Three Fiber canvas, floor, lighting, and rotating cube.
+- Mount the spike only when the URL contains `?spike3d=1`.
+- Do not show any visible 3D button, link, label, menu item, or hint in the default UI.
+- Include a close button inside the active overlay.
+- Keep the normal app mounted underneath so countdown/session behavior continues.
+- Do not implement secret code detection, level data, avatars, movement, top-down view, reveal animation, or timer-in-world rendering.
+- Build requirement: `npm.cmd run build` must pass.
+
+#### Completed implementation
+
+- Added the minimum 3D dependencies.
+- Added `RenderingStackSpike` as a dev-only full-screen R3F overlay with floor, lights, grid, and rotating cube.
+- Mounted via `?spike3d=1`.
+- Added close control inside the overlay.
+- Kept the normal app mounted and default UI free of 3D affordances.
+
+#### Deferred / not included
+
+- No secret unlock.
+- No persistent 3D mode.
+- No level model.
+- No movement, avatars, timer-in-world, or reveal.
 
 ### [x] Phase 1: Secret code detection
 
@@ -54,12 +71,33 @@ Add the hidden input mechanic that detects a valid secret code without changing 
 
 #### Implementation spec
 
-- Add a local secret-code detector that listens for typed input while the app is focused.
-- Avoid obvious labels like "3D mode" or "secret world" in the default UI.
-- Keep the first secret code implementation simple, such as a local constant or environment-driven value.
-- Treat the code as a discovery mechanic, not a security boundary.
-- Emit a local unlock state when the code is entered correctly.
-- Do not yet render the 3D world in this phase.
+- Add `src/hooks/useSecretCodeUnlock.ts`.
+- Default code: `syncsesh`.
+- Allow env override via `VITE_3D_SECRET_CODE`, trimming/lowercasing and falling back to `syncsesh` if missing or blank.
+- Listen to `window` keydown while app is focused.
+- Ignore repeat, ctrl/meta/alt chords, interactive targets, and non-single printable keys.
+- Do not call `preventDefault`.
+- Maintain a rolling buffer limited to the normalized code length.
+- Match case-insensitively.
+- When matched, set local `isSecretUnlocked` to true and stop accumulating.
+- In `MainScreen`, call the hook and expose state invisibly with `data-secret-unlocked={isSecretUnlocked ? "true" : undefined}`.
+- No visible copy, button, toast, modal, hint, or 3D-related UI.
+- Keep `?spike3d=1` independent.
+
+#### Completed implementation
+
+- Added `useSecretCodeUnlock`.
+- Added default/env-driven code behavior.
+- Added hidden local unlock state.
+- Added `data-secret-unlocked` to the root `<main>`.
+- Kept the default UI unchanged.
+
+#### Deferred / not included
+
+- No 3D shell opened from the code yet.
+- No security boundary.
+- No server/session persistence.
+- No visible unlock feedback.
 
 ### [x] Phase 2: 3D mode shell
 
@@ -69,11 +107,35 @@ Use the local unlock state to switch the current user into a hidden 3D mode. Thi
 
 #### Implementation spec
 
-- Add a 3D mode component that can replace or overlay the normal timer app after unlock.
-- Keep the normal app as the default experience for users who have not entered the code.
-- Add an exit path from 3D mode back to the normal timer app.
-- Keep this phase visually simple: render only the canvas, a placeholder scene, and a minimal exit affordance.
-- Do not add the reveal animation yet.
+- Use local `isSecretUnlocked` state to open a hidden private 3D shell after the code is entered.
+- Default app remains normal timer UI until unlock.
+- Add `src/3d/ThreeDModeShell.tsx`.
+- Use existing R3F dependencies; add no new packages.
+- Render a full-screen fixed overlay with Canvas, simple dark background, ambient/directional light, floor/grid, and one placeholder object.
+- Add a minimal visible `Exit` button only inside the shell after unlock.
+- In `MainScreen`, open shell on the false-to-true unlock transition.
+- Avoid reopening automatically after Exit.
+- Keep `data-secret-unlocked` and add `data-3d-shell-open`.
+- Keep normal app mounted underneath.
+- Keep Phase 0 spike independent and above shell if both overlays are active.
+- Do not add level data, reveal, movement, top-down view, user presence, or timer-in-world rendering.
+
+#### Completed implementation
+
+- Added `ThreeDModeShell`.
+- Added shell open state in `MainScreen`.
+- Opened shell only when secret unlock transitions from false to true.
+- Added Exit control.
+- Added `data-3d-shell-open`.
+- Kept normal app mounted and Phase 0 spike independent.
+
+#### Deferred / not included
+
+- No cinematic reveal.
+- No Level 1 rendering.
+- No movement/top-down.
+- No presence.
+- No timer display inside the world.
 
 ### [x] Phase 3: Level 1 data model
 
@@ -83,11 +145,27 @@ Create the data structure that defines Level 1 so the world does not become hard
 
 #### Implementation spec
 
-- Define a Level 1 config with id, name, room dimensions, player start, top-down camera settings, and station positions.
-- Include placeholders for timer display position, collision bounds, and lighting.
-- Keep the config plain and easy to inspect.
-- Add type definitions for level data if needed.
-- Do not render the full level yet; this phase creates the source of truth.
+- Add shared level types under `src/3d/levels/types.ts`.
+- Add `src/3d/levels/level1.ts` exporting `level1Config satisfies LevelConfig`.
+- Optional `src/3d/levels/index.ts` barrel export is allowed.
+- Use plain TypeScript data, arrays for vectors/rotations, no React imports, no Three.js imports.
+- Define Level 1 with id, name, dimensions, player start, top-down camera, 8 station configs, timer display, collision bounds, and lighting.
+- Do not import config into rendering yet.
+- Do not implement room rendering, stations, timer screen, movement, registry, or presence.
+
+#### Completed implementation
+
+- Added `LevelConfig` and related types.
+- Added `level1Config` for Station Room.
+- Added dimensions, player start, top-down camera, 8 stations, timer display, collision blockers, and lighting.
+- Added barrel exports.
+
+#### Deferred / not included
+
+- No rendering from the config yet.
+- No registry.
+- No station/user mapping.
+- No level selection.
 
 ### [x] Phase 4: Level 1 room shell
 
@@ -97,11 +175,30 @@ Render the basic Level 1 room from the level config. This phase achieves W11 and
 
 #### Implementation spec
 
-- Render floor, walls, and simple lighting using the Level 1 config.
-- Add a clear sense of room scale.
-- Keep all geometry procedural and lightweight.
-- Avoid decorative complexity in this phase.
-- Confirm the 3D mode still mounts, unmounts, and exits cleanly.
+- Add `src/3d/Level1RoomShell.tsx`.
+- Consume `level1Config`.
+- Replace placeholder scene in `ThreeDModeShell` with Level 1 room shell.
+- Render floor, four walls, simple lighting, and grid/scale cue using Level 1 dimensions.
+- Use Level 1 lighting config for ambient/directional/point lights; ignore target if needed.
+- Use player start for static camera position if feasible, with simple look-at helper.
+- Keep Exit and overlay behavior intact.
+- Keep Phase 0 spike independent and above shell.
+- Do not render stations, timer display, collision blockers, avatars, users, reveal, movement, top-down, registry, or level selection.
+
+#### Completed implementation
+
+- Added `Level1RoomShell`.
+- Rendered procedural floor, walls, lights, and grid.
+- Swapped shell placeholder scene for Level 1 room.
+- Kept shell/Exit/spike behavior intact.
+
+#### Deferred / not included
+
+- No stations.
+- No timer surface.
+- No collision behavior.
+- No user presence.
+- No reveal or movement.
 
 ### [x] Phase 5: Computer stations
 
@@ -111,11 +208,28 @@ Add the desks/computers that explain the fiction: every participant begins behin
 
 #### Implementation spec
 
-- Render a desk and computer at each station position from the Level 1 config.
-- Keep each station simple: desk surface, monitor, chair or seated marker.
-- Make stations visually readable from first-person and top-down camera angles.
-- Reserve a screen surface on each monitor for later timer/session rendering.
-- Do not map real users to stations yet.
+- Add `src/3d/ComputerStation.tsx`.
+- Render one static procedural desk/computer/chair marker per `level1Config.stations`.
+- Use root group `position={station.position}` and `rotation={station.rotation}`.
+- Use local negative Z as monitor side and local positive Z as chair/seated side.
+- Build stations from lightweight boxes: desk surface, legs, monitor stand/body, blank reserved monitor screen, chair/seated marker, and optional keyboard slab.
+- Keep monitor screen blank.
+- Integrate by mapping stations in `Level1RoomShell`.
+- Do not map real users, render avatars, names, presence, timer content, collision blockers, reveal, movement, top-down, registry, or level selection.
+
+#### Completed implementation
+
+- Added `ComputerStation`.
+- Added procedural desks/computers/chair markers.
+- Mapped all Level 1 stations in the room shell.
+- Reserved blank monitor screen surfaces.
+
+#### Deferred / not included
+
+- No station timer content.
+- No real user mapping.
+- No avatars/presence markers.
+- No synced movement.
 
 ### [x] Phase 6: Timer screen in world
 
@@ -125,12 +239,32 @@ Render the current timer/session state on a surface inside Level 1. This phase a
 
 #### Implementation spec
 
-- Add a readable 3D timer display on a computer monitor or central wall display.
-- Source all timer text from the existing session/countdown display state.
-- Show at least phase and timer text.
-- Keep the display readable at the default camera position.
-- Do not add room-wide effects yet.
-- Keep all countdown math sourced from the existing session state and sync timing.
+- Render current synchronized timer/session display on a readable central wall surface.
+- Source all timer text from existing countdown display logic; do not duplicate countdown math.
+- Move `useCountdownDisplay(state)` up into `MainScreen`.
+- Pass `countdownDisplay` to `TimerPanel` and `ThreeDModeShell`.
+- Update `TimerPanel` to accept `countdownDisplay`.
+- Pass `countdownDisplay` through `ThreeDModeShell` to `Level1RoomShell`.
+- Add `src/3d/WorldTimerDisplay.tsx` using an HTML canvas texture applied to a plane/thin display frame.
+- Use `level1Config.timerDisplay` for position, rotation, and size.
+- Show at least `countdownDisplay.timerText` and `countdownDisplay.phase`.
+- Keep station monitors blank.
+- Do not add room-wide effects, presence, avatars, movement, top-down, reveal, registry, or phase feedback.
+
+#### Completed implementation
+
+- Lifted `useCountdownDisplay` into `MainScreen`.
+- Passed `countdownDisplay` into normal `TimerPanel` and the 3D shell.
+- Added `WorldTimerDisplay` with canvas texture.
+- Rendered central wall timer with timer text, phase, and subheadline.
+- Kept station screens blank.
+
+#### Deferred / not included
+
+- No station monitor content.
+- No phase-driven room effects yet.
+- No countdown math duplication.
+- No presence or controls changes.
 
 ### [x] Phase 7: Camera pull-back reveal
 
@@ -140,12 +274,35 @@ Replace the hard switch into 3D mode with the desired cinematic reveal. This pha
 
 #### Implementation spec
 
-- Start the 3D camera tightly framed on the timer surface.
-- Animate the camera backward to reveal the computer station and room.
-- End the reveal at the default first-person spawn position.
-- Ensure the transition can complete even if assets load slowly.
-- Add a skip path for repeat viewers or poor-performance devices.
-- Keep the session timer updating during the animation.
+- Replace hard entry into the shell with a cinematic camera pull-back reveal.
+- Every time `ThreeDModeShell` mounts, start in reveal state.
+- Start camera near the central wall timer display, looking at the timer surface.
+- Animate backward over about 3200ms to reveal the room and stations.
+- End at `level1Config.playerStart.position`, looking at `[0, 1.2, 0]`.
+- Use `useFrame`; add no dependencies.
+- Add local reveal state: `revealing | complete`.
+- Add a minimal `Skip` button visible only while revealing.
+- Skip snaps to final camera pose and completes reveal.
+- Keep Exit visible and working.
+- Add `data-reveal-state`.
+- Keep timer display mounted/updating during reveal.
+- Do not add movement, top-down, presence, avatars, registry, level selection, or phase effects.
+
+#### Completed implementation
+
+- Added reveal camera controller.
+- Added reveal state and Skip button.
+- Animated from timer close-up to player start.
+- Kept timer display live during reveal.
+- Added invisible reveal state attribute.
+
+#### Deferred / not included
+
+- No WASD movement.
+- No Tab top-down.
+- No user presence.
+- No synced avatars.
+- No level selection.
 
 ### [x] Phase 8: First-person WASD movement
 
@@ -155,12 +312,39 @@ Allow the unlocked user to walk through Level 1 in first person. This phase achi
 
 #### Implementation spec
 
-- Implement WASD movement for the first-person camera.
-- Keep movement constrained to the Level 1 room bounds.
-- Add simple collision or soft boundaries for walls and major objects.
-- Keep movement speed comfortable for a small room.
-- Do not sync movement to other users yet.
-- Verify that movement controls do not break the existing hold-to-ready flow.
+- Add local-only WASD movement after reveal completes.
+- Adjust reveal controller so it snaps final pose once and then stops writing camera position.
+- Movement controller should be the only camera-position writer after reveal completion.
+- Skip should snap once to final pose, then allow movement.
+- Track only `KeyW`, `KeyA`, `KeyS`, `KeyD`.
+- Ignore repeat, ctrl/meta/alt chords, interactive targets, and non-WASD keys.
+- Do not handle or block Space or Tab.
+- Prevent default only for WASD keys while shell is open.
+- Clear active keys on blur and unmount.
+- Use `useFrame` movement with speed `2.2` units/sec.
+- Keep camera Y fixed at player start height.
+- Use fixed forward world negative Z and strafe right positive X for the original implementation.
+- Normalize diagonal movement.
+- Clamp to room collision bounds with player radius `0.35`.
+- Respect blockers as inflated X/Z rectangles with simple slide fallback.
+- Enable movement only when reveal state is complete.
+- Do not sync movement, send events, modify session state, add top-down view, user presence, avatars, registry, or phase effects.
+
+#### Completed implementation
+
+- Added local WASD movement controller.
+- Made reveal final pose a one-time snap.
+- Added room bounds/blocker collision and slide fallback.
+- Cleared active keys on blur/unmount.
+- Kept movement local and session-independent.
+- Later hardening moved the player spawn out of the south station blocker and made WASD move relative to camera yaw.
+
+#### Deferred / not included
+
+- No movement sync.
+- No remote avatars.
+- No new session events.
+- Original phase did not include mouse look or pointer lock; drag-look was added later as a control enrichment.
 
 ### [x] Phase 9: Tab top-down view
 
@@ -170,12 +354,34 @@ Add the alternate map-like camera view. This phase achieves W9.
 
 #### Implementation spec
 
-- Pressing Tab should switch to a top-down camera view.
-- Prefer hold-to-view for the first implementation.
-- Use the top-down camera settings from the Level 1 config.
-- Keep station positions and the local user position readable.
-- Return cleanly to first-person view when Tab is released.
-- Verify that Tab behavior does not conflict with browser or Discord focus expectations.
+- Add hold-to-view Tab top-down camera mode inside unlocked shell.
+- Active only while shell is open and reveal is complete.
+- On valid Tab keydown: preventDefault and set top-down active true.
+- On valid Tab keyup/window blur/unmount: set top-down active false.
+- Ignore repeat, ctrl/meta/alt chords, interactive targets, and Space.
+- Use `level1Config.topDownCamera` position/target.
+- Preserve first-person camera position before entering top-down and restore it on release.
+- Restore fixed first-person look direction on release.
+- Pause WASD movement while top-down is active.
+- Add `data-camera-view`.
+- Show local-only floor marker at saved first-person position.
+- Do not implement user presence, avatars, movement sync, registry, phase effects, level selection, or new dependencies.
+
+#### Completed implementation
+
+- Added top-down camera controller.
+- Added top-down active state and `data-camera-view`.
+- Preserved/restored first-person camera pose.
+- Paused WASD while top-down was active.
+- Added local-only floor marker.
+- Later control enrichment changed Tab from hold-to-view to toggle-to-view and preserves the current first-person look direction.
+
+#### Deferred / not included
+
+- No user/remote position display.
+- No avatars.
+- No synced top-down data.
+- No level selection.
 
 ### [x] Phase 10: Station-based user presence
 
@@ -185,13 +391,35 @@ Represent all current session users in the 3D world without syncing free-roam mo
 
 #### Implementation spec
 
-- Map current session users into available Level 1 station positions.
-- Assign each participant a stable station for the current session.
-- Show a simple seated avatar, silhouette, or marker at each occupied station.
-- Show display name, avatar color, avatar image, or initials near the station.
-- Indicate whether the user is local, host, idle, ready, or spectating.
-- Keep this presence derived from existing session state.
-- Do not add networked avatar movement yet.
+- Represent current `DabSyncState.users` in Level 1 by placing each user at a station.
+- Pass `state.users`, `state.localProfile.id`, and `state.session.ownerId` from `MainScreen` into `ThreeDModeShell` and `Level1RoomShell`.
+- Assign users deterministically by sorting `joinedAt` ascending, then `id` ascending, mapping to `level1Config.stations[index]`.
+- Render up to station count; ignore overflow.
+- Add `StationOccupantMarker`.
+- Render static seated procedural marker at station chair side.
+- Show display name/status/initials near station using canvas texture labels or equivalent lightweight procedural approach.
+- Do not fetch/render `avatarUrl` textures.
+- Indicate local user, host/owner, ready, idle, spectating, and sim/test user with simple colors/shapes/status text.
+- Keep markers seated; they do not follow free-roam camera.
+- Derive all presence from existing `SessionUser`; no new sync messages, events, fields, or movement sync.
+- Do not implement free-roaming synced avatars, registry changes, phase effects, or level selection.
+
+#### Completed implementation
+
+- Passed user/local/owner data into the 3D shell.
+- Added deterministic station assignment in the room shell.
+- Added `StationOccupantMarker` with procedural seated markers.
+- Added canvas-text labels via declarative `<canvasTexture>`.
+- Added local/host/status/sim visual indicators.
+- Avoided direct `three` imports and avatar image textures.
+
+#### Deferred / not included
+
+- No free-roam synced avatars.
+- No movement sync.
+- No avatar image textures.
+- No new session/sync schema.
+- Overflow users ignored.
 
 ### [x] Phase 11: 3D session phase feedback
 
@@ -201,13 +429,34 @@ Make Level 1 react to the same session phases as the normal timer app. This phas
 
 #### Implementation spec
 
-- Reflect idle, lobby, armed, precount, countdown, and completed phases in the 3D room.
-- Use simple lighting, monitor glow, screen color, or small effects.
-- Keep effects lightweight and readable.
-- During armed state, make the room visibly tense or charged.
-- During precount, focus attention on the timer surface.
-- During completed state, trigger a restrained celebration effect.
-- Avoid adding sound or heavy particles in this phase unless they are trivial.
+- Add lightweight phase-driven visual feedback in Level 1 based on `countdownDisplay.phase` and `countdownDisplay.isUrgent`.
+- Add `src/3d/phaseVisuals.ts` central mapping/helper.
+- Use existing `countdownDisplay`; do not duplicate countdown math or change session semantics.
+- Update room colors/lights/grid/timer glow from phase visuals.
+- Pass phase visuals to `WorldTimerDisplay` and `ComputerStation`.
+- `WorldTimerDisplay` should use phase timer background/accent colors while keeping same timer text data.
+- `ComputerStation` should tint blank monitor screens from phase monitor glow; no station timer content.
+- Add restrained completed burst near central timer with small procedural geometry only.
+- Add subtle timer-area light pulse for armed/precount/countdown if lightweight.
+- Do not add sound, heavy particles, dependencies, sync messages, events, registry changes, selectors, or controls.
+- Preserve station readability, WASD, Tab, reveal, Exit, timer display, and Phase 0 spike behavior.
+
+#### Completed implementation
+
+- Added `phaseVisuals.ts`.
+- Applied phase-driven room background, floor, wall, grid, lighting, timer glow, and monitor glow.
+- Updated central timer display canvas colors from phase visuals.
+- Added subtle timer-area pulse.
+- Added restrained completed burst.
+- Kept session state and countdown math untouched.
+
+#### Deferred / not included
+
+- No sound.
+- No heavy particles/post-processing.
+- No new phase semantics.
+- No station timer content.
+- No networking or selection changes.
 
 ### [x] Phase 12: Level registry
 
@@ -217,11 +466,34 @@ Prepare the codebase for future levels without building Level 2 yet. This phase 
 
 #### Implementation spec
 
-- Add a level registry that can return Level 1 by id.
-- Keep level selection separate from level rendering.
-- Support metadata, spawn points, station positions, camera presets, collision bounds, lights, and display surfaces.
-- Ensure Level 1 is loaded through the registry instead of direct imports everywhere.
-- Do not add a visible level selector yet.
+- Add static registry in `src/3d/levels/registry.ts`.
+- Export `DEFAULT_LEVEL_ID`, `getLevelConfig(levelId?: string)`, and `getAvailableLevels()`.
+- Registry contains only Level 1.
+- `getLevelConfig` accepts string and falls back to Level 1 for unknown ids.
+- Update `levels/index.ts` to export registry API and types.
+- Migrate app rendering away from direct `level1Config` imports.
+- `ThreeDModeShell` gets `levelConfig = getLevelConfig(DEFAULT_LEVEL_ID)` and passes it to internal controllers and `Level1RoomShell`.
+- `Level1RoomShell` accepts `levelConfig: LevelConfig`.
+- `WorldTimerDisplay` accepts `timerDisplay: TimerDisplayConfig`.
+- `ComputerStation` and `StationOccupantMarker` continue receiving station configs.
+- Do not add Level 2, selector UI, host switching, sync fields, events, URL selection, local storage, or persistence.
+- Current behavior remains always Level 1.
+
+#### Completed implementation
+
+- Added static level registry.
+- Exported registry API.
+- Migrated shell/room/timer display to resolved `levelConfig`.
+- Kept Level 1 as the only registered/default level.
+- Preserved current behavior.
+
+#### Deferred / not included
+
+- No Level 2.
+- No visible selector.
+- No URL/dev level selection.
+- No sync or persistence for level choice.
+- No async loading.
 
 ### [x] Phase 13: Hidden-world fallback and recovery
 
@@ -231,12 +503,38 @@ Make the secret 3D mode recoverable if something fails. This phase supports W1 t
 
 #### Implementation spec
 
-- Add graceful fallback for WebGL failure.
-- Add loading and error states for the 3D mode.
-- Preserve an exit path back to the normal timer app.
-- Keep the normal timer app as the stable fallback experience.
-- Add a simple manual test checklist for entering, exiting, unlocking, movement, Tab view, and timer updates.
-- Confirm that failed 3D loading does not break the regular activity.
+- Add WebGL preflight in `ThreeDModeShell`.
+- If WebGL cannot be created, show recovery panel instead of Canvas.
+- Add loading/checking states while shell checks/mounts Canvas.
+- Add `ThreeDModeErrorBoundary` around Canvas/3D subtree.
+- Render recovery panel if 3D render throws.
+- Recovery/loading UI exists only inside unlocked shell overlay.
+- Recovery/loading UI includes Exit path.
+- Normal timer app remains mounted underneath and usable after Exit.
+- Keep default app showing no 3D affordance before unlock.
+- Preserve reveal, Skip, WASD, Tab, timer display, station presence, phase feedback, and Phase 0 spike behavior on success.
+- Add `docs/3d/manual-test-checklist.md`.
+- Add minimal CSS only if needed.
+- Do not add dependencies, sync events, level selection, persistence, or gameplay changes.
+
+#### Completed implementation
+
+- Added `ThreeDStatus` checking/loading/ready/unsupported/error states.
+- Added WebGL preflight.
+- Added in-shell loading/recovery panel with Exit.
+- Added `ThreeDModeErrorBoundary`.
+- Added `data-3d-status`.
+- Added manual test checklist doc.
+- Added minimal panel CSS.
+- Kept normal app mounted underneath.
+
+#### Deferred / not included
+
+- No context-loss recovery beyond startup/render failure handling.
+- No automated browser/WebGL-disabled test.
+- No gameplay changes.
+- No new sync/session behavior.
+- No dependencies.
 
 ### [x] Phase 14: Future-level planning pass
 
@@ -246,11 +544,37 @@ Document how richer future levels, secrets, interactables, and stronger multipla
 
 #### Implementation spec
 
-- Add notes for future level themes and unlock paths.
-- Define what belongs in a future level config versus global 3D systems.
-- Identify where interactable objects would plug into the session state or sync layer.
-- Identify what would be needed for free-roaming synced avatars.
-- Keep this phase mostly documentation unless tiny code comments or type placeholders are useful.
+- Documentation-only.
+- Add `docs/3d/future-levels.md`.
+- Use sections for purpose, current foundation, future level themes, future unlock paths, level config responsibilities, global 3D system responsibilities, interactable object model, session and sync integration points, free-roaming synced avatars, level registry evolution, performance and safety guardrails, suggested future phase order, and non-goals for now.
+- Document how richer levels, secrets, interactables, and stronger multiplayer presence should build on Level 1.
+- Define what belongs in future level configs versus global 3D systems.
+- Identify where interactables would plug into session/sync flow.
+- Identify what is needed for free-roaming synced avatars.
+- Do not implement Level 2, selectors, controls, session events, sync payloads, avatar networking, gameplay systems, persistence, asset pipeline, or code/type placeholders.
+- Do not edit code files.
+- Run `npm.cmd run build` as sanity check.
+
+#### Completed implementation
+
+- Added `docs/3d/future-levels.md`.
+- Documented future level themes and unlock paths.
+- Documented level-config versus global-system responsibilities.
+- Documented interactable flow and sync integration points.
+- Documented free-roaming avatar requirements.
+- Documented registry evolution, guardrails, future phase order, and non-goals.
+- Kept implementation documentation-only.
+
+#### Deferred / not included
+
+- No Level 2.
+- No visible selector.
+- No new controls.
+- No session/sync schema changes.
+- No avatar networking.
+- No gameplay interactables.
+- No persistence or asset pipeline.
+- No code/type placeholders.
 
 Implementation principles:
 

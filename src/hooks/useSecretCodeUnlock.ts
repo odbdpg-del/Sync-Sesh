@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 const DEFAULT_SECRET_CODE = "syncsesh";
 
@@ -18,13 +18,16 @@ function getSecretCode() {
 
 export function useSecretCodeUnlock() {
   const [isSecretUnlocked, setIsSecretUnlocked] = useState(false);
+  const [unlockCount, setUnlockCount] = useState(0);
   const bufferRef = useRef("");
   const secretCode = useMemo(getSecretCode, []);
+  const resetSecretEntry = useCallback(() => {
+    bufferRef.current = "";
+  }, []);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (
-        isSecretUnlocked ||
         event.repeat ||
         event.ctrlKey ||
         event.metaKey ||
@@ -40,6 +43,8 @@ export function useSecretCodeUnlock() {
 
       if (nextBuffer === secretCode) {
         setIsSecretUnlocked(true);
+        setUnlockCount((currentCount) => currentCount + 1);
+        bufferRef.current = "";
       }
     };
 
@@ -48,9 +53,11 @@ export function useSecretCodeUnlock() {
     return () => {
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [isSecretUnlocked, secretCode]);
+  }, [secretCode]);
 
   return {
     isSecretUnlocked,
+    unlockCount,
+    resetSecretEntry,
   };
 }

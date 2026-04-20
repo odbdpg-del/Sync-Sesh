@@ -67,23 +67,23 @@ function createLabelCanvas(user: SessionUser, isLocal: boolean, isHost: boolean)
 
   context.fillStyle = accentColor;
   context.beginPath();
-  context.arc(76, 72, 42, 0, Math.PI * 2);
+  context.arc(76, 68, 44, 0, Math.PI * 2);
   context.fill();
 
   context.fillStyle = "#03060c";
-  context.font = "700 34px Arial, sans-serif";
+  context.font = "700 32px Arial, sans-serif";
   context.textAlign = "center";
   context.textBaseline = "middle";
-  context.fillText(user.avatarSeed.slice(0, 2).toUpperCase(), 76, 74);
+  context.fillText(user.avatarSeed.slice(0, 2).toUpperCase(), 76, 70);
 
   context.textAlign = "left";
   context.fillStyle = "#f4f7ff";
-  context.font = "700 42px Arial, sans-serif";
-  context.fillText(truncateLabel(user.displayName, 16), 142, 68);
+  context.font = "700 40px Arial, sans-serif";
+  context.fillText(truncateLabel(user.displayName, 16), 142, 66);
 
   context.fillStyle = accentColor;
-  context.font = "700 25px Arial, sans-serif";
-  context.fillText(truncateLabel(getStatusText(user, isLocal, isHost), 25), 142, 124);
+  context.font = "700 24px Arial, sans-serif";
+  context.fillText(truncateLabel(`${getStatusText(user, isLocal, isHost)} | STATION`, 28), 142, 122);
 
   return canvas;
 }
@@ -105,22 +105,22 @@ export function StationOccupantMarker({ user, station, isLocal, isHost }: Statio
   return (
     <group position={station.position} rotation={station.rotation}>
       <mesh position={[0, 0.9, 0.82]}>
-        <boxGeometry args={[0.42, 0.62, 0.34]} />
+        <boxGeometry args={[0.46, 0.68, 0.36]} />
         <OccupantMaterial color={bodyColor} opacity={markerOpacity} />
       </mesh>
 
-      <mesh position={[0, 1.32, 0.74]}>
-        <sphereGeometry args={[0.22, 18, 14]} />
+      <mesh position={[0, 1.34, 0.74]}>
+        <sphereGeometry args={[0.24, 20, 16]} />
         <OccupantMaterial color={isHost ? "#f8d36a" : statusColor} opacity={markerOpacity} />
       </mesh>
 
-      <mesh position={[0, 0.52, 1.02]}>
-        <boxGeometry args={[0.58, 0.16, 0.42]} />
+      <mesh position={[0, 0.54, 1.02]}>
+        <boxGeometry args={[0.62, 0.18, 0.44]} />
         <OccupantMaterial color="#202b3d" opacity={markerOpacity} />
       </mesh>
 
       <mesh position={[0, 0.08, 0.95]} rotation={[-Math.PI / 2, 0, 0]}>
-        <ringGeometry args={[0.34, 0.43, 32]} />
+        <ringGeometry args={[0.36, 0.46, 32]} />
         <meshBasicMaterial args={[{ color: isLocal ? "#57f3ff" : statusColor, transparent: markerOpacity < 1, opacity: markerOpacity }]} />
       </mesh>
 
@@ -138,8 +138,8 @@ export function StationOccupantMarker({ user, station, isLocal, isHost }: Statio
         </mesh>
       ) : null}
 
-      <mesh position={[0, 1.92, 0.92]}>
-        <planeGeometry args={[1.42, 0.54]} />
+      <mesh position={[0, 2.02, 0.92]}>
+        <planeGeometry args={[1.56, 0.6]} />
         <meshBasicMaterial args={[{ transparent: true, side: DOUBLE_SIDE, toneMapped: false }]}>
           <canvasTexture key={textureKey} attach="map" args={[labelCanvas]} />
         </meshBasicMaterial>

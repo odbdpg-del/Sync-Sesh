@@ -25,6 +25,8 @@ export interface TimerConfig {
   durationSeconds: number;
   preCountSeconds: number;
   allowLateJoinSpectators: boolean;
+  lateJoinersJoinReady: boolean;
+  autoJoinOnLoad: boolean;
   presets: number[];
 }
 
@@ -55,6 +57,37 @@ export interface SessionMetrics {
   idleCount: number;
 }
 
+export interface RangeScoreSubmission {
+  levelId: string;
+  score: number;
+  shots: number;
+  hits: number;
+  misses: number;
+  accuracy: number;
+  durationMs: number;
+}
+
+export interface RangeScoreResult extends RangeScoreSubmission {
+  roundNumber: number;
+  completedAt: string;
+  userId: string;
+  displayName: string;
+  avatarSeed: string;
+  avatarUrl?: string;
+  isTestUser?: boolean;
+}
+
+export interface FreeRoamPresenceUpdate {
+  levelId: string;
+  position: readonly [number, number, number];
+  yaw: number;
+}
+
+export interface FreeRoamPresenceState extends FreeRoamPresenceUpdate {
+  userId: string;
+  updatedAt: string;
+}
+
 export interface SyncStatus {
   mode: SyncTransportMode;
   connection: SyncConnectionState;
@@ -69,6 +102,8 @@ export interface SessionSnapshot {
   users: SessionUser[];
   timerConfig: TimerConfig;
   countdown: CountdownTimeline;
+  rangeScoreboard: RangeScoreResult[];
+  freeRoamPresence: FreeRoamPresenceState[];
 }
 
 export interface DabSyncState extends SessionSnapshot {
@@ -114,4 +149,9 @@ export type SessionEvent =
   | { type: "admin_reset_session" }
   | { type: "admin_add_test_participant" }
   | { type: "admin_toggle_test_participants_ready" }
-  | { type: "admin_clear_test_participants" };
+  | { type: "admin_clear_test_participants" }
+  | { type: "admin_set_late_joiners_join_ready"; enabled: boolean }
+  | { type: "admin_set_auto_join_on_load"; enabled: boolean }
+  | { type: "range_score_submit"; result: RangeScoreSubmission }
+  | { type: "free_roam_presence_update"; presence: FreeRoamPresenceUpdate }
+  | { type: "free_roam_presence_clear" };

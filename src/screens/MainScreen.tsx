@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { AdminPanel } from "../components/AdminPanel";
 import { AppHeader } from "../components/AppHeader";
 import { LobbyPanel } from "../components/LobbyPanel";
@@ -12,6 +12,7 @@ import { useAppViewportControls } from "../hooks/useAppViewportControls";
 import { useCountdownDisplay } from "../hooks/useCountdownDisplay";
 import { useDabSyncSession } from "../hooks/useDabSyncSession";
 import { useSecretCodeUnlock } from "../hooks/useSecretCodeUnlock";
+import { useSoundCloudPlayer } from "../hooks/useSoundCloudPlayer";
 
 function hasRenderingSpikeParam() {
   return new URLSearchParams(window.location.search).get("spike3d") === "1";
@@ -20,9 +21,9 @@ function hasRenderingSpikeParam() {
 export function MainScreen() {
   const [isRenderingSpikeOpen, setIsRenderingSpikeOpen] = useState(hasRenderingSpikeParam);
   const [isThreeDModeOpen, setIsThreeDModeOpen] = useState(false);
+  const [soundCloudWaveformBarCount, setSoundCloudWaveformBarCount] = useState(60);
   const { zoomPercent } = useAppViewportControls();
-  const { isSecretUnlocked } = useSecretCodeUnlock();
-  const wasSecretUnlockedRef = useRef(isSecretUnlocked);
+  const { isSecretUnlocked, resetSecretEntry, unlockCount } = useSecretCodeUnlock();
   const {
     state,
     lobbyState,
@@ -38,23 +39,28 @@ export function MainScreen() {
     addTestParticipant,
     toggleTestParticipantsReady,
     clearTestParticipants,
+    setLateJoinersJoinReady,
+    setAutoJoinOnLoad,
+    submitRangeScore,
+    updateFreeRoamPresence,
+    clearFreeRoamPresence,
   } = useDabSyncSession();
   const countdownDisplay = useCountdownDisplay(state);
   const { isOpen: isAdminOpen, setIsOpen: setIsAdminOpen } = useAdminPanelHotkey(lobbyState.canUseAdminTools);
+  const soundCloudPlayer = useSoundCloudPlayer({ waveformBarCount: soundCloudWaveformBarCount });
 
   useEffect(() => {
-    if (isSecretUnlocked && !wasSecretUnlockedRef.current) {
+    if (unlockCount > 0) {
       setIsThreeDModeOpen(true);
     }
-
-    wasSecretUnlockedRef.current = isSecretUnlocked;
-  }, [isSecretUnlocked]);
+  }, [unlockCount]);
 
   return (
     <main
       className="app-shell"
       data-secret-unlocked={isSecretUnlocked ? "true" : undefined}
       data-3d-shell-open={isThreeDModeOpen ? "true" : undefined}
+      onClickCapture={!isThreeDModeOpen ? resetSecretEntry : undefined}
     >
       <AppHeader session={state.session} syncStatus={state.syncStatus} zoomPercent={zoomPercent} />
 
@@ -83,19 +89,23 @@ export function MainScreen() {
         />
       </div>
 
-      <SoundCloudPanel />
+      <SoundCloudPanel waveformBarCount={soundCloudWaveformBarCount} player={soundCloudPlayer} />
 
       <AdminPanel
         state={state}
         lobbyState={lobbyState}
         isOpen={isAdminOpen}
+        waveformBarCount={soundCloudWaveformBarCount}
         onClose={() => setIsAdminOpen(false)}
+        onSetWaveformBarCount={setSoundCloudWaveformBarCount}
         onForceStartRound={forceStartRound}
         onForceCompleteRound={forceCompleteRound}
         onResetSession={adminResetSession}
         onAddTestParticipant={addTestParticipant}
         onToggleTestParticipantsReady={toggleTestParticipantsReady}
         onClearTestParticipants={clearTestParticipants}
+        onSetLateJoinersJoinReady={setLateJoinersJoinReady}
+        onSetAutoJoinOnLoad={setAutoJoinOnLoad}
       />
 
       <StatusFooter syncStatus={state.syncStatus} sdkState={sdkState} />
@@ -106,6 +116,14 @@ export function MainScreen() {
           users={state.users}
           localUserId={state.localProfile.id}
           ownerId={state.session.ownerId}
+          roundNumber={state.session.roundNumber}
+          rangeScoreboard={state.rangeScoreboard}
+          onSubmitRangeScore={submitRangeScore}
+          freeRoamPresence={state.freeRoamPresence}
+          onUpdateFreeRoamPresence={updateFreeRoamPresence}
+          onClearFreeRoamPresence={clearFreeRoamPresence}
+          jukeboxDisplay={soundCloudPlayer.jukeboxDisplay}
+          jukeboxActions={soundCloudPlayer.jukeboxActions}
           onExit={() => setIsThreeDModeOpen(false)}
         />
       ) : null}
