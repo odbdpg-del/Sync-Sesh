@@ -36,6 +36,9 @@ export class WebSocketSyncClient implements SyncClient {
   };
   private socket?: WebSocket;
   private pingIntervalId?: number;
+  private reconnectTimeoutId?: number;
+  private reconnectAttempt = 0;
+  private destroyed = false;
 
   constructor({ localProfile, serverUrl, sessionId }: WebSocketSyncClientOptions) {
     this.localProfile = localProfile;
@@ -44,10 +47,12 @@ export class WebSocketSyncClient implements SyncClient {
   }
 
   async connect() {
+    this.destroyed = false;
+    this.clearReconnectTimeout();
     this.syncStatus = {
       ...this.syncStatus,
       connection: "connecting",
-      warning: "Connecting to sync server",
+      warning: this.reconnectAttempt > 0 ? "Reconnecting to sync server" : "Connecting to sync server",
     };
     this.emit();
 
@@ -65,15 +70,16 @@ export class WebSocketSyncClient implements SyncClient {
         this.syncStatus = {
           ...this.syncStatus,
           connection: "error",
-          warning: "Sync server timed out while connecting.",
+          warning: "Sync server is still waking up. Retrying shortly.",
         };
         this.emit();
         this.socket?.close();
         finish();
-      }, 5000);
+      }, 15000);
 
       socket.addEventListener("open", () => {
         window.clearTimeout(timeoutId);
+        this.reconnectAttempt = 0;
         this.syncStatus = {
           ...this.syncStatus,
           connection: "connected",
@@ -157,7 +163,7 @@ export class WebSocketSyncClient implements SyncClient {
         this.syncStatus = {
           ...this.syncStatus,
           connection: "error",
-          warning: "Unable to reach the sync server.",
+          warning: "Unable to reach the sync server. Retrying...",
         };
         this.emit();
         finish();
@@ -175,19 +181,22 @@ export class WebSocketSyncClient implements SyncClient {
           warning:
             this.syncStatus.connection === "error"
               ? this.syncStatus.warning
-              : "Sync disconnected. Reconnect the server to restore alignment.",
+              : "Sync disconnected. Retrying...",
         };
         this.emit();
+        this.scheduleReconnect();
         finish();
       });
     });
   }
 
   disconnect() {
+    this.destroyed = true;
     if (this.pingIntervalId !== undefined) {
       window.clearInterval(this.pingIntervalId);
     }
 
+    this.clearReconnectTimeout();
     this.socket?.close();
   }
 
@@ -236,6 +245,26 @@ export class WebSocketSyncClient implements SyncClient {
 
     for (const listener of this.listeners) {
       listener(state);
+    }
+  }
+
+  private scheduleReconnect() {
+    if (this.destroyed || this.reconnectTimeoutId !== undefined) {
+      return;
+    }
+
+    this.reconnectAttempt += 1;
+    const delayMs = Math.min(2000 * this.reconnectAttempt, 10000);
+    this.reconnectTimeoutId = window.setTimeout(() => {
+      this.reconnectTimeoutId = undefined;
+      void this.connect();
+    }, delayMs);
+  }
+
+  private clearReconnectTimeout() {
+    if (this.reconnectTimeoutId !== undefined) {
+      window.clearTimeout(this.reconnectTimeoutId);
+      this.reconnectTimeoutId = undefined;
     }
   }
 }

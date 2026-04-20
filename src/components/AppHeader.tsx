@@ -1,4 +1,5 @@
 import type { SessionInfo, SyncStatus } from "../types/session";
+import syncSeshLogo from "../../images/icon/ChatGPT Image Apr 19, 2026, 04_54_54 PM.png";
 
 interface AppHeaderProps {
   session: SessionInfo;
@@ -13,11 +14,7 @@ export function AppHeader({ session, syncStatus, zoomPercent }: AppHeaderProps) 
     <header className="panel app-header">
       <div className="brand-lockup">
         <div className="brand-logo-frame">
-          <img
-            src="/images/icon/ChatGPT%20Image%20Apr%2019,%202026,%2004_54_54%20PM.png"
-            alt="Sync Sesh logo"
-            className="brand-logo"
-          />
+          <img src={syncSeshLogo} alt="Sync Sesh logo" className="brand-logo" />
         </div>
         <div className="brand-copy">
           <p className="eyebrow">Discord Activity</p>
