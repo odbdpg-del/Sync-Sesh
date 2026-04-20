@@ -3,9 +3,10 @@ import type { SessionInfo, SyncStatus } from "../types/session";
 interface AppHeaderProps {
   session: SessionInfo;
   syncStatus: SyncStatus;
+  zoomPercent: number;
 }
 
-export function AppHeader({ session, syncStatus }: AppHeaderProps) {
+export function AppHeader({ session, syncStatus, zoomPercent }: AppHeaderProps) {
   const sessionLabel = session.id.startsWith("discord-") ? "DISCORD" : session.code;
 
   return (
@@ -39,6 +40,10 @@ export function AppHeader({ session, syncStatus }: AppHeaderProps) {
         <div className="header-pill">
           <span className="meta-label">Sync</span>
           <strong className={`sync-pill sync-${syncStatus.connection}`}>{syncStatus.connection}</strong>
+        </div>
+        <div className="header-pill">
+          <span className="meta-label">Zoom</span>
+          <strong>{zoomPercent}%</strong>
         </div>
       </div>
     </header>

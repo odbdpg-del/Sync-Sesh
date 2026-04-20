@@ -12,3 +12,37 @@ interface ImportMetaEnv {
 interface ImportMeta {
   readonly env: ImportMetaEnv;
 }
+
+interface SoundCloudWidgetSound {
+  title?: string;
+  permalink_url?: string;
+}
+
+interface SoundCloudWidgetInstance {
+  bind(eventName: string, listener: (...args: unknown[]) => void): void;
+  unbind(eventName: string): void;
+  load(url: string, options?: Record<string, unknown>): void;
+  play(): void;
+  pause(): void;
+  toggle(): void;
+  skip(soundIndex: number): void;
+  getSounds(callback: (sounds: SoundCloudWidgetSound[]) => void): void;
+  getCurrentSound(callback: (sound: SoundCloudWidgetSound | null) => void): void;
+}
+
+interface SoundCloudWidgetStatic {
+  (target: HTMLIFrameElement | string): SoundCloudWidgetInstance;
+  Events: {
+    READY: string;
+    PLAY: string;
+    PAUSE: string;
+    FINISH: string;
+    ERROR: string;
+  };
+}
+
+interface Window {
+  SC?: {
+    Widget: SoundCloudWidgetStatic;
+  };
+}

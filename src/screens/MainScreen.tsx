@@ -2,11 +2,13 @@ import { useEffect, useRef, useState } from "react";
 import { AdminPanel } from "../components/AdminPanel";
 import { AppHeader } from "../components/AppHeader";
 import { LobbyPanel } from "../components/LobbyPanel";
+import { SoundCloudPanel } from "../components/SoundCloudPanel";
 import { StatusFooter } from "../components/StatusFooter";
 import { TimerPanel } from "../components/TimerPanel";
 import { RenderingStackSpike } from "../3d/RenderingStackSpike";
 import { ThreeDModeShell } from "../3d/ThreeDModeShell";
 import { useAdminPanelHotkey } from "../hooks/useAdminPanelHotkey";
+import { useAppViewportControls } from "../hooks/useAppViewportControls";
 import { useCountdownDisplay } from "../hooks/useCountdownDisplay";
 import { useDabSyncSession } from "../hooks/useDabSyncSession";
 import { useSecretCodeUnlock } from "../hooks/useSecretCodeUnlock";
@@ -18,6 +20,7 @@ function hasRenderingSpikeParam() {
 export function MainScreen() {
   const [isRenderingSpikeOpen, setIsRenderingSpikeOpen] = useState(hasRenderingSpikeParam);
   const [isThreeDModeOpen, setIsThreeDModeOpen] = useState(false);
+  const { zoomPercent } = useAppViewportControls();
   const { isSecretUnlocked } = useSecretCodeUnlock();
   const wasSecretUnlockedRef = useRef(isSecretUnlocked);
   const {
@@ -53,7 +56,7 @@ export function MainScreen() {
       data-secret-unlocked={isSecretUnlocked ? "true" : undefined}
       data-3d-shell-open={isThreeDModeOpen ? "true" : undefined}
     >
-      <AppHeader session={state.session} syncStatus={state.syncStatus} />
+      <AppHeader session={state.session} syncStatus={state.syncStatus} zoomPercent={zoomPercent} />
 
       {state.syncStatus.connection === "connecting" ? (
         <div className="panel sync-banner">
@@ -79,6 +82,8 @@ export function MainScreen() {
           onResetRound={resetRound}
         />
       </div>
+
+      <SoundCloudPanel />
 
       <AdminPanel
         state={state}

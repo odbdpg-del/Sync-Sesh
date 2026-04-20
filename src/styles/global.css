@@ -31,6 +31,7 @@
   --shadow-panel: 0 0 0 1px rgba(65, 108, 181, 0.16), 0 18px 48px rgba(0, 0, 0, 0.45);
   --shadow-cyan: 0 0 28px rgba(63, 233, 255, 0.2);
   --shadow-green: 0 0 30px rgba(115, 255, 76, 0.22);
+  --app-zoom: 100%;
 }
 
 * {
@@ -64,6 +65,8 @@ input {
   padding: 16px;
   display: grid;
   gap: 16px;
+  zoom: var(--app-zoom);
+  transform-origin: top center;
 }
 
 .panel {
@@ -948,9 +951,12 @@ h2 {
 .ghost-button:disabled,
 .primary-button:disabled {
   cursor: not-allowed;
-  opacity: 0.56;
+  opacity: 0.42;
   box-shadow: none;
   transform: none;
+  border-color: rgba(130, 144, 170, 0.18);
+  background: rgba(11, 16, 26, 0.8);
+  color: rgba(191, 202, 223, 0.58);
 }
 
 .preset-active {
@@ -995,6 +1001,82 @@ h2 {
 .sync-banner-alert {
   border-color: rgba(255, 138, 91, 0.28);
   background: linear-gradient(135deg, rgba(255, 138, 91, 0.12), rgba(4, 10, 22, 0.82));
+}
+
+.soundcloud-panel {
+  padding: 20px 22px 24px;
+  display: grid;
+  gap: 18px;
+}
+
+.soundcloud-controls {
+  display: flex;
+  gap: 16px;
+  align-items: end;
+  justify-content: space-between;
+  flex-wrap: wrap;
+}
+
+.soundcloud-select-wrap {
+  display: grid;
+  gap: 8px;
+  min-width: min(100%, 420px);
+}
+
+.soundcloud-select {
+  min-height: 54px;
+  border-radius: 16px;
+  border: 1px solid rgba(87, 119, 180, 0.24);
+  background: rgba(8, 15, 28, 0.96);
+  color: #effcff;
+  padding: 12px 16px;
+}
+
+.soundcloud-actions {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.soundcloud-now-playing {
+  display: grid;
+  gap: 8px;
+}
+
+.soundcloud-error-state {
+  border-color: rgba(255, 138, 91, 0.3);
+  background: linear-gradient(135deg, rgba(255, 138, 91, 0.08), rgba(8, 15, 28, 0.96));
+}
+
+.soundcloud-now-playing strong {
+  font-size: 1.15rem;
+}
+
+.soundcloud-now-playing span {
+  color: var(--text-dim);
+}
+
+.soundcloud-help {
+  color: #ffd7cc;
+  font-size: 0.94rem;
+}
+
+.soundcloud-retry-button {
+  border-color: rgba(255, 138, 91, 0.34);
+  color: #ffd0c1;
+}
+
+.soundcloud-widget-shell {
+  border-radius: 24px;
+  overflow: hidden;
+  border: 1px solid rgba(87, 119, 180, 0.22);
+  background: rgba(4, 10, 22, 0.92);
+}
+
+.soundcloud-widget-frame {
+  display: block;
+  width: 100%;
+  height: 220px;
 }
 
 .footer-bar {
@@ -1194,5 +1276,10 @@ h2 {
 
   .admin-grid {
     grid-template-columns: 1fr;
+  }
+
+  .soundcloud-controls,
+  .soundcloud-actions {
+    align-items: stretch;
   }
 }
