@@ -1338,6 +1338,31 @@ h2 {
   flex-wrap: wrap;
 }
 
+.soundcloud-volume-row {
+  display: grid;
+  grid-template-columns: auto minmax(140px, 220px) auto;
+  gap: 12px;
+  align-items: center;
+}
+
+.soundcloud-volume-slider {
+  width: 100%;
+  accent-color: var(--cyan);
+}
+
+.soundcloud-volume-slider:disabled {
+  cursor: not-allowed;
+  opacity: 0.48;
+}
+
+.soundcloud-volume-value {
+  min-width: 46px;
+  color: #d9ecff;
+  font-size: 0.84rem;
+  font-weight: 700;
+  text-align: right;
+}
+
 .soundcloud-control-button {
   min-height: 48px;
   border: 1px solid rgba(87, 243, 255, 0.24);

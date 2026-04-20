@@ -21,28 +21,32 @@ const port = Number(process.env.PORT ?? 8787);
 const rooms = new Map<string, SessionRoom>();
 const socketToRoomId = new Map<import("ws").WebSocket, string>();
 
+function createRoom(sessionId: string): SessionRoom {
+  return {
+    snapshot: createSessionSnapshot({
+      session: {
+        id: sessionId,
+        code: sessionId.toUpperCase().slice(0, 8),
+        phase: "idle",
+        roundNumber: 1,
+        ownerId: "",
+      },
+      users: [],
+    }),
+    clients: new Set(),
+  };
+}
+
 function getRoom(sessionId: string) {
-  let room = rooms.get(sessionId);
+  const existingRoom = rooms.get(sessionId);
 
-  if (!room) {
-    room = {
-      snapshot: createSessionSnapshot({
-        session: {
-          id: sessionId,
-          code: sessionId.toUpperCase().slice(0, 8),
-          phase: "idle",
-          roundNumber: 1,
-          ownerId: "",
-        },
-        users: [],
-      }),
-      clients: new Set(),
-    };
-
-    rooms.set(sessionId, room);
+  if (!existingRoom || existingRoom.clients.size === 0) {
+    const freshRoom = createRoom(sessionId);
+    rooms.set(sessionId, freshRoom);
+    return freshRoom;
   }
 
-  return room;
+  return existingRoom;
 }
 
 function send(socket: import("ws").WebSocket, payload: ServerMessage) {
@@ -130,6 +134,11 @@ server.on("connection", (socket) => {
 
     const room = rooms.get(roomId);
     room?.clients.delete(socket);
+
+    if (room && room.clients.size === 0) {
+      rooms.delete(roomId);
+    }
+
     socketToRoomId.delete(socket);
   });
 });

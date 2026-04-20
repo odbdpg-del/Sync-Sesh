@@ -14,11 +14,14 @@ interface ImportMeta {
 }
 
 interface SoundCloudWidgetSound {
-  artwork_url?: string;
+  artwork_url?: string | null;
+  duration?: number;
+  metadata_artist?: string | null;
   title?: string;
   permalink_url?: string;
   waveform_url?: string;
   user?: {
+    permalink_url?: string;
     username?: string;
   };
 }
@@ -26,16 +29,18 @@ interface SoundCloudWidgetSound {
 interface SoundCloudWidgetInstance {
   bind(eventName: string, listener: (...args: unknown[]) => void): void;
   unbind(eventName: string): void;
+  getDuration(callback: (duration: number) => void): void;
+  getPosition(callback: (position: number) => void): void;
+  getVolume(callback: (volume: number) => void): void;
   load(url: string, options?: Record<string, unknown>): void;
   play(): void;
   pause(): void;
+  seekTo(milliseconds: number): void;
+  setVolume(volume: number): void;
   toggle(): void;
   skip(soundIndex: number): void;
-  seekTo(milliseconds: number): void;
   getSounds(callback: (sounds: SoundCloudWidgetSound[]) => void): void;
   getCurrentSound(callback: (sound: SoundCloudWidgetSound | null) => void): void;
-  getDuration(callback: (duration: number) => void): void;
-  getPosition(callback: (position: number) => void): void;
 }
 
 interface SoundCloudWidgetStatic {

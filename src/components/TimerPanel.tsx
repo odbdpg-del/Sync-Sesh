@@ -10,7 +10,12 @@ interface TimerPanelProps {
   onStartReadyHold: () => void;
   onEndReadyHold: () => void;
   onSetTimerDuration: (durationSeconds: number) => void;
+  onSetPrecountDuration: (preCountSeconds: number) => void;
   onResetRound: () => void;
+}
+
+function getPrecountSequenceLabel(preCountSeconds: number) {
+  return Array.from({ length: preCountSeconds }, (_, index) => String(preCountSeconds - index)).join("...");
 }
 
 function getStatusCopy(lobbyState: DerivedLobbyState, syncStatus: SyncStatus) {
@@ -72,10 +77,12 @@ export function TimerPanel({
   onStartReadyHold,
   onEndReadyHold,
   onSetTimerDuration,
+  onSetPrecountDuration,
   onResetRound,
 }: TimerPanelProps) {
   const { isCelebrating } = useRoundEffects(state.session.phase);
   const [draftDuration, setDraftDuration] = useState(state.timerConfig.durationSeconds.toString());
+  const preCountPresets = state.timerConfig.preCountPresets ?? [3, 5];
   const syncReady = state.syncStatus.mode === "mock" || state.syncStatus.connection === "connected";
   const { isHolding, bindHoldButton } = useReadyHold({
     enabled: lobbyState.canHoldToReady && syncReady,
@@ -215,12 +222,25 @@ export function TimerPanel({
             <div className="config-heading">
               <p className="meta-label">Flow Preview</p>
             </div>
+            <div className="precount-preset-row">
+              {preCountPresets.map((preset) => (
+                <button
+                  key={preset}
+                  type="button"
+                  className={`ghost-button precount-button ${preset === state.timerConfig.preCountSeconds ? "preset-active" : ""}`}
+                  disabled={!lobbyState.canEditTimer || !syncReady}
+                  onClick={() => onSetPrecountDuration(preset)}
+                >
+                  {getPrecountSequenceLabel(preset)}
+                </button>
+              ))}
+            </div>
             <div className="flow-steps">
               <span className="flow-step">Hold</span>
               <span className="flow-arrow">{">"}</span>
               <span className="flow-step flow-step-live">Armed</span>
               <span className="flow-arrow">{">"}</span>
-              <span className="flow-step">3...2...1</span>
+              <span className="flow-step">{getPrecountSequenceLabel(state.timerConfig.preCountSeconds)}</span>
               <span className="flow-arrow">{">"}</span>
               <span className="flow-step">Start</span>
             </div>

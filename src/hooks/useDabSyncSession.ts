@@ -77,6 +77,13 @@ export function useDabSyncSession() {
     [syncClient],
   );
 
+  const setPrecountDuration = useCallback(
+    (preCountSeconds: number) => {
+      syncClient.send({ type: "set_precount_duration", preCountSeconds });
+    },
+    [syncClient],
+  );
+
   const resetRound = useCallback(() => {
     syncClient.send({ type: "reset_round" });
   }, [syncClient]);
@@ -145,6 +152,7 @@ export function useDabSyncSession() {
     startReadyHold,
     endReadyHold,
     setTimerDuration,
+    setPrecountDuration,
     resetRound,
     forceStartRound,
     forceCompleteRound,

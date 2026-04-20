@@ -179,6 +179,11 @@ export function SoundCloudPanel({ player }: SoundCloudPanelProps) {
                 Open
               </a>
             ) : null}
+            {state.currentTrackArtistUrl ? (
+              <a className="soundcloud-open-link" href={state.currentTrackArtistUrl} target="_blank" rel="noreferrer">
+                Artist
+              </a>
+            ) : null}
           </div>
 
           <SoundCloudWaveformView
@@ -217,6 +222,22 @@ export function SoundCloudPanel({ player }: SoundCloudPanelProps) {
                 </button>
               ) : null}
             </div>
+          </div>
+
+          <div className="soundcloud-volume-row">
+            <span className="meta-label">Volume</span>
+            <input
+              type="range"
+              min={0}
+              max={100}
+              step={1}
+              value={state.volume}
+              onChange={(event) => actions.setVolume(Number(event.target.value))}
+              className="soundcloud-volume-slider"
+              aria-label="SoundCloud volume"
+              disabled={!state.isWidgetReady}
+            />
+            <span className="soundcloud-volume-value">{state.volume}%</span>
           </div>
 
           <p className="soundcloud-player-note">

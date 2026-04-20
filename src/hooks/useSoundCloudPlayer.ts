@@ -39,11 +39,14 @@ export interface SoundCloudPlayerState extends JukeboxDisplayState {
   isWaveformWindowOpen: boolean;
   selectedPlaylist: PlaylistOption;
   resolvedWidgetSrc: string;
+  currentTrackArtistUrl: string | null;
+  volume: number;
 }
 
 export interface SoundCloudPlayerActions extends JukeboxActions {
   changePlaylist: (playlistId: string) => void;
   seekWaveform: (ratio: number) => void;
+  setVolume: (volume: number) => void;
   openWaveformWindow: () => void;
   closeWaveformWindow: () => void;
 }
@@ -111,9 +114,13 @@ function getWidgetSrc(apiUrl: string) {
     url: resolvedPlaylistUrl,
     auto_play: "false",
     color: "#3fe9ff",
-    show_artwork: "true",
+    visual: "false",
+    show_artwork: "false",
     show_playcount: "false",
     show_user: "true",
+    show_comments: "false",
+    show_teaser: "false",
+    hide_related: "true",
     buying: "false",
     sharing: "false",
     download: "false",
@@ -177,7 +184,7 @@ function pickRandomIndex(length: number, currentIndex?: number) {
   return nextIndex;
 }
 
-function getHighResolutionArtworkUrl(artworkUrl?: string) {
+function getHighResolutionArtworkUrl(artworkUrl?: string | null) {
   return artworkUrl?.replace("-large", "-t500x500") ?? null;
 }
 
@@ -222,11 +229,13 @@ export function useSoundCloudPlayer({ waveformBarCount }: UseSoundCloudPlayerOpt
   const [trackCount, setTrackCount] = useState(0);
   const [currentTrackTitle, setCurrentTrackTitle] = useState("Choose a playlist and hit Shuffle & Play.");
   const [currentTrackArtist, setCurrentTrackArtist] = useState("SoundCloud");
+  const [currentTrackArtistUrl, setCurrentTrackArtistUrl] = useState<string | null>(null);
   const [currentTrackArtwork, setCurrentTrackArtwork] = useState<string | null>(null);
   const [currentTrackUrl, setCurrentTrackUrl] = useState<string | null>(null);
   const [waveformSamples, setWaveformSamples] = useState<number[]>([]);
   const [playbackPosition, setPlaybackPosition] = useState(0);
   const [playbackDuration, setPlaybackDuration] = useState(0);
+  const [volume, setVolumeState] = useState(70);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [reloadNonce, setReloadNonce] = useState(0);
   const [isWaveformWindowOpen, setIsWaveformWindowOpen] = useState(false);
@@ -282,11 +291,13 @@ export function useSoundCloudPlayer({ waveformBarCount }: UseSoundCloudPlayerOpt
     setTrackCount(0);
     setCurrentTrackTitle(`Loading ${selectedPlaylist.label}...`);
     setCurrentTrackArtist("SoundCloud");
+    setCurrentTrackArtistUrl(null);
     setCurrentTrackArtwork(null);
     setCurrentTrackUrl(null);
     setWaveformSamples([]);
     setPlaybackPosition(0);
     setPlaybackDuration(0);
+    setVolumeState(70);
     setErrorMessage(null);
 
     const updatePlaybackTiming = () => {
@@ -303,7 +314,8 @@ export function useSoundCloudPlayer({ waveformBarCount }: UseSoundCloudPlayerOpt
     const setCurrentSoundDetails = (fallbackTitle: string) => {
       widget.getCurrentSound((sound) => {
         setCurrentTrackTitle(sound?.title ?? fallbackTitle);
-        setCurrentTrackArtist(sound?.user?.username ?? selectedPlaylist.label);
+        setCurrentTrackArtist(sound?.metadata_artist ?? sound?.user?.username ?? selectedPlaylist.label);
+        setCurrentTrackArtistUrl(sound?.user?.permalink_url ?? null);
         setCurrentTrackArtwork(getHighResolutionArtworkUrl(sound?.artwork_url));
         setCurrentTrackUrl(sound?.permalink_url ?? selectedPlaylist.sourceUrl);
 
@@ -366,6 +378,9 @@ export function useSoundCloudPlayer({ waveformBarCount }: UseSoundCloudPlayerOpt
 
     widget.bind(window.SC.Widget.Events.READY, () => {
       setIsWidgetReady(true);
+      widget.getVolume((nextVolume) => {
+        setVolumeState(Number.isFinite(nextVolume) ? nextVolume : 70);
+      });
       updatePlaybackTiming();
       refreshTrackList();
     });
@@ -422,11 +437,13 @@ export function useSoundCloudPlayer({ waveformBarCount }: UseSoundCloudPlayerOpt
     setTrackCount(0);
     setCurrentTrackTitle(`Retrying ${selectedPlaylist.label}...`);
     setCurrentTrackArtist("SoundCloud");
+    setCurrentTrackArtistUrl(null);
     setCurrentTrackArtwork(null);
     setCurrentTrackUrl(null);
     setWaveformSamples([]);
     setPlaybackPosition(0);
     setPlaybackDuration(0);
+    setVolumeState(70);
     durationRef.current = 0;
     setReloadNonce((current) => current + 1);
   };
@@ -478,6 +495,12 @@ export function useSoundCloudPlayer({ waveformBarCount }: UseSoundCloudPlayerOpt
     pendingAutoplayRef.current = true;
   };
 
+  const setVolume = (nextVolume: number) => {
+    const clampedVolume = Math.max(0, Math.min(100, Math.round(nextVolume)));
+    setVolumeState(clampedVolume);
+    safeWidgetCall(() => widgetRef.current?.setVolume(clampedVolume));
+  };
+
   const state: SoundCloudPlayerState = {
     playlistId: selectedPlaylist.id,
     playlistLabel: selectedPlaylist.label,
@@ -501,6 +524,8 @@ export function useSoundCloudPlayer({ waveformBarCount }: UseSoundCloudPlayerOpt
     isWaveformWindowOpen,
     selectedPlaylist,
     resolvedWidgetSrc,
+    currentTrackArtistUrl,
+    volume,
   };
   const actions: SoundCloudPlayerActions = {
     togglePlayback,
@@ -508,6 +533,7 @@ export function useSoundCloudPlayer({ waveformBarCount }: UseSoundCloudPlayerOpt
     retry,
     changePlaylist,
     seekWaveform,
+    setVolume,
     openWaveformWindow: () => setIsWaveformWindowOpen(true),
     closeWaveformWindow: () => setIsWaveformWindowOpen(false),
   };

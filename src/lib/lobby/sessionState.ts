@@ -17,6 +17,7 @@ import type {
 export const DEFAULT_TIMER_SECONDS = 50;
 export const DEFAULT_PRECOUNT_SECONDS = 3;
 export const TIMER_PRESETS = [30, 45, 60];
+export const PRECOUNT_PRESETS = [3, 5];
 const MAX_RANGE_SCORE_RESULTS = 32;
 const FREE_ROAM_PRESENCE_TTL_MS = 10_000;
 
@@ -189,6 +190,14 @@ function upsertRangeScoreResult(results: RangeScoreResult[], nextResult: RangeSc
       firstResult.completedAt.localeCompare(secondResult.completedAt)
     ))
     .slice(0, MAX_RANGE_SCORE_RESULTS);
+}
+
+function clampPrecountDuration(value: number) {
+  if (!Number.isFinite(value)) {
+    return DEFAULT_PRECOUNT_SECONDS;
+  }
+
+  return PRECOUNT_PRESETS.includes(Math.round(value)) ? Math.round(value) : DEFAULT_PRECOUNT_SECONDS;
 }
 
 function parseTimestamp(value?: string) {
@@ -371,6 +380,7 @@ export function createSessionSnapshot(overrides?: Partial<SessionSnapshot>): Ses
       lateJoinersJoinReady: false,
       autoJoinOnLoad: false,
       presets: TIMER_PRESETS,
+      preCountPresets: PRECOUNT_PRESETS,
     },
     countdown: createEmptyCountdown(),
     rangeScoreboard: [],
@@ -401,8 +411,15 @@ export function attachLocalProfile(
   localProfile: LocalProfile,
   state?: Partial<DabSyncState>,
 ): DabSyncState {
+  const normalizedTimerConfig = {
+    ...snapshot.timerConfig,
+    preCountSeconds: clampPrecountDuration(snapshot.timerConfig.preCountSeconds),
+    preCountPresets: snapshot.timerConfig.preCountPresets ?? PRECOUNT_PRESETS,
+  };
+
   return {
     ...snapshot,
+    timerConfig: normalizedTimerConfig,
     syncStatus: state?.syncStatus ?? {
       mode: "mock",
       connection: "offline",
@@ -586,6 +603,19 @@ export function reduceSessionEvent(snapshot: SessionSnapshot, event: SessionEven
         timerConfig: {
           ...snapshot.timerConfig,
           durationSeconds: clampTimerDuration(event.durationSeconds),
+        },
+      };
+    }
+    case "set_precount_duration": {
+      if (snapshot.session.phase === "precount" || snapshot.session.phase === "countdown") {
+        return snapshot;
+      }
+
+      return {
+        ...snapshot,
+        timerConfig: {
+          ...snapshot.timerConfig,
+          preCountSeconds: clampPrecountDuration(event.preCountSeconds),
         },
       };
     }
