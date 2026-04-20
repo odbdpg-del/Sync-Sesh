@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Sync Sesh</title>
+    <style>
+      html, body, #root {
+        margin: 0;
+        min-height: 100%;
+        background: #04070d;
+        color: #f4f7ff;
+      }
+
+      #bootstrap-status {
+        position: fixed;
+        inset: 0;
+        display: grid;
+        place-items: center;
+        padding: 24px;
+        background: radial-gradient(circle at top, rgba(54, 113, 255, 0.22), transparent 38%), #04070d;
+        font-family: "Trebuchet MS", sans-serif;
+        white-space: pre-wrap;
+        text-align: left;
+      }
+
+      #bootstrap-status[hidden] {
+        display: none;
+      }
+
+      #bootstrap-card {
+        width: min(720px, 100%);
+        border: 1px solid rgba(87, 243, 255, 0.25);
+        border-radius: 18px;
+        padding: 18px;
+        background: rgba(8, 17, 35, 0.92);
+        box-shadow: 0 0 28px rgba(87, 243, 255, 0.14);
+      }
+
+      #bootstrap-title {
+        margin: 0 0 12px;
+        font-size: 28px;
+        font-family: "Courier New", monospace;
+      }
+
+      #bootstrap-copy {
+        margin: 0;
+        color: #dce8ff;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="bootstrap-status">
+      <div id="bootstrap-card">
+        <h1 id="bootstrap-title">Sync Sesh</h1>
+        <p id="bootstrap-copy">Booting activity...</p>
+      </div>
+    </div>
+    <div id="root"></div>
+    <script>
+      (function () {
+        const status = document.getElementById("bootstrap-status");
+        const copy = document.getElementById("bootstrap-copy");
+        const setMessage = (message) => {
+          if (copy) copy.textContent = message;
+          if (status) status.hidden = false;
+        };
+
+        window.addEventListener("error", (event) => {
+          setMessage("Bootstrap error:\n" + (event.error?.stack || event.message || "Unknown error"));
+        });
+
+        window.addEventListener("unhandledrejection", (event) => {
+          const reason = event.reason;
+          setMessage("Unhandled promise rejection:\n" + (reason?.stack || String(reason)));
+        });
+
+        window.__HIDE_BOOTSTRAP_STATUS__ = function () {
+          if (status) status.hidden = true;
+        };
+
+        window.setTimeout(() => {
+          const root = document.getElementById("root");
+          if (root && root.childElementCount === 0) {
+            setMessage(
+              "The app is still loading.\n\nIf this stays visible in Discord, the embedded client is not finishing startup. " +
+                "That usually means a Discord SDK issue, a localhost test-mode mismatch, or a runtime error before React mounted."
+            );
+          }
+        }, 4000);
+      })();
+    </script>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

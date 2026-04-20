@@ -1,0 +1,5 @@
+
+> dabsync@0.1.0 dev:sync-server
+> tsx server/sync-server.ts
+
+DabSync sync server listening on ws://localhost:8787
