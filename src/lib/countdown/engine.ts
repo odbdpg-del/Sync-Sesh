@@ -10,11 +10,11 @@ function formatSeconds(value: number) {
   return `${minutes.toString().padStart(2, "0")}:${seconds.toString().padStart(2, "0")}`;
 }
 
-function getPrecountValue(countdown: CountdownTimeline, serverNowMs: number) {
+function getPrecountValue(countdown: CountdownTimeline, serverNowMs: number, preCountSeconds: number) {
   const countdownStartMs = parseTimestamp(countdown.countdownStartAt);
 
   if (countdownStartMs === undefined) {
-    return "3";
+    return String(preCountSeconds);
   }
 
   const millisecondsLeft = countdownStartMs - serverNowMs;
@@ -54,7 +54,7 @@ export function deriveCountdownDisplay(state: DabSyncState, serverNowMs: number)
     case "precount":
       return {
         phase: state.session.phase,
-        headline: getPrecountValue(state.countdown, serverNowMs),
+        headline: getPrecountValue(state.countdown, serverNowMs, state.timerConfig.preCountSeconds),
         subheadline: "Synchronized pre-count",
         timerText: formatSeconds(state.timerConfig.durationSeconds),
         accentText: "Main timer is about to begin",
@@ -93,4 +93,3 @@ export function deriveCountdownDisplay(state: DabSyncState, serverNowMs: number)
       };
   }
 }
-

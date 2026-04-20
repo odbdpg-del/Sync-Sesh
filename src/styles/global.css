@@ -1,5 +1,5 @@
 :root {
-  font-family: "Trebuchet MS", "Segoe UI", sans-serif;
+  font-family: var(--font-ui);
   color: #eef6ff;
   background:
     radial-gradient(circle at top, rgba(19, 255, 146, 0.12), transparent 30%),
@@ -32,6 +32,17 @@
   --shadow-cyan: 0 0 28px rgba(63, 233, 255, 0.2);
   --shadow-green: 0 0 30px rgba(115, 255, 76, 0.22);
   --app-zoom: 100%;
+  --font-ui: "Segoe UI Variable", "Segoe UI", "Trebuchet MS", system-ui, sans-serif;
+  --font-display: "IBM Plex Mono", "JetBrains Mono", "SFMono-Regular", "Consolas", "Courier New", monospace;
+  --type-title: clamp(2.5rem, 2.7vw, 3.2rem);
+  --type-section: 1.14rem;
+  --type-label: 0.68rem;
+  --type-helper: 0.92rem;
+  --type-button: 0.92rem;
+  --type-badge: 0.72rem;
+  --tracking-label: 0.22em;
+  --tracking-badge: 0.16em;
+  --tracking-helper: 0.04em;
 }
 
 * {
@@ -48,11 +59,13 @@ body {
     linear-gradient(90deg, rgba(255, 255, 255, 0.018) 1px, transparent 1px),
     var(--bg-shell);
   background-size: auto, 100% 4px, 4px 100%, auto;
+  font-family: var(--font-ui);
 }
 
 button,
 input {
   font: inherit;
+  font-family: var(--font-ui);
 }
 
 #root {
@@ -259,8 +272,11 @@ input {
 }
 
 .header-pill strong {
-  font-weight: 700;
-  letter-spacing: 0.02em;
+  font-family: var(--font-ui);
+  font-weight: 600;
+  font-size: 1.06rem;
+  letter-spacing: 0.01em;
+  line-height: 1.1;
 }
 
 .content-grid {
@@ -289,10 +305,13 @@ input {
 .eyebrow,
 .meta-label {
   margin: 0;
-  color: #7f73ff;
+  color: #8f84ff;
   text-transform: uppercase;
-  letter-spacing: 0.17em;
-  font-size: 0.8rem;
+  letter-spacing: var(--tracking-label);
+  font-size: var(--type-label);
+  font-weight: 500;
+  line-height: 1.15;
+  opacity: 0.88;
 }
 
 h1,
@@ -303,20 +322,22 @@ p {
 
 h1,
 h2,
-.timer-value,
-.hold-title {
-  font-family: "Courier New", monospace;
-  letter-spacing: 0.04em;
-}
-
 h1 {
-  font-size: clamp(2.6rem, 3vw, 3.5rem);
-  font-weight: 800;
+  font-family: var(--font-display);
+  font-size: var(--type-title);
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  line-height: 0.95;
   white-space: nowrap;
+  text-wrap: balance;
 }
 
 h2 {
-  font-size: 1.15rem;
+  font-family: var(--font-ui);
+  font-size: var(--type-section);
+  font-weight: 650;
+  letter-spacing: 0.01em;
+  line-height: 1.15;
 }
 
 .sync-pill,
@@ -328,9 +349,11 @@ h2 {
   justify-content: center;
   border-radius: 18px;
   padding: 10px 16px;
-  font-size: 0.8rem;
+  font-size: var(--type-badge);
+  font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.12em;
+  letter-spacing: var(--tracking-badge);
+  line-height: 1;
   border: 1px solid rgba(63, 233, 255, 0.18);
   background: rgba(8, 17, 31, 0.92);
 }
@@ -404,13 +427,17 @@ h2 {
 
 .metric-card strong {
   display: block;
-  font-size: 4rem;
-  line-height: 1;
+  font-family: var(--font-ui);
+  font-size: clamp(3.85rem, 5.4vw, 4.5rem);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.03em;
+  line-height: 0.9;
 }
 
 .metric-icon {
   font-size: 1.7rem;
-  opacity: 0.45;
+  opacity: 0.26;
   transform: translateY(-8px);
 }
 
@@ -456,7 +483,9 @@ h2 {
 }
 
 .join-copy-subtle {
-  color: var(--text-dim);
+  color: rgba(168, 181, 209, 0.72);
+  font-size: 0.84rem;
+  letter-spacing: var(--tracking-helper);
 }
 
 .user-list {
@@ -515,7 +544,10 @@ h2 {
 }
 
 .user-copy strong {
-  font-size: 1.05rem;
+  font-size: 1.02rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  line-height: 1.15;
 }
 
 .user-status {
@@ -546,12 +578,16 @@ h2 {
   padding-left: 20px;
   display: grid;
   gap: 10px;
-  color: var(--text-soft);
+  color: rgba(168, 181, 209, 0.8);
+  font-size: 0.9rem;
+  line-height: 1.45;
 }
 
 .empty-state-card,
 .sync-state-card {
-  color: var(--text-soft);
+  color: rgba(168, 181, 209, 0.8);
+  font-size: 0.92rem;
+  line-height: 1.45;
 }
 
 .timer-panel {
@@ -631,7 +667,11 @@ h2 {
 }
 
 .timer-value {
+  font-family: var(--font-display);
   font-size: clamp(5.4rem, 11vw, 8.5rem);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums slashed-zero;
+  letter-spacing: -0.04em;
   line-height: 1;
   color: var(--cyan);
   text-shadow: 0 0 26px rgba(63, 233, 255, 0.42);
@@ -640,17 +680,21 @@ h2 {
 .timer-subcopy {
   color: var(--green-strong);
   text-transform: uppercase;
-  letter-spacing: 0.28em;
-  font-size: 0.9rem;
+  letter-spacing: 0.24em;
+  font-size: 0.76rem;
+  font-weight: 600;
   text-align: center;
+  opacity: 0.92;
 }
 
 .timer-accent {
   color: #d9ddff;
   text-transform: uppercase;
-  letter-spacing: 0.2em;
-  font-size: 0.84rem;
+  letter-spacing: 0.16em;
+  font-size: 0.74rem;
+  font-weight: 500;
   text-align: center;
+  opacity: 0.72;
 }
 
 .timer-rails {
@@ -708,14 +752,17 @@ h2 {
 }
 
 .armed-prefix {
-  font-family: "Courier New", monospace;
-  font-size: 1.35rem;
+  font-family: var(--font-display);
+  font-size: 1.2rem;
   font-weight: 700;
+  letter-spacing: 0.04em;
 }
 
 .armed-copy {
   color: #9eff82;
-  font-size: 0.96rem;
+  font-size: 0.9rem;
+  font-weight: 550;
+  letter-spacing: 0.08em;
 }
 
 .armed-chevron {
@@ -811,20 +858,29 @@ h2 {
   gap: 8px;
   position: relative;
   z-index: 1;
+  min-width: 0;
 }
 
 .hold-title {
-  font-size: clamp(2rem, 4.2vw, 3rem);
-  font-style: italic;
-  font-weight: 800;
+  font-family: var(--font-ui);
+  font-size: clamp(1.62rem, 3vw, 2.35rem);
+  font-style: normal;
+  font-weight: 700;
   color: #bfff86;
   text-shadow: 0 0 24px rgba(115, 255, 76, 0.24);
+  white-space: nowrap;
+  line-height: 1.05;
+  text-align: center;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
 }
 
 .hold-subtitle {
-  font-size: 0.86rem;
-  color: #ddffcc;
-  letter-spacing: 0.22em;
+  font-size: 0.78rem;
+  color: rgba(221, 255, 204, 0.78);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  font-weight: 500;
 }
 
 .hold-grid {
@@ -878,15 +934,17 @@ h2 {
   background: rgba(8, 15, 28, 0.96);
   color: #effcff;
   padding: 10px 16px;
-  font-size: 1.1rem;
-  font-weight: 700;
+  font-size: 1.05rem;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
 }
 
 .timer-input-suffix {
   color: var(--text-dim);
   text-transform: uppercase;
-  letter-spacing: 0.16em;
-  font-size: 0.78rem;
+  letter-spacing: 0.14em;
+  font-size: 0.72rem;
+  font-weight: 500;
 }
 
 .preset-row {
@@ -902,6 +960,18 @@ h2 {
   gap: 10px;
 }
 
+.precount-preset-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.precount-button {
+  min-height: 44px;
+  padding-inline: 14px;
+  font-size: 0.82rem;
+}
+
 .flow-step,
 .ghost-button,
 .primary-button {
@@ -913,6 +983,7 @@ h2 {
   color: #dce8ff;
   cursor: pointer;
   transition: transform 120ms ease, box-shadow 120ms ease, border-color 120ms ease;
+  font-family: var(--font-ui);
 }
 
 .flow-step {
@@ -923,8 +994,10 @@ h2 {
   border-radius: 14px;
   padding: 10px 14px;
   text-transform: uppercase;
-  letter-spacing: 0.1em;
-  font-size: 0.76rem;
+  letter-spacing: 0.14em;
+  font-size: 0.7rem;
+  font-weight: 600;
+  line-height: 1;
 }
 
 .flow-step-live {
@@ -940,6 +1013,15 @@ h2 {
   background: linear-gradient(135deg, rgba(31, 255, 232, 0.14), rgba(31, 255, 232, 0.08));
   color: #effcff;
   box-shadow: 0 0 18px rgba(31, 255, 232, 0.12);
+  font-size: var(--type-button);
+  font-weight: 650;
+  letter-spacing: 0.08em;
+}
+
+.ghost-button {
+  font-size: var(--type-button);
+  font-weight: 600;
+  letter-spacing: 0.08em;
 }
 
 .ghost-button:hover,
@@ -979,8 +1061,8 @@ h2 {
   background: linear-gradient(135deg, rgba(122, 52, 255, 0.22), rgba(88, 24, 181, 0.18));
   border-color: rgba(157, 78, 255, 0.32);
   color: #b762ff;
-  font-size: 1.05rem;
-  font-weight: 700;
+  font-size: 0.9rem;
+  font-weight: 650;
   text-transform: uppercase;
   letter-spacing: 0.12em;
 }
@@ -989,7 +1071,7 @@ h2 {
   background: rgba(6, 16, 27, 0.96);
   color: #9fb0cd;
   text-transform: uppercase;
-  letter-spacing: 0.12em;
+  letter-spacing: 0.1em;
 }
 
 .sync-banner {
@@ -1038,9 +1120,42 @@ h2 {
   flex-wrap: wrap;
 }
 
-.soundcloud-now-playing {
+.soundcloud-player-card {
+  display: grid;
+  grid-template-columns: 180px minmax(0, 1fr);
+  gap: 18px;
+  align-items: stretch;
+}
+
+.soundcloud-player-art {
+  min-height: 180px;
+  border-radius: 18px;
+  overflow: hidden;
+  border: 1px solid rgba(87, 119, 180, 0.22);
+  background: linear-gradient(135deg, rgba(12, 19, 33, 0.98), rgba(8, 14, 24, 0.98));
+}
+
+.soundcloud-artwork-image,
+.soundcloud-artwork-fallback {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.soundcloud-artwork-image {
+  object-fit: cover;
+}
+
+.soundcloud-artwork-fallback {
+  background:
+    radial-gradient(circle at 50% 40%, rgba(63, 233, 255, 0.35), transparent 25%),
+    linear-gradient(135deg, rgba(127, 115, 255, 0.28), rgba(6, 12, 22, 0.98));
+}
+
+.soundcloud-player-copy {
   display: grid;
   gap: 8px;
+  align-content: center;
 }
 
 .soundcloud-error-state {
@@ -1048,12 +1163,22 @@ h2 {
   background: linear-gradient(135deg, rgba(255, 138, 91, 0.08), rgba(8, 15, 28, 0.96));
 }
 
-.soundcloud-now-playing strong {
-  font-size: 1.15rem;
+.soundcloud-player-copy strong {
+  font-size: 1.12rem;
+  font-weight: 650;
+  line-height: 1.2;
 }
 
-.soundcloud-now-playing span {
-  color: var(--text-dim);
+.soundcloud-player-copy span {
+  color: rgba(168, 181, 209, 0.76);
+  font-size: 0.88rem;
+  line-height: 1.4;
+}
+
+.soundcloud-player-artist {
+  color: #d9ecff;
+  font-size: 0.93rem;
+  font-weight: 550;
 }
 
 .soundcloud-help {
@@ -1066,17 +1191,90 @@ h2 {
   color: #ffd0c1;
 }
 
-.soundcloud-widget-shell {
-  border-radius: 24px;
+.soundcloud-attribution {
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+  padding-top: 8px;
+}
+
+.soundcloud-attribution a {
+  color: var(--cyan);
+  text-decoration: none;
+}
+
+.soundcloud-attribution a:hover {
+  text-decoration: underline;
+}
+
+.soundcloud-volume-row {
+  display: grid;
+  grid-template-columns: auto 180px auto;
+  gap: 12px;
+  align-items: center;
+  padding-top: 2px;
+  justify-content: start;
+}
+
+.soundcloud-volume-slider {
+  width: 100%;
+  accent-color: var(--cyan);
+}
+
+.soundcloud-volume-value {
+  color: #d9ecff;
+  font-size: 0.84rem;
+  font-weight: 600;
+  min-width: 46px;
+  text-align: right;
+}
+
+.soundcloud-timeline-row {
+  display: grid;
+  gap: 10px;
+  padding-top: 6px;
+}
+
+.soundcloud-timeline-labels {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: center;
+}
+
+.soundcloud-time-readout {
+  color: rgba(217, 236, 255, 0.78);
+  font-family: var(--font-display);
+  font-size: 0.84rem;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  font-variant-numeric: tabular-nums;
+}
+
+.soundcloud-timeline-slider {
+  width: 100%;
+  accent-color: var(--cyan);
+}
+
+.soundcloud-timeline-slider:disabled {
+  opacity: 0.45;
+}
+
+.soundcloud-widget-engine {
+  position: absolute;
+  width: 1px;
+  height: 1px;
   overflow: hidden;
-  border: 1px solid rgba(87, 119, 180, 0.22);
-  background: rgba(4, 10, 22, 0.92);
+  opacity: 0;
+  pointer-events: none;
 }
 
 .soundcloud-widget-frame {
   display: block;
-  width: 100%;
-  height: 220px;
+  width: 1px;
+  height: 1px;
+  border: 0;
+  background: transparent;
 }
 
 .footer-bar {
@@ -1281,5 +1479,13 @@ h2 {
   .soundcloud-controls,
   .soundcloud-actions {
     align-items: stretch;
+  }
+
+  .soundcloud-player-card {
+    grid-template-columns: 1fr;
+  }
+
+  .soundcloud-player-art {
+    min-height: 220px;
   }
 }

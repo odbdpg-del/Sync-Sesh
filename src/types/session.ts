@@ -26,6 +26,7 @@ export interface TimerConfig {
   preCountSeconds: number;
   allowLateJoinSpectators: boolean;
   presets: number[];
+  preCountPresets: number[];
 }
 
 export interface CountdownTimeline {
@@ -108,6 +109,7 @@ export type SessionEvent =
   | { type: "ready_hold_start" }
   | { type: "ready_hold_end" }
   | { type: "set_timer_duration"; durationSeconds: number }
+  | { type: "set_precount_duration"; preCountSeconds: number }
   | { type: "reset_round" }
   | { type: "admin_force_start_round" }
   | { type: "admin_force_complete_round" }

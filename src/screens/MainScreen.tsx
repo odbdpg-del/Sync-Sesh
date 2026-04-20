@@ -12,6 +12,7 @@ import { useAppViewportControls } from "../hooks/useAppViewportControls";
 import { useCountdownDisplay } from "../hooks/useCountdownDisplay";
 import { useDabSyncSession } from "../hooks/useDabSyncSession";
 import { useSecretCodeUnlock } from "../hooks/useSecretCodeUnlock";
+import { useSoundEffects } from "../hooks/useSoundEffects";
 
 function hasRenderingSpikeParam() {
   return new URLSearchParams(window.location.search).get("spike3d") === "1";
@@ -31,6 +32,7 @@ export function MainScreen() {
     startReadyHold,
     endReadyHold,
     setTimerDuration,
+    setPrecountDuration,
     resetRound,
     forceStartRound,
     forceCompleteRound,
@@ -40,6 +42,7 @@ export function MainScreen() {
     clearTestParticipants,
   } = useDabSyncSession();
   const countdownDisplay = useCountdownDisplay(state);
+  const { playCue } = useSoundEffects(state, lobbyState, countdownDisplay);
   const { isOpen: isAdminOpen, setIsOpen: setIsAdminOpen } = useAdminPanelHotkey(lobbyState.canUseAdminTools);
 
   useEffect(() => {
@@ -49,6 +52,28 @@ export function MainScreen() {
 
     wasSecretUnlockedRef.current = isSecretUnlocked;
   }, [isSecretUnlocked]);
+
+  const handleJoinSession = () => {
+    playCue("ui_join_ping");
+    joinSession();
+  };
+
+  const handleStartReadyHold = () => {
+    playCue("ui_ready_hold_start");
+    startReadyHold();
+  };
+
+  const handleEndReadyHold = () => {
+    if (!lobbyState.releaseStartsCountdown) {
+      playCue("ui_ready_release_cancel");
+    }
+
+    endReadyHold();
+  };
+
+  const handleResetRound = () => {
+    resetRound();
+  };
 
   return (
     <main
@@ -71,15 +96,16 @@ export function MainScreen() {
       ) : null}
 
       <div className="content-grid">
-        <LobbyPanel session={state.session} users={state.users} lobbyState={lobbyState} onJoinSession={joinSession} />
+        <LobbyPanel session={state.session} users={state.users} lobbyState={lobbyState} onJoinSession={handleJoinSession} />
         <TimerPanel
           state={state}
           lobbyState={lobbyState}
           countdownDisplay={countdownDisplay}
-          onStartReadyHold={startReadyHold}
-          onEndReadyHold={endReadyHold}
+          onStartReadyHold={handleStartReadyHold}
+          onEndReadyHold={handleEndReadyHold}
           onSetTimerDuration={setTimerDuration}
-          onResetRound={resetRound}
+          onSetPrecountDuration={setPrecountDuration}
+          onResetRound={handleResetRound}
         />
       </div>
 

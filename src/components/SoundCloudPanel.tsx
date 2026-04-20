@@ -27,6 +27,25 @@ const WIDGET_SCRIPT_SRC = "https://w.soundcloud.com/player/api.js";
 const SOUNDCLOUD_WIDGET_PREFIX = "/soundcloud-widget";
 const SOUNDCLOUD_API_PREFIX = "/soundcloud-api";
 
+interface CurrentTrackInfo {
+  title: string;
+  artist: string;
+  artworkUrl?: string;
+  permalinkUrl?: string;
+  artistPermalinkUrl?: string;
+}
+
+function formatDuration(milliseconds: number) {
+  if (!Number.isFinite(milliseconds) || milliseconds <= 0) {
+    return "0:00";
+  }
+
+  const totalSeconds = Math.floor(milliseconds / 1000);
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes}:${seconds.toString().padStart(2, "0")}`;
+}
+
 function isDiscordProxyHost() {
   return window.location.host.includes("discordsays.com") || window.location.host.includes("discordsez.com");
 }
@@ -46,9 +65,13 @@ function getWidgetSrc(apiUrl: string) {
     url: resolvedPlaylistUrl,
     auto_play: "false",
     color: "#3fe9ff",
-    show_artwork: "true",
+    visual: "false",
+    show_artwork: "false",
     show_playcount: "false",
     show_user: "true",
+    show_comments: "false",
+    show_teaser: "false",
+    hide_related: "true",
     buying: "false",
     sharing: "false",
     download: "false",
@@ -112,9 +135,32 @@ function pickRandomIndex(length: number, currentIndex?: number) {
   return nextIndex;
 }
 
+function upscaleArtworkUrl(artworkUrl?: string | null) {
+  if (!artworkUrl) {
+    return undefined;
+  }
+
+  return artworkUrl.replace("-large", "-t500x500");
+}
+
+function normalizeSound(sound: SoundCloudWidgetSound | null | undefined): CurrentTrackInfo | null {
+  if (!sound) {
+    return null;
+  }
+
+  return {
+    title: sound.title ?? "Untitled track",
+    artist: sound.metadata_artist ?? sound.user?.username ?? "Unknown artist",
+    artworkUrl: upscaleArtworkUrl(sound.artwork_url),
+    permalinkUrl: sound.permalink_url,
+    artistPermalinkUrl: sound.user?.permalink_url,
+  };
+}
+
 export function SoundCloudPanel() {
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const widgetRef = useRef<SoundCloudWidgetInstance | null>(null);
+  const soundsRef = useRef<SoundCloudWidgetSound[]>([]);
   const trackCountRef = useRef(0);
   const currentTrackIndexRef = useRef<number | undefined>(undefined);
   const pendingAutoplayRef = useRef(false);
@@ -127,6 +173,10 @@ export function SoundCloudPanel() {
   const [currentTrackTitle, setCurrentTrackTitle] = useState("Choose a playlist and hit Shuffle & Play.");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [reloadNonce, setReloadNonce] = useState(0);
+  const [currentTrack, setCurrentTrack] = useState<CurrentTrackInfo | null>(null);
+  const [volume, setVolume] = useState(70);
+  const [durationMs, setDurationMs] = useState(0);
+  const [positionMs, setPositionMs] = useState(0);
 
   const selectedPlaylist = useMemo(
     () => PLAYLISTS.find((playlist) => playlist.id === selectedPlaylistId) ?? PLAYLISTS[0],
@@ -176,10 +226,34 @@ export function SoundCloudPanel() {
     setIsPlaying(false);
     setTrackCount(0);
     setCurrentTrackTitle(`Loading ${selectedPlaylist.label}...`);
+    setCurrentTrack(null);
+    setVolume(70);
+    setDurationMs(0);
+    setPositionMs(0);
     setErrorMessage(null);
+
+    const updateCurrentTrack = (sound: SoundCloudWidgetSound | null | undefined, fallbackTitle?: string) => {
+      const normalizedSound = normalizeSound(sound);
+
+      if (normalizedSound) {
+        setCurrentTrack(normalizedSound);
+        setCurrentTrackTitle(normalizedSound.title);
+        return;
+      }
+
+      setCurrentTrack((previousTrack) =>
+        previousTrack ?? {
+          title: fallbackTitle ?? "Now playing from SoundCloud.",
+          artist: selectedPlaylist.label,
+          permalinkUrl: selectedPlaylist.sourceUrl,
+        },
+      );
+      setCurrentTrackTitle(fallbackTitle ?? "Now playing from SoundCloud.");
+    };
 
     const refreshTrackList = () => {
       widget.getSounds((sounds) => {
+        soundsRef.current = sounds;
         const count = sounds.length;
         trackCountRef.current = count;
         setTrackCount(count);
@@ -192,6 +266,7 @@ export function SoundCloudPanel() {
         if (pendingAutoplayRef.current) {
           const nextIndex = pickRandomIndex(count);
           currentTrackIndexRef.current = nextIndex;
+          updateCurrentTrack(sounds[nextIndex], sounds[nextIndex]?.title ?? `${selectedPlaylist.label} loaded.`);
           widget.skip(nextIndex);
           widget.play();
           pendingAutoplayRef.current = false;
@@ -199,20 +274,29 @@ export function SoundCloudPanel() {
         }
 
         widget.getCurrentSound((sound) => {
-          setCurrentTrackTitle(sound?.title ?? `${count} tracks loaded.`);
+          updateCurrentTrack(sound, `${count} tracks loaded.`);
         });
       });
     };
 
     widget.bind(window.SC.Widget.Events.READY, () => {
       setIsWidgetReady(true);
+      widget.getVolume((nextVolume) => {
+        setVolume(Number.isFinite(nextVolume) ? nextVolume : 70);
+      });
+      widget.getDuration((nextDuration) => {
+        setDurationMs(Number.isFinite(nextDuration) ? nextDuration : 0);
+      });
       refreshTrackList();
     });
 
     widget.bind(window.SC.Widget.Events.PLAY, () => {
       setIsPlaying(true);
       widget.getCurrentSound((sound) => {
-        setCurrentTrackTitle(sound?.title ?? "Now playing from SoundCloud.");
+        updateCurrentTrack(sound, "Now playing from SoundCloud.");
+      });
+      widget.getDuration((nextDuration) => {
+        setDurationMs(Number.isFinite(nextDuration) ? nextDuration : 0);
       });
     });
 
@@ -229,6 +313,8 @@ export function SoundCloudPanel() {
 
       const nextIndex = pickRandomIndex(count, currentTrackIndexRef.current);
       currentTrackIndexRef.current = nextIndex;
+      updateCurrentTrack(soundsRef.current[nextIndex], soundsRef.current[nextIndex]?.title ?? "Now playing from SoundCloud.");
+      setPositionMs(0);
       widget.skip(nextIndex);
       widget.play();
     });
@@ -246,13 +332,44 @@ export function SoundCloudPanel() {
     };
   }, [isScriptReady, selectedPlaylist.id, selectedPlaylist.label]);
 
+  useEffect(() => {
+    if (!isWidgetReady) {
+      return;
+    }
+
+    const intervalId = window.setInterval(() => {
+      const widget = widgetRef.current;
+
+      if (!widget) {
+        return;
+      }
+
+      widget.getPosition((nextPosition) => {
+        setPositionMs(Number.isFinite(nextPosition) ? nextPosition : 0);
+      });
+
+      widget.getDuration((nextDuration) => {
+        setDurationMs(Number.isFinite(nextDuration) ? nextDuration : 0);
+      });
+    }, isPlaying ? 300 : 1200);
+
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, [isPlaying, isWidgetReady]);
+
   const handleRetry = () => {
     widgetRef.current = null;
     trackCountRef.current = 0;
     currentTrackIndexRef.current = undefined;
+    soundsRef.current = [];
     pendingAutoplayRef.current = false;
     setTrackCount(0);
     setCurrentTrackTitle(`Retrying ${selectedPlaylist.label}...`);
+    setCurrentTrack(null);
+    setVolume(70);
+    setDurationMs(0);
+    setPositionMs(0);
     setReloadNonce((current) => current + 1);
   };
 
@@ -269,6 +386,9 @@ export function SoundCloudPanel() {
 
     const nextIndex = pickRandomIndex(count, currentTrackIndexRef.current);
     currentTrackIndexRef.current = nextIndex;
+    const nextSound = soundsRef.current[nextIndex];
+    setCurrentTrack(normalizeSound(nextSound));
+    setCurrentTrackTitle(nextSound?.title ?? "Now playing from SoundCloud.");
     widget.skip(nextIndex);
     widget.play();
   };
@@ -286,6 +406,27 @@ export function SoundCloudPanel() {
   const handlePlaylistChange = (playlistId: string) => {
     setSelectedPlaylistId(playlistId);
     pendingAutoplayRef.current = true;
+  };
+
+  const handleVolumeChange = (nextVolume: number) => {
+    const clampedVolume = Math.max(0, Math.min(100, Math.round(nextVolume)));
+    setVolume(clampedVolume);
+    safeWidgetCall(() => widgetRef.current?.setVolume(clampedVolume));
+  };
+
+  const progressRatio = durationMs > 0 ? Math.max(0, Math.min(1, positionMs / durationMs)) : 0;
+
+  const handleTimelineChange = (nextRatio: number) => {
+    const widget = widgetRef.current;
+
+    if (!widget || durationMs <= 0) {
+      return;
+    }
+
+    const clampedRatio = Math.max(0, Math.min(1, nextRatio));
+    const nextPosition = Math.round(durationMs * clampedRatio);
+    setPositionMs(nextPosition);
+    safeWidgetCall(() => widget.seekTo(nextPosition));
   };
 
   return (
@@ -328,19 +469,68 @@ export function SoundCloudPanel() {
         </div>
       </div>
 
-      <div className={`soundcloud-now-playing inset-panel ${errorMessage ? "soundcloud-error-state" : ""}`}>
-        <p className="meta-label">Now playing</p>
-        <strong>{currentTrackTitle}</strong>
-        <span>
-          {errorMessage ??
-            (isDiscordProxyHost()
-              ? "Tracks continue in random order when one finishes. In Discord, SoundCloud needs Activity URL mappings for /soundcloud-widget and /soundcloud-api."
-              : "Tracks continue in random order when one finishes.")}
-        </span>
-        {errorMessage ? <p className="soundcloud-help">SoundCloud controls stay disabled until the widget script loads successfully.</p> : null}
+      <div className={`soundcloud-player-card inset-panel ${errorMessage ? "soundcloud-error-state" : ""}`}>
+        <div className="soundcloud-player-art">
+          {currentTrack?.artworkUrl ? <img src={currentTrack.artworkUrl} alt={currentTrack.title} className="soundcloud-artwork-image" /> : <div className="soundcloud-artwork-fallback" />}
+        </div>
+        <div className="soundcloud-player-copy">
+          <p className="meta-label">Now playing</p>
+          <strong>{currentTrackTitle}</strong>
+          <span className="soundcloud-player-artist">{currentTrack?.artist ?? selectedPlaylist.label}</span>
+          <span>
+            {errorMessage ??
+              (isDiscordProxyHost()
+                ? "Tracks continue in random order when one finishes. In Discord, SoundCloud needs Activity URL mappings for /soundcloud-widget and /soundcloud-api."
+                : "Tracks continue in random order when one finishes.")}
+          </span>
+          {errorMessage ? <p className="soundcloud-help">SoundCloud controls stay disabled until the widget script loads successfully.</p> : null}
+          <div className="soundcloud-attribution">
+            <a href={currentTrack?.permalinkUrl ?? selectedPlaylist.sourceUrl} target="_blank" rel="noreferrer">
+              Open on SoundCloud
+            </a>
+            {currentTrack?.artistPermalinkUrl ? (
+              <a href={currentTrack.artistPermalinkUrl} target="_blank" rel="noreferrer">
+                Artist
+              </a>
+            ) : null}
+          </div>
+          <div className="soundcloud-timeline-row">
+            <div className="soundcloud-timeline-labels">
+              <span className="meta-label">Timeline</span>
+              <span className="soundcloud-time-readout">
+                {formatDuration(positionMs)} / {formatDuration(durationMs)}
+              </span>
+            </div>
+            <input
+              type="range"
+              min={0}
+              max={1000}
+              step={1}
+              value={Math.round(progressRatio * 1000)}
+              onChange={(event) => handleTimelineChange(Number(event.target.value) / 1000)}
+              className="soundcloud-timeline-slider"
+              aria-label="SoundCloud playback timeline"
+              disabled={!isWidgetReady || durationMs <= 0}
+            />
+          </div>
+          <div className="soundcloud-volume-row">
+            <span className="meta-label">Volume</span>
+            <input
+              type="range"
+              min={0}
+              max={100}
+              step={1}
+              value={volume}
+              onChange={(event) => handleVolumeChange(Number(event.target.value))}
+              className="soundcloud-volume-slider"
+              aria-label="SoundCloud volume"
+            />
+            <span className="soundcloud-volume-value">{volume}%</span>
+          </div>
+        </div>
       </div>
 
-      <div className="soundcloud-widget-shell">
+      <div className="soundcloud-widget-engine" aria-hidden="true">
         <iframe
           key={selectedPlaylist.id}
           ref={iframeRef}

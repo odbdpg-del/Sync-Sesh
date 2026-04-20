@@ -13,6 +13,7 @@ import type {
 export const DEFAULT_TIMER_SECONDS = 50;
 export const DEFAULT_PRECOUNT_SECONDS = 3;
 export const TIMER_PRESETS = [30, 45, 60];
+export const PRECOUNT_PRESETS = [3, 5];
 
 function createEmptyCountdown(): CountdownTimeline {
   return {};
@@ -24,6 +25,14 @@ function clampTimerDuration(value: number) {
   }
 
   return Math.min(600, Math.max(5, Math.round(value)));
+}
+
+function clampPrecountDuration(value: number) {
+  if (!Number.isFinite(value)) {
+    return DEFAULT_PRECOUNT_SECONDS;
+  }
+
+  return PRECOUNT_PRESETS.includes(Math.round(value)) ? Math.round(value) : DEFAULT_PRECOUNT_SECONDS;
 }
 
 function parseTimestamp(value?: string) {
@@ -204,6 +213,7 @@ export function createSessionSnapshot(overrides?: Partial<SessionSnapshot>): Ses
       preCountSeconds: DEFAULT_PRECOUNT_SECONDS,
       allowLateJoinSpectators: true,
       presets: TIMER_PRESETS,
+      preCountPresets: PRECOUNT_PRESETS,
     },
     countdown: createEmptyCountdown(),
   };
@@ -232,8 +242,15 @@ export function attachLocalProfile(
   localProfile: LocalProfile,
   state?: Partial<DabSyncState>,
 ): DabSyncState {
+  const normalizedTimerConfig = {
+    ...snapshot.timerConfig,
+    preCountSeconds: clampPrecountDuration(snapshot.timerConfig.preCountSeconds),
+    preCountPresets: snapshot.timerConfig.preCountPresets ?? PRECOUNT_PRESETS,
+  };
+
   return {
     ...snapshot,
+    timerConfig: normalizedTimerConfig,
     syncStatus: state?.syncStatus ?? {
       mode: "mock",
       connection: "offline",
@@ -412,6 +429,19 @@ export function reduceSessionEvent(snapshot: SessionSnapshot, event: SessionEven
         timerConfig: {
           ...snapshot.timerConfig,
           durationSeconds: clampTimerDuration(event.durationSeconds),
+        },
+      };
+    }
+    case "set_precount_duration": {
+      if (snapshot.session.phase === "precount" || snapshot.session.phase === "countdown") {
+        return snapshot;
+      }
+
+      return {
+        ...snapshot,
+        timerConfig: {
+          ...snapshot.timerConfig,
+          preCountSeconds: clampPrecountDuration(event.preCountSeconds),
         },
       };
     }
