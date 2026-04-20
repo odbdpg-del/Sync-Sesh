@@ -1,0 +1,145 @@
+import type { LevelConfig } from "./types";
+
+export const level1Config = {
+  id: "level-1",
+  name: "Station Room",
+  dimensions: {
+    width: 14,
+    depth: 12,
+    height: 4,
+  },
+  playerStart: {
+    position: [0, 1.7, 1.2],
+    rotation: [0, Math.PI, 0],
+  },
+  topDownCamera: {
+    position: [0, 10, 0],
+    target: [0, 0, 0],
+    height: 10,
+    orthographicSize: 13,
+  },
+  stations: [
+    {
+      id: "station-1",
+      label: "Station 1",
+      position: [-4.5, 0, -3.5],
+      rotation: [0, 0.35, 0],
+      seatPosition: [-4.5, 0, -2.5],
+      monitorPosition: [-4.5, 1.15, -3.9],
+    },
+    {
+      id: "station-2",
+      label: "Station 2",
+      position: [-1.5, 0, -4.2],
+      rotation: [0, 0.12, 0],
+      seatPosition: [-1.5, 0, -3.1],
+      monitorPosition: [-1.5, 1.15, -4.6],
+    },
+    {
+      id: "station-3",
+      label: "Station 3",
+      position: [1.5, 0, -4.2],
+      rotation: [0, -0.12, 0],
+      seatPosition: [1.5, 0, -3.1],
+      monitorPosition: [1.5, 1.15, -4.6],
+    },
+    {
+      id: "station-4",
+      label: "Station 4",
+      position: [4.5, 0, -3.5],
+      rotation: [0, -0.35, 0],
+      seatPosition: [4.5, 0, -2.5],
+      monitorPosition: [4.5, 1.15, -3.9],
+    },
+    {
+      id: "station-5",
+      label: "Station 5",
+      position: [-4.5, 0, 2.8],
+      rotation: [0, 2.8, 0],
+      seatPosition: [-4.5, 0, 1.8],
+      monitorPosition: [-4.5, 1.15, 3.2],
+    },
+    {
+      id: "station-6",
+      label: "Station 6",
+      position: [-1.5, 0, 3.6],
+      rotation: [0, Math.PI, 0],
+      seatPosition: [-1.5, 0, 2.5],
+      monitorPosition: [-1.5, 1.15, 4],
+    },
+    {
+      id: "station-7",
+      label: "Station 7",
+      position: [1.5, 0, 3.6],
+      rotation: [0, Math.PI, 0],
+      seatPosition: [1.5, 0, 2.5],
+      monitorPosition: [1.5, 1.15, 4],
+    },
+    {
+      id: "station-8",
+      label: "Station 8",
+      position: [4.5, 0, 2.8],
+      rotation: [0, -2.8, 0],
+      seatPosition: [4.5, 0, 1.8],
+      monitorPosition: [4.5, 1.15, 3.2],
+    },
+  ],
+  timerDisplay: {
+    id: "central-timer-display",
+    position: [0, 2.1, -5.85],
+    rotation: [0, 0, 0],
+    size: {
+      width: 3.2,
+      height: 1.4,
+    },
+  },
+  collisionBounds: {
+    room: {
+      min: [-7, 0, -6],
+      max: [7, 4, 6],
+    },
+    blockers: [
+      {
+        id: "north-station-row",
+        label: "North station row",
+        min: [-5.6, 0, -5.2],
+        max: [5.6, 1.6, -3],
+      },
+      {
+        id: "south-station-row",
+        label: "South station row",
+        min: [-5.6, 0, 2.2],
+        max: [5.6, 1.6, 4.6],
+      },
+      {
+        id: "timer-wall-display",
+        label: "Timer display",
+        min: [-1.8, 1.2, -6],
+        max: [1.8, 2.9, -5.7],
+      },
+    ],
+  },
+  lighting: [
+    {
+      id: "room-ambient",
+      type: "ambient",
+      color: "#7fa7ff",
+      intensity: 0.38,
+    },
+    {
+      id: "main-overhead",
+      type: "directional",
+      position: [2, 5, 3],
+      target: [0, 0, 0],
+      color: "#f4f7ff",
+      intensity: 1.15,
+    },
+    {
+      id: "timer-glow-placeholder",
+      type: "point",
+      position: [0, 2.2, -5.4],
+      color: "#57f3ff",
+      intensity: 0.9,
+    },
+  ],
+} satisfies LevelConfig;

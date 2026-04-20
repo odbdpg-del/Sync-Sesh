@@ -1,12 +1,25 @@
+import { useEffect, useRef, useState } from "react";
 import { AdminPanel } from "../components/AdminPanel";
 import { AppHeader } from "../components/AppHeader";
 import { LobbyPanel } from "../components/LobbyPanel";
 import { StatusFooter } from "../components/StatusFooter";
 import { TimerPanel } from "../components/TimerPanel";
+import { RenderingStackSpike } from "../3d/RenderingStackSpike";
+import { ThreeDModeShell } from "../3d/ThreeDModeShell";
 import { useAdminPanelHotkey } from "../hooks/useAdminPanelHotkey";
+import { useCountdownDisplay } from "../hooks/useCountdownDisplay";
 import { useDabSyncSession } from "../hooks/useDabSyncSession";
+import { useSecretCodeUnlock } from "../hooks/useSecretCodeUnlock";
+
+function hasRenderingSpikeParam() {
+  return new URLSearchParams(window.location.search).get("spike3d") === "1";
+}
 
 export function MainScreen() {
+  const [isRenderingSpikeOpen, setIsRenderingSpikeOpen] = useState(hasRenderingSpikeParam);
+  const [isThreeDModeOpen, setIsThreeDModeOpen] = useState(false);
+  const { isSecretUnlocked } = useSecretCodeUnlock();
+  const wasSecretUnlockedRef = useRef(isSecretUnlocked);
   const {
     state,
     lobbyState,
@@ -23,10 +36,23 @@ export function MainScreen() {
     toggleTestParticipantsReady,
     clearTestParticipants,
   } = useDabSyncSession();
+  const countdownDisplay = useCountdownDisplay(state);
   const { isOpen: isAdminOpen, setIsOpen: setIsAdminOpen } = useAdminPanelHotkey(lobbyState.canUseAdminTools);
 
+  useEffect(() => {
+    if (isSecretUnlocked && !wasSecretUnlockedRef.current) {
+      setIsThreeDModeOpen(true);
+    }
+
+    wasSecretUnlockedRef.current = isSecretUnlocked;
+  }, [isSecretUnlocked]);
+
   return (
-    <main className="app-shell">
+    <main
+      className="app-shell"
+      data-secret-unlocked={isSecretUnlocked ? "true" : undefined}
+      data-3d-shell-open={isThreeDModeOpen ? "true" : undefined}
+    >
       <AppHeader session={state.session} syncStatus={state.syncStatus} />
 
       {state.syncStatus.connection === "connecting" ? (
@@ -46,6 +72,7 @@ export function MainScreen() {
         <TimerPanel
           state={state}
           lobbyState={lobbyState}
+          countdownDisplay={countdownDisplay}
           onStartReadyHold={startReadyHold}
           onEndReadyHold={endReadyHold}
           onSetTimerDuration={setTimerDuration}
@@ -67,6 +94,17 @@ export function MainScreen() {
       />
 
       <StatusFooter syncStatus={state.syncStatus} sdkState={sdkState} />
+
+      {isThreeDModeOpen ? (
+        <ThreeDModeShell
+          countdownDisplay={countdownDisplay}
+          users={state.users}
+          localUserId={state.localProfile.id}
+          ownerId={state.session.ownerId}
+          onExit={() => setIsThreeDModeOpen(false)}
+        />
+      ) : null}
+      {isRenderingSpikeOpen ? <RenderingStackSpike onClose={() => setIsRenderingSpikeOpen(false)} /> : null}
     </main>
   );
 }

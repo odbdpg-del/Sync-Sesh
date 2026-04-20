@@ -1,12 +1,12 @@
 import { useEffect, useState } from "react";
-import { useCountdownDisplay } from "../hooks/useCountdownDisplay";
 import { useReadyHold } from "../hooks/useReadyHold";
 import { useRoundEffects } from "../hooks/useRoundEffects";
-import type { DabSyncState, DerivedLobbyState, SyncStatus } from "../types/session";
+import type { CountdownDisplayState, DabSyncState, DerivedLobbyState, SyncStatus } from "../types/session";
 
 interface TimerPanelProps {
   state: DabSyncState;
   lobbyState: DerivedLobbyState;
+  countdownDisplay: CountdownDisplayState;
   onStartReadyHold: () => void;
   onEndReadyHold: () => void;
   onSetTimerDuration: (durationSeconds: number) => void;
@@ -36,12 +36,12 @@ function getStatusCopy(lobbyState: DerivedLobbyState, syncStatus: SyncStatus) {
 export function TimerPanel({
   state,
   lobbyState,
+  countdownDisplay,
   onStartReadyHold,
   onEndReadyHold,
   onSetTimerDuration,
   onResetRound,
 }: TimerPanelProps) {
-  const countdownDisplay = useCountdownDisplay(state);
   const { isCelebrating } = useRoundEffects(state.session.phase);
   const [draftDuration, setDraftDuration] = useState(state.timerConfig.durationSeconds.toString());
   const syncReady = state.syncStatus.mode === "mock" || state.syncStatus.connection === "connected";
