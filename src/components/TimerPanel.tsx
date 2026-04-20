@@ -15,11 +15,11 @@ interface TimerPanelProps {
 
 function getStatusCopy(lobbyState: DerivedLobbyState, syncStatus: SyncStatus) {
   if (syncStatus.connection === "connecting") {
-    return "Connecting to sync layer. Timing controls will stabilize once the link is ready.";
+    return "Connecting to sync layer";
   }
 
   if (syncStatus.connection === "offline" || syncStatus.connection === "error") {
-    return syncStatus.warning ?? "Sync unavailable. Reconnect before relying on shared timing.";
+    return syncStatus.warning ?? "Sync unavailable";
   }
 
   if (syncStatus.warning) {
@@ -27,10 +27,42 @@ function getStatusCopy(lobbyState: DerivedLobbyState, syncStatus: SyncStatus) {
   }
 
   if (lobbyState.isArmed) {
-    return "ARMED: any ready participant can release to trigger the countdown.";
+    return "Release to start";
   }
 
-  return "Hold to ready. Once everyone active is holding, release starts the round.";
+  if (lobbyState.canResetRound) {
+    return "Replay to return to lobby";
+  }
+
+  return "Release starts the round";
+}
+
+function getActionLabel(lobbyState: DerivedLobbyState, isHolding: boolean) {
+  if (lobbyState.isLocalUserSpectating) {
+    return {
+      title: "Spectating This Round",
+      subtitle: "Wait for replay to rejoin",
+    };
+  }
+
+  if (lobbyState.releaseStartsCountdown) {
+    return {
+      title: "Release To Start",
+      subtitle: "Everyone is locked in",
+    };
+  }
+
+  if (isHolding) {
+    return {
+      title: "Holding Ready",
+      subtitle: "Hold everyone together",
+    };
+  }
+
+  return {
+    title: "Hold To Ready",
+    subtitle: "Hold everyone together",
+  };
 }
 
 export function TimerPanel({
@@ -55,6 +87,11 @@ export function TimerPanel({
     setDraftDuration(state.timerConfig.durationSeconds.toString());
   }, [state.timerConfig.durationSeconds]);
 
+  const actionLabel = getActionLabel(lobbyState, isHolding);
+  const phaseLabel = state.session.phase === "completed" ? "Completed" : state.session.phase;
+  const armedLabel =
+    state.session.phase === "completed" ? "Complete" : lobbyState.isArmed ? "Armed" : state.session.phase === "precount" ? "Launch" : "Standby";
+
   return (
     <section className={`panel timer-panel timer-shell phase-shell-${state.session.phase} ${isCelebrating ? "round-complete-burst" : ""}`}>
       <div className="crt-overlay" aria-hidden="true" />
@@ -66,7 +103,7 @@ export function TimerPanel({
           <h2>Round Control</h2>
         </div>
         <div className="status-stack">
-          <span className={`phase-pill phase-${state.session.phase}`}>{state.session.phase}</span>
+          <span className={`phase-pill phase-${state.session.phase}`}>{phaseLabel}</span>
           <span className="capacity-pill">Round {state.session.roundNumber}</span>
         </div>
       </div>
@@ -76,13 +113,33 @@ export function TimerPanel({
           state.session.phase === "precount" ? "timer-face-precount" : ""
         } ${state.session.phase === "completed" ? "timer-face-complete" : ""}`}
       >
-        <span className="timer-value">{countdownDisplay.headline}</span>
-        <span className="timer-subcopy">{countdownDisplay.subheadline}</span>
-        {countdownDisplay.accentText ? <span className="timer-accent">{countdownDisplay.accentText}</span> : null}
+        <div className="timer-rails timer-rails-left" aria-hidden="true">
+          <span />
+          <span />
+          <span />
+          <span />
+          <span />
+        </div>
+        <div className="timer-center">
+          <span className="timer-value">{countdownDisplay.headline}</span>
+          <span className="timer-subcopy">{countdownDisplay.subheadline}</span>
+          {countdownDisplay.accentText ? <span className="timer-accent">{countdownDisplay.accentText}</span> : null}
+        </div>
+        <div className="timer-rails timer-rails-right" aria-hidden="true">
+          <span />
+          <span />
+          <span />
+          <span />
+          <span />
+        </div>
       </div>
 
       <div className={`armed-banner ${lobbyState.isArmed ? "armed-live" : ""} ${state.session.phase === "precount" ? "armed-banner-hot" : ""}`}>
-        {getStatusCopy(lobbyState, state.syncStatus)}
+        <span className="armed-prefix">! {armedLabel}</span>
+        <span className="armed-copy">{getStatusCopy(lobbyState, state.syncStatus)}</span>
+        <span className="armed-chevron" aria-hidden="true">
+          ====
+        </span>
       </div>
 
       {state.syncStatus.connection !== "connected" ? (
@@ -91,77 +148,93 @@ export function TimerPanel({
           <p>
             {state.syncStatus.connection === "connecting"
               ? "Attempting to establish synchronized timing."
-              : "Shared timing is not currently available. You can still inspect the session, but multiplayer actions are paused."}
+              : "Shared timing is not currently available. Multiplayer actions are paused."}
           </p>
         </div>
       ) : null}
 
-      <div className="timer-config panel inset-panel">
-        <div className="config-heading">
-          <p className="meta-label">Duration</p>
-          <span className="meta-label">Shared across the current session</span>
-        </div>
-        <div className="timer-config-row">
-          <input
-            type="number"
-            min={5}
-            max={600}
-            step={1}
-            value={draftDuration}
-            onChange={(event) => setDraftDuration(event.target.value)}
-            onBlur={() => onSetTimerDuration(Number(draftDuration))}
-            onKeyDown={(event) => {
-              if (event.key === "Enter") {
-                onSetTimerDuration(Number(draftDuration));
-              }
-            }}
-            disabled={!lobbyState.canEditTimer || !syncReady}
-            className="timer-input"
-          />
-          <span className="timer-input-suffix">seconds</span>
-        </div>
-        <div className="preset-row">
-          {state.timerConfig.presets.map((preset) => (
-            <button
-              key={preset}
-              type="button"
-              className={`ghost-button ${preset === state.timerConfig.durationSeconds ? "preset-active" : ""}`}
-              disabled={!lobbyState.canEditTimer || !syncReady}
-              onClick={() => onSetTimerDuration(preset)}
-            >
-              {preset}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <div className="cta-row">
+      <div className="hold-stage">
         <button
           type="button"
           className={`hold-button ${isHolding ? "hold-button-active" : ""}`}
           disabled={!lobbyState.canHoldToReady || !syncReady}
           {...bindHoldButton}
         >
-          {lobbyState.isLocalUserSpectating
-            ? "Spectating This Round"
-            : lobbyState.releaseStartsCountdown
-              ? "Release To Start"
-              : isHolding
-                ? "Holding Ready"
-                : "Hold To Ready"}
-        </button>
-        <button type="button" className="ghost-button replay-button" disabled={!lobbyState.canResetRound || !syncReady} onClick={onResetRound}>
-          Replay / Reset
+          <span className="hold-orb" aria-hidden="true" />
+          <span className="hold-copy">
+            <span className="hold-title">{actionLabel.title}</span>
+            <span className="hold-subtitle">{actionLabel.subtitle}</span>
+          </span>
+          <span className="hold-grid" aria-hidden="true">
+            ......
+          </span>
         </button>
       </div>
 
-      <div className="panel inset-panel">
-        <p className="meta-label">Flow</p>
-        <ul className="instruction-list">
-          <li>Reach ARMED by having every active participant hold ready.</li>
-          <li>Release from ARMED to start a synchronized 3...2...1 pre-count.</li>
-          <li>When the main timer reaches zero, replay returns everyone to lobby.</li>
-        </ul>
+      <div className="timer-config panel inset-panel">
+        <div className="timer-config-grid">
+          <div className="duration-block">
+            <div className="config-heading">
+              <p className="meta-label">Duration</p>
+            </div>
+            <div className="timer-config-row">
+              <input
+                type="number"
+                min={5}
+                max={600}
+                step={1}
+                value={draftDuration}
+                onChange={(event) => setDraftDuration(event.target.value)}
+                onBlur={() => onSetTimerDuration(Number(draftDuration))}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    onSetTimerDuration(Number(draftDuration));
+                  }
+                }}
+                disabled={!lobbyState.canEditTimer || !syncReady}
+                className="timer-input"
+              />
+              <span className="timer-input-suffix">seconds</span>
+            </div>
+            <div className="preset-row">
+              {state.timerConfig.presets.map((preset) => (
+                <button
+                  key={preset}
+                  type="button"
+                  className={`ghost-button ${preset === state.timerConfig.durationSeconds ? "preset-active" : ""}`}
+                  disabled={!lobbyState.canEditTimer || !syncReady}
+                  onClick={() => onSetTimerDuration(preset)}
+                >
+                  {preset}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="flow-preview">
+            <div className="config-heading">
+              <p className="meta-label">Flow Preview</p>
+            </div>
+            <div className="flow-steps">
+              <span className="flow-step">Hold</span>
+              <span className="flow-arrow">{">"}</span>
+              <span className="flow-step flow-step-live">Armed</span>
+              <span className="flow-arrow">{">"}</span>
+              <span className="flow-step">3...2...1</span>
+              <span className="flow-arrow">{">"}</span>
+              <span className="flow-step">Start</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="cta-row cta-row-bottom">
+        <button type="button" className="primary-button run-it-back" disabled={!lobbyState.canResetRound || !syncReady} onClick={onResetRound}>
+          Reset / Replay
+        </button>
+        <button type="button" className="ghost-button settings-button" disabled>
+          Settings
+        </button>
       </div>
     </section>
   );

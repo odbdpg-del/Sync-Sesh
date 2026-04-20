@@ -18,6 +18,29 @@ function getStateLabel(state: SessionUser["presence"]) {
   }
 }
 
+function getMetricIcon(state: "ready" | "idle" | "spectators") {
+  switch (state) {
+    case "ready":
+      return "R";
+    case "spectators":
+      return "S";
+    default:
+      return "I";
+  }
+}
+
+function getUserRoleLabel(user: SessionUser, session: SessionInfo) {
+  if (user.id === session.ownerId) {
+    return "OWNER";
+  }
+
+  if (user.isTestUser) {
+    return "SIM";
+  }
+
+  return "CREW";
+}
+
 export function LobbyPanel({ session, users, lobbyState, onJoinSession }: LobbyPanelProps) {
   return (
     <section className={`panel stack lobby-panel lobby-phase-${session.phase}`}>
@@ -32,28 +55,46 @@ export function LobbyPanel({ session, users, lobbyState, onJoinSession }: LobbyP
       </div>
 
       <div className="metrics-grid">
-        <article className="metric-card metric-ready">
+        <article className="metric-card metric-ready metric-tile">
           <span className="meta-label">Ready</span>
-          <strong>{lobbyState.metrics.readyCount}</strong>
+          <div className="metric-mainline">
+            <strong>{lobbyState.metrics.readyCount}</strong>
+            <span className="metric-icon" aria-hidden="true">
+              {getMetricIcon("ready")}
+            </span>
+          </div>
         </article>
-        <article className="metric-card metric-idle">
+        <article className="metric-card metric-idle metric-tile">
           <span className="meta-label">Idle</span>
-          <strong>{lobbyState.metrics.idleCount}</strong>
+          <div className="metric-mainline">
+            <strong>{lobbyState.metrics.idleCount}</strong>
+            <span className="metric-icon" aria-hidden="true">
+              {getMetricIcon("idle")}
+            </span>
+          </div>
         </article>
-        <article className="metric-card metric-spectators">
+        <article className="metric-card metric-spectators metric-tile">
           <span className="meta-label">Spectators</span>
-          <strong>{lobbyState.metrics.spectatorCount}</strong>
+          <div className="metric-mainline">
+            <strong>{lobbyState.metrics.spectatorCount}</strong>
+            <span className="metric-icon" aria-hidden="true">
+              {getMetricIcon("spectators")}
+            </span>
+          </div>
         </article>
       </div>
 
       <div className="join-row">
         <button
           type="button"
-          className="primary-button"
+          className="primary-button join-button"
           disabled={!lobbyState.canJoinSession}
           onClick={onJoinSession}
         >
-          {lobbyState.isJoined ? "Joined" : "Join Session"}
+          <span className="join-button-icon" aria-hidden="true">
+            +
+          </span>
+          <span>{lobbyState.isJoined ? "Joined" : "Join Session"}</span>
         </button>
         <div className="join-copy">
           <p className="meta-label">Join behavior</p>
@@ -62,6 +103,7 @@ export function LobbyPanel({ session, users, lobbyState, onJoinSession }: LobbyP
               ? "Late joins become spectators until the next round."
               : "Join now to enter the active lobby."}
           </p>
+          <p className="join-copy-subtle">Once the round is armed, you're in.</p>
         </div>
       </div>
 
@@ -82,11 +124,16 @@ export function LobbyPanel({ session, users, lobbyState, onJoinSession }: LobbyP
                   {user.displayName}
                   {user.id === lobbyState.localUser?.id ? " (You)" : ""}
                 </strong>
-                <span className="meta-label">
-                  {user.id === session.ownerId ? "Owner" : user.isTestUser ? "Sim" : "Crew"} | {getStateLabel(user.presence)}
-                </span>
+                <span className="meta-label">{getUserRoleLabel(user, session)}</span>
               </div>
-              <span className={`presence-chip presence-${user.presence}`}>{getStateLabel(user.presence)}</span>
+              <div className="user-status">
+                <span className={`presence-chip presence-${user.presence}`}>{getStateLabel(user.presence)}</span>
+                {user.presence === "ready" ? (
+                  <span className="ready-bars" aria-hidden="true">
+                    III
+                  </span>
+                ) : null}
+              </div>
             </article>
           ))
         )}
