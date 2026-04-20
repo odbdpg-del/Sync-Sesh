@@ -1,5 +1,6 @@
 node_modules
 dist
+.local-run
 .DS_Store
 *.local
 *.tsbuildinfo
