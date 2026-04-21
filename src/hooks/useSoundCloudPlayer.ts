@@ -131,7 +131,7 @@ function getWidgetSrc(playlist: PlaylistOption) {
 
 function getResolvedWidgetSrc(playlist: PlaylistOption) {
   const rawWidgetSrc = getWidgetSrc(playlist);
-  return remapThroughActivityPrefix(rawWidgetSrc, SOUNDCLOUD_WIDGET_PREFIX);
+  return rawWidgetSrc;
 }
 
 function loadWidgetScript() {
