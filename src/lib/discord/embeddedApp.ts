@@ -1,4 +1,4 @@
-import { DiscordSDK } from "@discord/embedded-app-sdk";
+import { DiscordSDK, patchUrlMappings } from "@discord/embedded-app-sdk";
 import type { LocalProfile } from "../../types/session";
 import { getDiscordAvatarUrl, getDiscordDisplayName } from "./user";
 import { buildAvatarSeed, getLocalProfile, persistLocalProfile } from "../session/localProfile";
@@ -10,6 +10,42 @@ export interface EmbeddedAppState {
   guildId?: string;
   instanceId?: string;
   localProfile?: LocalProfile;
+}
+
+const DEFAULT_SYNC_PROXY_TARGET = "sync-sesh-sync.onrender.com";
+const STATIC_ACTIVITY_URL_MAPPINGS = [
+  { prefix: "/soundcloud-widget", target: "w.soundcloud.com" },
+  { prefix: "/soundcloud-api", target: "api.soundcloud.com" },
+] as const;
+
+let hasPatchedActivityUrlMappings = false;
+
+function resolveSyncProxyTarget() {
+  const configuredUrl = import.meta.env.VITE_SYNC_SERVER_URL;
+
+  if (configuredUrl && configuredUrl !== "auto") {
+    try {
+      const parsed = new URL(configuredUrl);
+      const isLocalTarget = parsed.hostname === "localhost" || parsed.hostname === "127.0.0.1";
+
+      if (!isLocalTarget) {
+        return parsed.hostname;
+      }
+    } catch {
+      // Fall back to the known hosted sync service target.
+    }
+  }
+
+  return DEFAULT_SYNC_PROXY_TARGET;
+}
+
+function patchActivityUrlMappings() {
+  if (hasPatchedActivityUrlMappings) {
+    return;
+  }
+
+  patchUrlMappings([{ prefix: "/sync", target: resolveSyncProxyTarget() }, ...STATIC_ACTIVITY_URL_MAPPINGS]);
+  hasPatchedActivityUrlMappings = true;
 }
 
 async function resolveDiscordLocalProfile(sdk: DiscordSDK): Promise<LocalProfile | undefined> {
@@ -51,6 +87,8 @@ export async function initializeEmbeddedApp(): Promise<EmbeddedAppState> {
   if (!enabled || !clientId) {
     return { enabled: false, localProfile: getLocalProfile() };
   }
+
+  patchActivityUrlMappings();
 
   const sdk = new DiscordSDK(clientId);
   await sdk.ready();

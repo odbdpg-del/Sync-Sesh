@@ -1,3 +1,4 @@
+import { createServer } from "node:http";
 import { WebSocketServer } from "ws";
 import { advanceSessionTime, createSessionSnapshot, reduceSessionEvent } from "../src/lib/lobby/sessionState";
 import type { LocalProfile, SessionEvent, SessionSnapshot } from "../src/types/session";
@@ -21,28 +22,32 @@ const port = Number(process.env.PORT ?? 8787);
 const rooms = new Map<string, SessionRoom>();
 const socketToRoomId = new Map<import("ws").WebSocket, string>();
 
+function createRoom(sessionId: string): SessionRoom {
+  return {
+    snapshot: createSessionSnapshot({
+      session: {
+        id: sessionId,
+        code: sessionId.toUpperCase().slice(0, 8),
+        phase: "idle",
+        roundNumber: 1,
+        ownerId: "",
+      },
+      users: [],
+    }),
+    clients: new Set(),
+  };
+}
+
 function getRoom(sessionId: string) {
-  let room = rooms.get(sessionId);
+  const existingRoom = rooms.get(sessionId);
 
-  if (!room) {
-    room = {
-      snapshot: createSessionSnapshot({
-        session: {
-          id: sessionId,
-          code: sessionId.toUpperCase().slice(0, 8),
-          phase: "idle",
-          roundNumber: 1,
-          ownerId: "",
-        },
-        users: [],
-      }),
-      clients: new Set(),
-    };
-
-    rooms.set(sessionId, room);
+  if (!existingRoom || existingRoom.clients.size === 0) {
+    const freshRoom = createRoom(sessionId);
+    rooms.set(sessionId, freshRoom);
+    return freshRoom;
   }
 
-  return room;
+  return existingRoom;
 }
 
 function send(socket: import("ws").WebSocket, payload: ServerMessage) {
@@ -69,9 +74,20 @@ function broadcast(sessionId: string) {
   }
 }
 
-const server = new WebSocketServer({ port });
+const httpServer = createServer((request, response) => {
+  if (request.url === "/health") {
+    response.writeHead(200, { "Content-Type": "application/json" });
+    response.end(JSON.stringify({ ok: true, service: "sync-sesh-sync" }));
+    return;
+  }
 
-server.on("connection", (socket) => {
+  response.writeHead(200, { "Content-Type": "text/plain; charset=utf-8" });
+  response.end("Sync Sesh sync server is running.");
+});
+
+const wsServer = new WebSocketServer({ server: httpServer });
+
+wsServer.on("connection", (socket) => {
   socket.on("message", (rawMessage) => {
     let payload: ClientMessage;
 
@@ -130,6 +146,11 @@ server.on("connection", (socket) => {
 
     const room = rooms.get(roomId);
     room?.clients.delete(socket);
+
+    if (room && room.clients.size === 0) {
+      rooms.delete(roomId);
+    }
+
     socketToRoomId.delete(socket);
   });
 });
@@ -145,4 +166,6 @@ setInterval(() => {
   }
 }, 100);
 
-console.log(`DabSync sync server listening on ws://localhost:${port}`);
+httpServer.listen(port, "0.0.0.0", () => {
+  console.log(`DabSync sync server listening on port ${port}`);
+});

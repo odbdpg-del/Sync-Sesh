@@ -2,7 +2,11 @@ import type {
   CountdownTimeline,
   DabSyncState,
   DerivedLobbyState,
+  FreeRoamPresenceState,
+  FreeRoamPresenceUpdate,
   LocalProfile,
+  RangeScoreResult,
+  RangeScoreSubmission,
   SessionEvent,
   SessionMetrics,
   SessionPhase,
@@ -13,6 +17,9 @@ import type {
 export const DEFAULT_TIMER_SECONDS = 50;
 export const DEFAULT_PRECOUNT_SECONDS = 3;
 export const TIMER_PRESETS = [30, 45, 60];
+export const PRECOUNT_PRESETS = [3, 5];
+const MAX_RANGE_SCORE_RESULTS = 32;
+const FREE_ROAM_PRESENCE_TTL_MS = 10_000;
 
 function createEmptyCountdown(): CountdownTimeline {
   return {};
@@ -24,6 +31,173 @@ function clampTimerDuration(value: number) {
   }
 
   return Math.min(600, Math.max(5, Math.round(value)));
+}
+
+function clampInteger(value: number, min: number, max: number) {
+  if (!Number.isFinite(value)) {
+    return min;
+  }
+
+  return Math.min(max, Math.max(min, Math.round(value)));
+}
+
+function clampNumber(value: number, min: number, max: number) {
+  if (!Number.isFinite(value)) {
+    return min;
+  }
+
+  return Math.min(max, Math.max(min, value));
+}
+
+function roundTo(value: number, decimals: number) {
+  const multiplier = 10 ** decimals;
+  return Math.round(value * multiplier) / multiplier;
+}
+
+function normalizeYaw(yaw: number) {
+  if (!Number.isFinite(yaw)) {
+    return 0;
+  }
+
+  let normalizedYaw = yaw;
+
+  while (normalizedYaw > Math.PI) {
+    normalizedYaw -= Math.PI * 2;
+  }
+
+  while (normalizedYaw < -Math.PI) {
+    normalizedYaw += Math.PI * 2;
+  }
+
+  return roundTo(normalizedYaw, 3);
+}
+
+function sanitizeFreeRoamPresenceUpdate(presence: FreeRoamPresenceUpdate) {
+  if (
+    typeof presence.levelId !== "string" ||
+    !Array.isArray(presence.position) ||
+    presence.position.length !== 3
+  ) {
+    return null;
+  }
+
+  const levelId = presence.levelId.trim();
+
+  if (!/^[a-z0-9-]{1,48}$/i.test(levelId)) {
+    return null;
+  }
+
+  return {
+    levelId,
+    position: [
+      roundTo(clampNumber(presence.position[0], -100, 100), 2),
+      roundTo(clampNumber(presence.position[1], 0, 20), 2),
+      roundTo(clampNumber(presence.position[2], -100, 100), 2),
+    ] as const,
+    yaw: normalizeYaw(presence.yaw),
+  };
+}
+
+function upsertFreeRoamPresence(
+  presenceEntries: FreeRoamPresenceState[],
+  nextPresence: FreeRoamPresenceState,
+  maxEntries: number,
+) {
+  const entriesWithoutActor = presenceEntries.filter((presence) => presence.userId !== nextPresence.userId);
+
+  return [...entriesWithoutActor, nextPresence].slice(-maxEntries);
+}
+
+function pruneFreeRoamPresence(presenceEntries: FreeRoamPresenceState[], nowMs: number) {
+  return presenceEntries.filter((presence) => {
+    const updatedAtMs = Date.parse(presence.updatedAt);
+    return Number.isFinite(updatedAtMs) && nowMs - updatedAtMs <= FREE_ROAM_PRESENCE_TTL_MS;
+  });
+}
+
+function sanitizeRangeScoreSubmission(submission: RangeScoreSubmission) {
+  const levelId = submission.levelId.trim();
+
+  if (!levelId) {
+    return null;
+  }
+
+  const score = clampInteger(submission.score, 0, 999999);
+  const shots = clampInteger(submission.shots, 0, 999);
+  const hits = Math.min(clampInteger(submission.hits, 0, 999), shots);
+  const misses = Math.min(clampInteger(submission.misses, 0, 999), Math.max(0, shots - hits));
+  const accuracy = shots === 0 ? 0 : clampInteger((hits / shots) * 100, 0, 100);
+  const durationMs = clampInteger(submission.durationMs, 5000, 120000);
+
+  if (shots <= 0) {
+    return null;
+  }
+
+  return {
+    levelId,
+    score,
+    shots,
+    hits,
+    misses,
+    accuracy,
+    durationMs,
+  };
+}
+
+function isBetterRangeScore(nextResult: RangeScoreResult, currentResult: RangeScoreResult) {
+  if (nextResult.score !== currentResult.score) {
+    return nextResult.score > currentResult.score;
+  }
+
+  if (nextResult.accuracy !== currentResult.accuracy) {
+    return nextResult.accuracy > currentResult.accuracy;
+  }
+
+  if (nextResult.durationMs !== currentResult.durationMs) {
+    return nextResult.durationMs < currentResult.durationMs;
+  }
+
+  return false;
+}
+
+function upsertRangeScoreResult(results: RangeScoreResult[], nextResult: RangeScoreResult) {
+  const existingIndex = results.findIndex((result) => (
+    result.userId === nextResult.userId &&
+    result.levelId === nextResult.levelId &&
+    result.roundNumber === nextResult.roundNumber
+  ));
+
+  if (existingIndex >= 0) {
+    const currentResult = results[existingIndex];
+
+    if (!isBetterRangeScore(nextResult, currentResult)) {
+      return results;
+    }
+
+    return [
+      ...results.slice(0, existingIndex),
+      nextResult,
+      ...results.slice(existingIndex + 1),
+    ];
+  }
+
+  return [...results, nextResult]
+    .sort((firstResult, secondResult) => (
+      secondResult.roundNumber - firstResult.roundNumber ||
+      secondResult.score - firstResult.score ||
+      secondResult.accuracy - firstResult.accuracy ||
+      firstResult.durationMs - secondResult.durationMs ||
+      firstResult.completedAt.localeCompare(secondResult.completedAt)
+    ))
+    .slice(0, MAX_RANGE_SCORE_RESULTS);
+}
+
+function clampPrecountDuration(value: number) {
+  if (!Number.isFinite(value)) {
+    return DEFAULT_PRECOUNT_SECONDS;
+  }
+
+  return PRECOUNT_PRESETS.includes(Math.round(value)) ? Math.round(value) : DEFAULT_PRECOUNT_SECONDS;
 }
 
 function parseTimestamp(value?: string) {
@@ -203,9 +377,14 @@ export function createSessionSnapshot(overrides?: Partial<SessionSnapshot>): Ses
       durationSeconds: DEFAULT_TIMER_SECONDS,
       preCountSeconds: DEFAULT_PRECOUNT_SECONDS,
       allowLateJoinSpectators: true,
+      lateJoinersJoinReady: false,
+      autoJoinOnLoad: false,
       presets: TIMER_PRESETS,
+      preCountPresets: PRECOUNT_PRESETS,
     },
     countdown: createEmptyCountdown(),
+    rangeScoreboard: [],
+    freeRoamPresence: [],
   };
 
   return {
@@ -232,8 +411,15 @@ export function attachLocalProfile(
   localProfile: LocalProfile,
   state?: Partial<DabSyncState>,
 ): DabSyncState {
+  const normalizedTimerConfig = {
+    ...snapshot.timerConfig,
+    preCountSeconds: clampPrecountDuration(snapshot.timerConfig.preCountSeconds),
+    preCountPresets: snapshot.timerConfig.preCountPresets ?? PRECOUNT_PRESETS,
+  };
+
   return {
     ...snapshot,
+    timerConfig: normalizedTimerConfig,
     syncStatus: state?.syncStatus ?? {
       mode: "mock",
       connection: "offline",
@@ -325,16 +511,21 @@ export function reduceSessionEvent(snapshot: SessionSnapshot, event: SessionEven
         return snapshot;
       }
 
-      const isLateJoin =
-        snapshot.session.phase === "precount" ||
-        snapshot.session.phase === "countdown" ||
-        snapshot.session.phase === "completed";
+      const isActiveCountdownJoin = snapshot.session.phase === "precount" || snapshot.session.phase === "countdown";
+      const isCompletedJoin = snapshot.session.phase === "completed";
+      const joinedPresence: SessionUser["presence"] = isActiveCountdownJoin
+        ? snapshot.timerConfig.lateJoinersJoinReady
+          ? "ready"
+          : "spectating"
+        : isCompletedJoin
+          ? "spectating"
+          : "idle";
       const nextUser: SessionUser = {
         id: actor.id,
         displayName: actor.displayName,
         avatarSeed: actor.avatarSeed,
         avatarUrl: actor.avatarUrl,
-        presence: isLateJoin ? "spectating" : "idle",
+        presence: joinedPresence,
         isHost: false,
         joinedAt: nextJoinedAt,
       };
@@ -343,7 +534,7 @@ export function reduceSessionEvent(snapshot: SessionSnapshot, event: SessionEven
             user.id === actor.id
               ? {
                   ...user,
-                  presence: isLateJoin ? "spectating" : "idle",
+                  presence: joinedPresence,
                 }
               : user,
           )
@@ -415,6 +606,19 @@ export function reduceSessionEvent(snapshot: SessionSnapshot, event: SessionEven
         },
       };
     }
+    case "set_precount_duration": {
+      if (snapshot.session.phase === "precount" || snapshot.session.phase === "countdown") {
+        return snapshot;
+      }
+
+      return {
+        ...snapshot,
+        timerConfig: {
+          ...snapshot.timerConfig,
+          preCountSeconds: clampPrecountDuration(event.preCountSeconds),
+        },
+      };
+    }
     case "reset_round": {
       if (snapshot.session.phase !== "completed") {
         return snapshot;
@@ -426,6 +630,7 @@ export function reduceSessionEvent(snapshot: SessionSnapshot, event: SessionEven
         ...snapshot,
         users: nextUsers,
         countdown: createEmptyCountdown(),
+        rangeScoreboard: [],
         session: {
           ...snapshot.session,
           phase: getBaseLobbyPhase(nextUsers),
@@ -495,6 +700,8 @@ export function reduceSessionEvent(snapshot: SessionSnapshot, event: SessionEven
         ...snapshot,
         users: nextUsers,
         countdown: createEmptyCountdown(),
+        rangeScoreboard: [],
+        freeRoamPresence: [],
         session: {
           ...snapshot.session,
           phase: getBaseLobbyPhase(nextUsers),
@@ -534,6 +741,7 @@ export function reduceSessionEvent(snapshot: SessionSnapshot, event: SessionEven
       return {
         ...snapshot,
         users: nextUsers,
+        freeRoamPresence: snapshot.freeRoamPresence.filter((presence) => nextUsers.some((user) => user.id === presence.userId)),
         session: {
           ...snapshot.session,
           phase: getBaseLobbyPhase(nextUsers),
@@ -573,57 +781,151 @@ export function reduceSessionEvent(snapshot: SessionSnapshot, event: SessionEven
         },
       };
     }
+    case "admin_set_late_joiners_join_ready": {
+      if (!isActorHost(snapshot, actor)) {
+        return snapshot;
+      }
+
+      return {
+        ...snapshot,
+        timerConfig: {
+          ...snapshot.timerConfig,
+          lateJoinersJoinReady: event.enabled,
+        },
+      };
+    }
+    case "admin_set_auto_join_on_load": {
+      if (!isActorHost(snapshot, actor)) {
+        return snapshot;
+      }
+
+      return {
+        ...snapshot,
+        timerConfig: {
+          ...snapshot.timerConfig,
+          autoJoinOnLoad: event.enabled,
+        },
+      };
+    }
+    case "range_score_submit": {
+      const sanitizedResult = sanitizeRangeScoreSubmission(event.result);
+
+      if (!sanitizedResult) {
+        return snapshot;
+      }
+
+      const actorUser = snapshot.users.find((user) => user.id === actor.id);
+      const nextResult: RangeScoreResult = {
+        ...sanitizedResult,
+        roundNumber: snapshot.session.roundNumber,
+        completedAt: new Date(nowMs).toISOString(),
+        userId: actor.id,
+        displayName: actor.displayName,
+        avatarSeed: actor.avatarSeed,
+        avatarUrl: actor.avatarUrl,
+        isTestUser: actorUser?.isTestUser,
+      };
+      const nextRangeScoreboard = upsertRangeScoreResult(snapshot.rangeScoreboard, nextResult);
+
+      if (nextRangeScoreboard === snapshot.rangeScoreboard) {
+        return snapshot;
+      }
+
+      return {
+        ...snapshot,
+        rangeScoreboard: nextRangeScoreboard,
+      };
+    }
+    case "free_roam_presence_update": {
+      const sanitizedPresence = sanitizeFreeRoamPresenceUpdate(event.presence);
+
+      if (!sanitizedPresence) {
+        return snapshot;
+      }
+
+      const nextPresence: FreeRoamPresenceState = {
+        ...sanitizedPresence,
+        userId: actor.id,
+        updatedAt: new Date(nowMs).toISOString(),
+      };
+      const maxEntries = Math.max(snapshot.session.capacity.max, snapshot.users.length, 1);
+
+      return {
+        ...snapshot,
+        freeRoamPresence: upsertFreeRoamPresence(snapshot.freeRoamPresence, nextPresence, maxEntries),
+      };
+    }
+    case "free_roam_presence_clear": {
+      const nextFreeRoamPresence = snapshot.freeRoamPresence.filter((presence) => presence.userId !== actor.id);
+
+      if (nextFreeRoamPresence.length === snapshot.freeRoamPresence.length) {
+        return snapshot;
+      }
+
+      return {
+        ...snapshot,
+        freeRoamPresence: nextFreeRoamPresence,
+      };
+    }
     default:
       return snapshot;
   }
 }
 
 export function advanceSessionTime(snapshot: SessionSnapshot, nowMs = Date.now()): SessionSnapshot {
-  if (!hasValidCountdownTimeline(snapshot)) {
-    const nextUsers = moveUsersToLobby(snapshot.users);
+  const prunedFreeRoamPresence = pruneFreeRoamPresence(snapshot.freeRoamPresence, nowMs);
+  const snapshotWithFreshPresence = prunedFreeRoamPresence.length === snapshot.freeRoamPresence.length
+    ? snapshot
+    : {
+      ...snapshot,
+      freeRoamPresence: prunedFreeRoamPresence,
+    };
+
+  if (!hasValidCountdownTimeline(snapshotWithFreshPresence)) {
+    const nextUsers = moveUsersToLobby(snapshotWithFreshPresence.users);
 
     return {
-      ...snapshot,
+      ...snapshotWithFreshPresence,
       users: nextUsers,
       countdown: createEmptyCountdown(),
       session: {
-        ...snapshot.session,
+        ...snapshotWithFreshPresence.session,
         phase: getBaseLobbyPhase(nextUsers),
       },
     };
   }
 
-  if (snapshot.session.phase === "precount") {
-    const countdownStartMs = parseTimestamp(snapshot.countdown.countdownStartAt);
+  if (snapshotWithFreshPresence.session.phase === "precount") {
+    const countdownStartMs = parseTimestamp(snapshotWithFreshPresence.countdown.countdownStartAt);
 
     if (countdownStartMs !== undefined && nowMs >= countdownStartMs) {
       return {
-        ...snapshot,
+        ...snapshotWithFreshPresence,
         session: {
-          ...snapshot.session,
+          ...snapshotWithFreshPresence.session,
           phase: "countdown",
         },
       };
     }
   }
 
-  if (snapshot.session.phase === "countdown") {
-    const countdownEndMs = parseTimestamp(snapshot.countdown.countdownEndAt);
+  if (snapshotWithFreshPresence.session.phase === "countdown") {
+    const countdownEndMs = parseTimestamp(snapshotWithFreshPresence.countdown.countdownEndAt);
 
     if (countdownEndMs !== undefined && nowMs >= countdownEndMs) {
       return {
-        ...snapshot,
+        ...snapshotWithFreshPresence,
         session: {
-          ...snapshot.session,
+          ...snapshotWithFreshPresence.session,
           phase: "completed",
         },
         countdown: {
-          ...snapshot.countdown,
+          ...snapshotWithFreshPresence.countdown,
           completedAt: new Date(nowMs).toISOString(),
         },
       };
     }
   }
 
-  return snapshot;
+  return snapshotWithFreshPresence;
 }

@@ -1,0 +1,187 @@
+import type { LevelConfig } from "./types";
+
+export const level2RangeConfig = {
+  id: "level-2-range",
+  name: "Shooting Range",
+  dimensions: {
+    width: 12,
+    depth: 18,
+    height: 4.5,
+  },
+  playerStart: {
+    position: [0, 1.7, 6.4],
+    rotation: [0, Math.PI, 0],
+  },
+  topDownCamera: {
+    position: [0, 12, 0],
+    target: [0, 0, 0],
+    height: 12,
+    orthographicSize: 18,
+  },
+  stations: [],
+  timerDisplay: {
+    id: "range-session-display",
+    position: [0, 3, -8.85],
+    rotation: [0, 0, 0],
+    size: {
+      width: 3.4,
+      height: 1.05,
+    },
+  },
+  collisionBounds: {
+    room: {
+      min: [-6, 0, -9],
+      max: [6, 4.5, 9],
+    },
+    blockers: [
+      {
+        id: "target-backstop",
+        label: "Target backstop",
+        min: [-5.6, 0, -8.9],
+        max: [5.6, 2.6, -8.25],
+      },
+      {
+        id: "left-lane-divider",
+        label: "Left lane divider",
+        min: [-2.15, 0, -7.2],
+        max: [-1.95, 1.2, 4.6],
+      },
+      {
+        id: "right-lane-divider",
+        label: "Right lane divider",
+        min: [1.95, 0, -7.2],
+        max: [2.15, 1.2, 4.6],
+      },
+    ],
+  },
+  lighting: [
+    {
+      id: "range-ambient",
+      type: "ambient",
+      color: "#7fa7ff",
+      intensity: 0.34,
+    },
+    {
+      id: "range-overhead",
+      type: "directional",
+      position: [2, 6, 4],
+      target: [0, 0, -4],
+      color: "#f4f7ff",
+      intensity: 1.2,
+    },
+    {
+      id: "range-target-glow",
+      type: "point",
+      position: [0, 2.4, -7.8],
+      color: "#73ff4c",
+      intensity: 0.7,
+    },
+  ],
+  exits: [
+    {
+      id: "level-2-return-door",
+      label: "BACK",
+      targetLevelId: "level-1",
+      position: [0, 1.2, 8.88],
+      rotation: [0, Math.PI, 0],
+      size: {
+        width: 1.45,
+        height: 2.15,
+      },
+    },
+  ],
+  shootingRange: {
+    lanes: [
+      {
+        id: "lane-left",
+        label: "Lane Left",
+        position: [-3.2, 0.02, -1.2],
+        width: 2.4,
+        length: 11.8,
+        targetIds: ["target-left-near", "target-left-far"],
+      },
+      {
+        id: "lane-center",
+        label: "Lane Center",
+        position: [0, 0.02, -1.2],
+        width: 2.4,
+        length: 11.8,
+        targetIds: ["target-center-near", "target-center-far"],
+      },
+      {
+        id: "lane-right",
+        label: "Lane Right",
+        position: [3.2, 0.02, -1.2],
+        width: 2.4,
+        length: 11.8,
+        targetIds: ["target-right-near", "target-right-far"],
+      },
+    ],
+    targets: [
+      {
+        id: "target-left-near",
+        label: "Left Near",
+        laneId: "lane-left",
+        position: [-3.2, 1.45, -5.6],
+        rotation: [0, 0, 0],
+        radius: 0.38,
+        points: 1,
+      },
+      {
+        id: "target-left-far",
+        label: "Left Far",
+        laneId: "lane-left",
+        position: [-3.2, 1.75, -7.6],
+        rotation: [0, 0, 0],
+        radius: 0.3,
+        points: 2,
+      },
+      {
+        id: "target-center-near",
+        label: "Center Near",
+        laneId: "lane-center",
+        position: [0, 1.5, -5.8],
+        rotation: [0, 0, 0],
+        radius: 0.4,
+        points: 1,
+      },
+      {
+        id: "target-center-far",
+        label: "Center Far",
+        laneId: "lane-center",
+        position: [0, 1.85, -7.8],
+        rotation: [0, 0, 0],
+        radius: 0.28,
+        points: 2,
+      },
+      {
+        id: "target-right-near",
+        label: "Right Near",
+        laneId: "lane-right",
+        position: [3.2, 1.45, -5.6],
+        rotation: [0, 0, 0],
+        radius: 0.38,
+        points: 1,
+      },
+      {
+        id: "target-right-far",
+        label: "Right Far",
+        laneId: "lane-right",
+        position: [3.2, 1.75, -7.6],
+        rotation: [0, 0, 0],
+        radius: 0.3,
+        points: 2,
+      },
+    ],
+    scoreDisplay: {
+      id: "range-hit-display",
+      label: "Range Hit Display",
+      position: [0, 2.35, -8.72],
+      rotation: [0, 0, 0],
+      size: {
+        width: 1.7,
+        height: 0.8,
+      },
+    },
+  },
+} satisfies LevelConfig;
