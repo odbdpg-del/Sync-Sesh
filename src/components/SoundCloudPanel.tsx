@@ -246,11 +246,11 @@ export function SoundCloudPanel({ player }: SoundCloudPanelProps) {
                 ? "Tracks continue in random order when one finishes. In Discord, SoundCloud needs Activity URL mappings for /soundcloud-widget and /soundcloud-api."
                 : "Tracks continue in random order when one finishes.")}
           </p>
-          {state.errorMessage ? <p className="soundcloud-help">SoundCloud controls stay disabled until the widget script loads successfully.</p> : null}
+          {state.errorMessage ? <p className="soundcloud-help">Custom controls stay disabled until the SoundCloud embed finishes loading. Try the embedded player below if it appears.</p> : null}
         </div>
       </div>
 
-      <div className="soundcloud-widget-shell">
+      <div className={`soundcloud-widget-shell ${state.errorMessage && !state.isWidgetReady ? "soundcloud-widget-shell-visible" : ""}`}>
         <iframe
           key={state.selectedPlaylist.id}
           ref={(element) => {

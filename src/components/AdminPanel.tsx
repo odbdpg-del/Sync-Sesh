@@ -1,4 +1,5 @@
 import { useState } from "react";
+import type { SoundCloudPlayerController } from "../hooks/useSoundCloudPlayer";
 import type { DabSyncState, DerivedLobbyState } from "../types/session";
 
 interface AdminPanelProps {
@@ -6,6 +7,7 @@ interface AdminPanelProps {
   lobbyState: DerivedLobbyState;
   isOpen: boolean;
   waveformBarCount: number;
+  soundCloudPlayer: SoundCloudPlayerController;
   onClose: () => void;
   onSetWaveformBarCount: (count: number) => void;
   onForceStartRound: () => void;
@@ -18,11 +20,24 @@ interface AdminPanelProps {
   onSetAutoJoinOnLoad: (enabled: boolean) => void;
 }
 
+function formatDebugValue(value: boolean | number | string | null) {
+  if (typeof value === "boolean") {
+    return value ? "yes" : "no";
+  }
+
+  return value ?? "none";
+}
+
+function truncateDebugUrl(url: string) {
+  return url.length > 96 ? `${url.slice(0, 93)}...` : url;
+}
+
 export function AdminPanel({
   state,
   lobbyState,
   isOpen,
   waveformBarCount,
+  soundCloudPlayer,
   onClose,
   onSetWaveformBarCount,
   onForceStartRound,
@@ -41,6 +56,7 @@ export function AdminPanel({
   }
 
   const testUsers = state.users.filter((user) => user.isTestUser);
+  const soundCloudState = soundCloudPlayer.state;
 
   return (
     <aside className="panel admin-panel">
@@ -126,6 +142,35 @@ export function AdminPanel({
             />
             <span>Fine</span>
           </label>
+          <div className="admin-debug-panel">
+            <p className="meta-label">SoundCloud debug</p>
+            <dl>
+              <div>
+                <dt>Script</dt>
+                <dd>{formatDebugValue(soundCloudState.isScriptReady)}</dd>
+              </div>
+              <div>
+                <dt>Widget</dt>
+                <dd>{formatDebugValue(soundCloudState.isWidgetReady)}</dd>
+              </div>
+              <div>
+                <dt>Tracks</dt>
+                <dd>{soundCloudState.trackCount}</dd>
+              </div>
+              <div>
+                <dt>Playing</dt>
+                <dd>{formatDebugValue(soundCloudState.isPlaying)}</dd>
+              </div>
+              <div>
+                <dt>Error</dt>
+                <dd>{formatDebugValue(soundCloudState.errorMessage)}</dd>
+              </div>
+              <div>
+                <dt>Iframe</dt>
+                <dd title={soundCloudState.resolvedWidgetSrc}>{truncateDebugUrl(soundCloudState.resolvedWidgetSrc)}</dd>
+              </div>
+            </dl>
+          </div>
         </div>
       ) : null}
 

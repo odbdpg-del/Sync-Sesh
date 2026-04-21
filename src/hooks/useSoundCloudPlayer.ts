@@ -88,7 +88,7 @@ const PLAYLISTS: PlaylistOption[] = [
 const WIDGET_SCRIPT_ID = "soundcloud-widget-api";
 const WIDGET_SCRIPT_SRC = "https://w.soundcloud.com/player/api.js";
 const SOUNDCLOUD_WIDGET_PREFIX = "/soundcloud-widget";
-const SOUNDCLOUD_API_PREFIX = "/soundcloud-api";
+const SOUNDCLOUD_WIDGET_READY_TIMEOUT_MS = 15000;
 const WAVEFORM_BARS = [
   24, 38, 64, 42, 72, 34, 52, 82, 46, 68, 36, 58, 76, 44, 88, 56, 32, 62, 74, 48, 92, 54, 40, 70, 84, 50, 66, 30, 60, 78,
   44, 86, 52, 36, 64, 80, 46, 72, 58, 34, 90, 48, 68, 42, 76, 54, 32, 62, 82, 46, 70, 38, 88, 56, 74, 44, 66, 30, 60, 78,
@@ -108,10 +108,9 @@ function remapThroughActivityPrefix(rawUrl: string, prefix: string) {
   return `${window.location.origin}${prefix}${url.pathname}${url.search}${url.hash}`;
 }
 
-function getWidgetSrc(apiUrl: string) {
-  const resolvedPlaylistUrl = remapThroughActivityPrefix(apiUrl, SOUNDCLOUD_API_PREFIX);
+function getWidgetSrc(playlist: PlaylistOption) {
   const params = new URLSearchParams({
-    url: resolvedPlaylistUrl,
+    url: playlist.sourceUrl,
     auto_play: "false",
     color: "#3fe9ff",
     visual: "false",
@@ -130,8 +129,8 @@ function getWidgetSrc(apiUrl: string) {
   return `https://w.soundcloud.com/player/?${params.toString()}`;
 }
 
-function getResolvedWidgetSrc(apiUrl: string) {
-  const rawWidgetSrc = getWidgetSrc(apiUrl);
+function getResolvedWidgetSrc(playlist: PlaylistOption) {
+  const rawWidgetSrc = getWidgetSrc(playlist);
   return remapThroughActivityPrefix(rawWidgetSrc, SOUNDCLOUD_WIDGET_PREFIX);
 }
 
@@ -244,7 +243,7 @@ export function useSoundCloudPlayer({ waveformBarCount }: UseSoundCloudPlayerOpt
     () => PLAYLISTS.find((playlist) => playlist.id === selectedPlaylistId) ?? PLAYLISTS[0],
     [selectedPlaylistId],
   );
-  const resolvedWidgetSrc = useMemo(() => getResolvedWidgetSrc(selectedPlaylist.apiUrl), [selectedPlaylist.apiUrl]);
+  const resolvedWidgetSrc = useMemo(() => getResolvedWidgetSrc(selectedPlaylist), [selectedPlaylist]);
 
   useEffect(() => {
     let isMounted = true;
@@ -299,6 +298,9 @@ export function useSoundCloudPlayer({ waveformBarCount }: UseSoundCloudPlayerOpt
     setPlaybackDuration(0);
     setVolumeState(70);
     setErrorMessage(null);
+    const readyTimeoutId = window.setTimeout(() => {
+      setErrorMessage("SoundCloud widget did not finish loading in Discord.");
+    }, SOUNDCLOUD_WIDGET_READY_TIMEOUT_MS);
 
     const updatePlaybackTiming = () => {
       widget.getPosition((position) => {
@@ -377,7 +379,9 @@ export function useSoundCloudPlayer({ waveformBarCount }: UseSoundCloudPlayerOpt
     };
 
     widget.bind(window.SC.Widget.Events.READY, () => {
+      window.clearTimeout(readyTimeoutId);
       setIsWidgetReady(true);
+      setErrorMessage(null);
       widget.getVolume((nextVolume) => {
         setVolumeState(Number.isFinite(nextVolume) ? nextVolume : 70);
       });
@@ -420,6 +424,7 @@ export function useSoundCloudPlayer({ waveformBarCount }: UseSoundCloudPlayerOpt
 
     return () => {
       window.clearInterval(timingInterval);
+      window.clearTimeout(readyTimeoutId);
 
       if (widgetRef.current === widget) {
         widgetRef.current = null;
