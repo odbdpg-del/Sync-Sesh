@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { getDisplayRoundNumber } from "../lib/lobby/sessionState";
 import { useReadyHold } from "../hooks/useReadyHold";
 import { useRoundEffects } from "../hooks/useRoundEffects";
 import type { CountdownDisplayState, DabSyncState, DerivedLobbyState, SyncStatus } from "../types/session";
@@ -98,6 +99,7 @@ export function TimerPanel({
   const phaseLabel = state.session.phase === "completed" ? "Completed" : state.session.phase;
   const armedLabel =
     state.session.phase === "completed" ? "Complete" : lobbyState.isArmed ? "Armed" : state.session.phase === "precount" ? "Launch" : "Standby";
+  const displayRoundNumber = getDisplayRoundNumber(state.session);
 
   return (
     <section className={`panel timer-panel timer-shell phase-shell-${state.session.phase} ${isCelebrating ? "round-complete-burst" : ""}`}>
@@ -111,7 +113,7 @@ export function TimerPanel({
         </div>
         <div className="status-stack">
           <span className={`phase-pill phase-${state.session.phase}`}>{phaseLabel}</span>
-          <span className="capacity-pill">Round {state.session.roundNumber}</span>
+          <span className="capacity-pill">Round {displayRoundNumber}</span>
         </div>
       </div>
 
@@ -142,10 +144,15 @@ export function TimerPanel({
       </div>
 
       <div className={`armed-banner ${lobbyState.isArmed ? "armed-live" : ""} ${state.session.phase === "precount" ? "armed-banner-hot" : ""}`}>
-        <span className="armed-prefix">! {armedLabel}</span>
+        <span className="armed-prefix">
+          <span className="armed-prefix-icon" aria-hidden="true">
+            ◉
+          </span>
+          {armedLabel}
+        </span>
         <span className="armed-copy">{getStatusCopy(lobbyState, state.syncStatus)}</span>
         <span className="armed-chevron" aria-hidden="true">
-          ====
+          •••
         </span>
       </div>
 
@@ -250,9 +257,15 @@ export function TimerPanel({
 
       <div className="cta-row cta-row-bottom">
         <button type="button" className="primary-button run-it-back" disabled={!lobbyState.canResetRound || !syncReady} onClick={onResetRound}>
+          <span className="button-icon" aria-hidden="true">
+            ↻
+          </span>
           Reset / Replay
         </button>
         <button type="button" className="ghost-button settings-button" disabled>
+          <span className="button-icon" aria-hidden="true">
+            ⚙
+          </span>
           Settings
         </button>
       </div>

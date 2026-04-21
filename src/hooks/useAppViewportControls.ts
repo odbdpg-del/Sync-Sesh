@@ -52,17 +52,35 @@ export function useAppViewportControls() {
   }, [zoomPercent]);
 
   useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (
-        event.code === "Space" &&
-        !event.repeat &&
-        !event.altKey &&
-        !event.ctrlKey &&
-        !event.metaKey &&
-        !isInteractiveTarget(event.target)
-      ) {
-        event.preventDefault();
+    const shouldBlockSpaceScroll = (event: KeyboardEvent) => (
+      event.code === "Space" &&
+      !event.altKey &&
+      !event.ctrlKey &&
+      !event.metaKey &&
+      !isInteractiveTarget(event.target)
+    );
+
+    const blockSpaceScroll = (event: KeyboardEvent) => {
+      if (!shouldBlockSpaceScroll(event)) {
+        return;
       }
+
+      event.preventDefault();
+      event.stopPropagation();
+    };
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.repeat && shouldBlockSpaceScroll(event)) {
+        blockSpaceScroll(event);
+      }
+    };
+
+    const handleKeyUp = (event: KeyboardEvent) => {
+      blockSpaceScroll(event);
+    };
+
+    const handleKeyPress = (event: KeyboardEvent) => {
+      blockSpaceScroll(event);
     };
 
     const handleWheel = (event: WheelEvent) => {
@@ -74,12 +92,22 @@ export function useAppViewportControls() {
       setZoomPercent((currentZoom) => clampZoom(currentZoom + (event.deltaY < 0 ? ZOOM_STEP_PERCENT : -ZOOM_STEP_PERCENT)));
     };
 
-    window.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("keydown", handleKeyDown, { capture: true });
+    window.addEventListener("keyup", handleKeyUp, { capture: true });
+    window.addEventListener("keypress", handleKeyPress, { capture: true });
     window.addEventListener("wheel", handleWheel, { passive: false });
+    document.addEventListener("keydown", blockSpaceScroll, { capture: true });
+    document.addEventListener("keyup", blockSpaceScroll, { capture: true });
+    document.addEventListener("keypress", blockSpaceScroll, { capture: true });
 
     return () => {
-      window.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("keydown", handleKeyDown, { capture: true });
+      window.removeEventListener("keyup", handleKeyUp, { capture: true });
+      window.removeEventListener("keypress", handleKeyPress, { capture: true });
       window.removeEventListener("wheel", handleWheel);
+      document.removeEventListener("keydown", blockSpaceScroll, { capture: true });
+      document.removeEventListener("keyup", blockSpaceScroll, { capture: true });
+      document.removeEventListener("keypress", blockSpaceScroll, { capture: true });
     };
   }, []);
 

@@ -174,16 +174,18 @@ export function SoundCloudPanel({ player }: SoundCloudPanelProps) {
               <strong>{state.currentTrackTitle}</strong>
               <span>{state.currentTrackArtist}</span>
             </div>
-            {state.currentTrackUrl ? (
-              <a className="soundcloud-open-link" href={state.currentTrackUrl} target="_blank" rel="noreferrer">
-                Open
-              </a>
-            ) : null}
-            {state.currentTrackArtistUrl ? (
-              <a className="soundcloud-open-link" href={state.currentTrackArtistUrl} target="_blank" rel="noreferrer">
-                Artist
-              </a>
-            ) : null}
+            <div className="soundcloud-track-links">
+              {state.currentTrackUrl ? (
+                <a className="soundcloud-open-link" href={state.currentTrackUrl} target="_blank" rel="noreferrer">
+                  Open on SoundCloud
+                </a>
+              ) : null}
+              {state.currentTrackArtistUrl ? (
+                <a className="soundcloud-open-link" href={state.currentTrackArtistUrl} target="_blank" rel="noreferrer">
+                  Artist
+                </a>
+              ) : null}
+            </div>
           </div>
 
           <SoundCloudWaveformView
@@ -211,9 +213,11 @@ export function SoundCloudPanel({ player }: SoundCloudPanelProps) {
 
             <div className="soundcloud-actions">
               <button type="button" className="soundcloud-control-button soundcloud-play-button" onClick={actions.togglePlayback} disabled={!state.isWidgetReady}>
+                <span aria-hidden="true">{state.isPlaying ? "❚❚" : "▶"}</span>
                 {state.isPlaying ? "Pause" : "Play"}
               </button>
               <button type="button" className="soundcloud-control-button" onClick={actions.shufflePlay} disabled={state.controlsDisabled}>
+                <span aria-hidden="true">⤮</span>
                 Shuffle
               </button>
               {state.errorMessage ? (

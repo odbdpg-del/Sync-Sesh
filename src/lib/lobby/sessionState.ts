@@ -8,6 +8,7 @@ import type {
   RangeScoreResult,
   RangeScoreSubmission,
   SessionEvent,
+  SessionInfo,
   SessionMetrics,
   SessionPhase,
   SessionSnapshot,
@@ -443,6 +444,10 @@ export function getSessionMetrics(users: SessionUser[]): SessionMetrics {
 
 export function getLocalUser(state: DabSyncState) {
   return state.users.find((user) => user.id === state.localProfile.id);
+}
+
+export function getDisplayRoundNumber(session: Pick<SessionInfo, "phase" | "roundNumber">) {
+  return session.phase === "completed" ? session.roundNumber + 1 : session.roundNumber;
 }
 
 export function deriveLobbyState(state: DabSyncState): DerivedLobbyState {

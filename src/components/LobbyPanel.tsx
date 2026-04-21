@@ -41,6 +41,17 @@ function getUserRoleLabel(user: SessionUser, session: SessionInfo) {
   return "CREW";
 }
 
+function getUserSubcopy(user: SessionUser) {
+  switch (user.presence) {
+    case "ready":
+      return "Locked in for launch";
+    case "spectating":
+      return "Observing until replay";
+    default:
+      return "Standing by in lobby";
+  }
+}
+
 export function LobbyPanel({ session, users, lobbyState, onJoinSession }: LobbyPanelProps) {
   return (
     <section className={`panel stack lobby-panel lobby-phase-${session.phase}`}>
@@ -50,6 +61,7 @@ export function LobbyPanel({ session, users, lobbyState, onJoinSession }: LobbyP
           <h2>Session Deck</h2>
         </div>
         <span className="capacity-pill">
+          <span className="capacity-dot" aria-hidden="true" />
           {users.length}/{session.capacity.max} connected
         </span>
       </div>
@@ -97,13 +109,19 @@ export function LobbyPanel({ session, users, lobbyState, onJoinSession }: LobbyP
           <span>{lobbyState.isJoined ? "Joined" : "Join Session"}</span>
         </button>
         <div className="join-copy">
-          <p className="meta-label">Join behavior</p>
-          <p>
-            {session.phase === "precount" || session.phase === "countdown"
-              ? "Late joins become spectators until the next round."
-              : "Join now to enter the active lobby."}
-          </p>
-          <p className="join-copy-subtle">Once the round is armed, you're in.</p>
+          <span className="join-copy-icon" aria-hidden="true">
+            <span className="join-copy-icon-ring" />
+            <span className="join-copy-icon-core" />
+          </span>
+          <div className="join-copy-body">
+            <p className="meta-label">Join behavior</p>
+            <p>
+              {session.phase === "precount" || session.phase === "countdown"
+                ? "Late joins become spectators until the next round."
+                : "Join now to enter the active lobby."}
+            </p>
+            <p className="join-copy-subtle">Once the round is armed, you're in.</p>
+          </div>
         </div>
       </div>
 
@@ -120,11 +138,14 @@ export function LobbyPanel({ session, users, lobbyState, onJoinSession }: LobbyP
                 {user.avatarUrl ? <img src={user.avatarUrl} alt="" className="avatar-image" referrerPolicy="no-referrer" /> : user.avatarSeed}
               </div>
               <div className="user-copy">
-                <strong>
-                  {user.displayName}
-                  {user.id === lobbyState.localUser?.id ? " (You)" : ""}
-                </strong>
-                <span className="meta-label">{getUserRoleLabel(user, session)}</span>
+                <div className="user-title-row">
+                  <strong>
+                    {user.displayName}
+                    {user.id === lobbyState.localUser?.id ? " (You)" : ""}
+                  </strong>
+                  <span className="meta-label">{getUserRoleLabel(user, session)}</span>
+                </div>
+                <span className="user-subcopy">{getUserSubcopy(user)}</span>
               </div>
               <div className="user-status">
                 <span className={`presence-chip presence-${user.presence}`}>{getStateLabel(user.presence)}</span>
