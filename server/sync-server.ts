@@ -1,3 +1,4 @@
+import { createServer } from "node:http";
 import { WebSocketServer } from "ws";
 import { advanceSessionTime, createSessionSnapshot, reduceSessionEvent } from "../src/lib/lobby/sessionState";
 import type { LocalProfile, SessionEvent, SessionSnapshot } from "../src/types/session";
@@ -73,9 +74,20 @@ function broadcast(sessionId: string) {
   }
 }
 
-const server = new WebSocketServer({ port });
+const httpServer = createServer((request, response) => {
+  if (request.url === "/health") {
+    response.writeHead(200, { "Content-Type": "application/json" });
+    response.end(JSON.stringify({ ok: true, service: "sync-sesh-sync" }));
+    return;
+  }
 
-server.on("connection", (socket) => {
+  response.writeHead(200, { "Content-Type": "text/plain; charset=utf-8" });
+  response.end("Sync Sesh sync server is running.");
+});
+
+const wsServer = new WebSocketServer({ server: httpServer });
+
+wsServer.on("connection", (socket) => {
   socket.on("message", (rawMessage) => {
     let payload: ClientMessage;
 
@@ -154,4 +166,6 @@ setInterval(() => {
   }
 }, 100);
 
-console.log(`DabSync sync server listening on ws://localhost:${port}`);
+httpServer.listen(port, "0.0.0.0", () => {
+  console.log(`DabSync sync server listening on port ${port}`);
+});
