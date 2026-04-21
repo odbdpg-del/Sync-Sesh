@@ -12,20 +12,39 @@ export interface EmbeddedAppState {
   localProfile?: LocalProfile;
 }
 
-const ACTIVITY_URL_MAPPINGS = [
-  { prefix: "/sync", target: "sync-sesh.onrender.com" },
+const DEFAULT_SYNC_PROXY_TARGET = "sync-sesh-sync.onrender.com";
+const STATIC_ACTIVITY_URL_MAPPINGS = [
   { prefix: "/soundcloud-widget", target: "w.soundcloud.com" },
   { prefix: "/soundcloud-api", target: "api.soundcloud.com" },
-];
+] as const;
 
 let hasPatchedActivityUrlMappings = false;
+
+function resolveSyncProxyTarget() {
+  const configuredUrl = import.meta.env.VITE_SYNC_SERVER_URL;
+
+  if (configuredUrl && configuredUrl !== "auto") {
+    try {
+      const parsed = new URL(configuredUrl);
+      const isLocalTarget = parsed.hostname === "localhost" || parsed.hostname === "127.0.0.1";
+
+      if (!isLocalTarget) {
+        return parsed.hostname;
+      }
+    } catch {
+      // Fall back to the known hosted sync service target.
+    }
+  }
+
+  return DEFAULT_SYNC_PROXY_TARGET;
+}
 
 function patchActivityUrlMappings() {
   if (hasPatchedActivityUrlMappings) {
     return;
   }
 
-  patchUrlMappings(ACTIVITY_URL_MAPPINGS);
+  patchUrlMappings([{ prefix: "/sync", target: resolveSyncProxyTarget() }, ...STATIC_ACTIVITY_URL_MAPPINGS]);
   hasPatchedActivityUrlMappings = true;
 }
 
