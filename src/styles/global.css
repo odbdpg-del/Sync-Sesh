@@ -1667,6 +1667,40 @@ h2 {
   accent-color: #3fe9ff;
 }
 
+.admin-debug-panel {
+  display: grid;
+  gap: 8px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(87, 243, 255, 0.12);
+}
+
+.admin-debug-panel dl {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  color: #dce8ff;
+  font-size: 0.78rem;
+}
+
+.admin-debug-panel dl > div {
+  display: grid;
+  grid-template-columns: 76px minmax(0, 1fr);
+  gap: 8px;
+  align-items: baseline;
+}
+
+.admin-debug-panel dt {
+  color: #8fa2c1;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.admin-debug-panel dd {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
 .admin-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

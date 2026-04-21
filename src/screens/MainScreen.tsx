@@ -122,6 +122,7 @@ export function MainScreen() {
         lobbyState={lobbyState}
         isOpen={isAdminOpen}
         waveformBarCount={soundCloudWaveformBarCount}
+        soundCloudPlayer={soundCloudPlayer}
         onClose={() => setIsAdminOpen(false)}
         onSetWaveformBarCount={setSoundCloudWaveformBarCount}
         onForceStartRound={forceStartRound}

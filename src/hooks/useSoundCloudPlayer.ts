@@ -88,6 +88,7 @@ const PLAYLISTS: PlaylistOption[] = [
 const WIDGET_SCRIPT_ID = "soundcloud-widget-api";
 const WIDGET_SCRIPT_SRC = "https://w.soundcloud.com/player/api.js";
 const SOUNDCLOUD_WIDGET_PREFIX = "/soundcloud-widget";
+const SOUNDCLOUD_WIDGET_READY_TIMEOUT_MS = 15000;
 const WAVEFORM_BARS = [
   24, 38, 64, 42, 72, 34, 52, 82, 46, 68, 36, 58, 76, 44, 88, 56, 32, 62, 74, 48, 92, 54, 40, 70, 84, 50, 66, 30, 60, 78,
   44, 86, 52, 36, 64, 80, 46, 72, 58, 34, 90, 48, 68, 42, 76, 54, 32, 62, 82, 46, 70, 38, 88, 56, 74, 44, 66, 30, 60, 78,
@@ -297,6 +298,9 @@ export function useSoundCloudPlayer({ waveformBarCount }: UseSoundCloudPlayerOpt
     setPlaybackDuration(0);
     setVolumeState(70);
     setErrorMessage(null);
+    const readyTimeoutId = window.setTimeout(() => {
+      setErrorMessage("SoundCloud widget did not finish loading in Discord.");
+    }, SOUNDCLOUD_WIDGET_READY_TIMEOUT_MS);
 
     const updatePlaybackTiming = () => {
       widget.getPosition((position) => {
@@ -375,7 +379,9 @@ export function useSoundCloudPlayer({ waveformBarCount }: UseSoundCloudPlayerOpt
     };
 
     widget.bind(window.SC.Widget.Events.READY, () => {
+      window.clearTimeout(readyTimeoutId);
       setIsWidgetReady(true);
+      setErrorMessage(null);
       widget.getVolume((nextVolume) => {
         setVolumeState(Number.isFinite(nextVolume) ? nextVolume : 70);
       });
@@ -418,6 +424,7 @@ export function useSoundCloudPlayer({ waveformBarCount }: UseSoundCloudPlayerOpt
 
     return () => {
       window.clearInterval(timingInterval);
+      window.clearTimeout(readyTimeoutId);
 
       if (widgetRef.current === widget) {
         widgetRef.current = null;
