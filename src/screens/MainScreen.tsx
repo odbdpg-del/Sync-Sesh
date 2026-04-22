@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { AdminPanel } from "../components/AdminPanel";
 import { AppHeader } from "../components/AppHeader";
 import { LobbyPanel } from "../components/LobbyPanel";
@@ -25,6 +25,7 @@ export function MainScreen() {
   const [soundCloudWaveformBarCount, setSoundCloudWaveformBarCount] = useState(60);
   const { zoomPercent } = useAppViewportControls();
   const { isSecretUnlocked, resetSecretEntry, unlockCount } = useSecretCodeUnlock();
+  const threeDJoinAttemptKeyRef = useRef<string | null>(null);
   const {
     state,
     lobbyState,
@@ -63,6 +64,28 @@ export function MainScreen() {
       setIsThreeDModeOpen(true);
     }
   }, [unlockCount]);
+
+  useEffect(() => {
+    if (!isThreeDModeOpen || state.syncStatus.connection !== "connected" || !lobbyState.canJoinSession) {
+      return;
+    }
+
+    const attemptKey = `${state.session.id}:${state.localProfile.id}`;
+
+    if (threeDJoinAttemptKeyRef.current === attemptKey) {
+      return;
+    }
+
+    threeDJoinAttemptKeyRef.current = attemptKey;
+    joinSession();
+  }, [
+    isThreeDModeOpen,
+    joinSession,
+    lobbyState.canJoinSession,
+    state.localProfile.id,
+    state.session.id,
+    state.syncStatus.connection,
+  ]);
 
   const handleJoinSession = () => {
     playCue("ui_join_ping");

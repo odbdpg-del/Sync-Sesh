@@ -204,6 +204,7 @@ const INITIAL_REVERB_EFFECT_PATCH: LocalDawReverbEffectPatch = {
   decaySeconds: 0.8,
   wetMix: 0,
 };
+const ENGINE_START_MASTER_VOLUME = 0.18;
 const INITIAL_AUDIO_ENGINE_STATE: LocalDawAudioEngineState = {
   status: "idle",
   isInitialized: false,
@@ -635,12 +636,19 @@ export function useLocalDawAudioEngine() {
           await existingAudioContext.resume();
         }
 
-        setState((currentState) => ({
-          ...currentState,
-          status: getStatusFromAudioContext(existingAudioContext),
-          isInitialized: true,
-          errorMessage: null,
-        }));
+        setState((currentState) => {
+          const nextState = {
+            ...currentState,
+            status: getStatusFromAudioContext(existingAudioContext),
+            isInitialized: true,
+            isMuted: false,
+            masterVolume: currentState.masterVolume > 0 ? currentState.masterVolume : ENGINE_START_MASTER_VOLUME,
+            errorMessage: null,
+          };
+
+          applyGain(nextState);
+          return nextState;
+        });
       } catch (error) {
         setState((currentState) => ({
           ...currentState,
@@ -686,7 +694,7 @@ export function useLocalDawAudioEngine() {
       const reverbOutput = audioContext.createGain();
       const reverbPatch = getClampedReverbEffectPatch(stateRef.current.reverbEffectPatch);
 
-      masterGain.gain.value = 0;
+      masterGain.gain.value = ENGINE_START_MASTER_VOLUME;
       filterNode.type = "lowpass";
       filterNode.frequency.value = filterPatch.cutoffFrequency;
       filterNode.Q.value = filterPatch.resonance;
@@ -748,8 +756,8 @@ export function useLocalDawAudioEngine() {
         ...currentState,
         status: getStatusFromAudioContext(audioContext),
         isInitialized: true,
-        isMuted: true,
-        masterVolume: 0,
+        isMuted: false,
+        masterVolume: ENGINE_START_MASTER_VOLUME,
         errorMessage: null,
       }));
     } catch (error) {
@@ -760,7 +768,7 @@ export function useLocalDawAudioEngine() {
         errorMessage: error instanceof Error ? error.message : "Unable to initialize local audio engine.",
       }));
     }
-  }, [closeAudioContext]);
+  }, [applyGain, closeAudioContext]);
   const setMuted = useCallback((isMuted: boolean) => {
     setState((currentState) => {
       const nextState = {

@@ -46,7 +46,7 @@ function resolveSessionId() {
 }
 
 export function createSyncClient(): SyncClient {
-  const mode = import.meta.env.VITE_SYNC_MODE ?? "mock";
+  const mode = import.meta.env.VITE_SYNC_MODE ?? (import.meta.env.VITE_ENABLE_DISCORD_SDK === "true" ? "ws" : "mock");
   const localProfile = getLocalProfile();
 
   if (mode === "ws") {

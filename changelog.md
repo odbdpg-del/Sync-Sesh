@@ -8,6 +8,12 @@ Entries must be in reverse chronological order. New entries go at the top, above
 
 Use a level-two heading for every entry so the editor can fold each change.
 
+## [2321] - 2026-04-21 23:21 - `DJ-branch / Discord 3D Presence And Piano Audio Recovery`
+
+- Summary: Made Discord-enabled builds default to WebSocket sync when no explicit sync mode is set, auto-joined users when opening the hidden 3D shell so friends render as room occupants, and made the Recording Studio audio engine become audible at a low master level after the user clicks ENGINE.
+- Areas touched: `src/lib/sync/createSyncClient.ts`, `src/screens/MainScreen.tsx`, `src/3d/useLocalDawAudioEngine.ts`.
+- Verification: Manager `npm.cmd run build` passed with the existing Vite large chunk warning.
+
 ## [2025] - 2026-04-21 20:25 - `DJ-branch / FM Synth Gain Display Scale`
 
 - Summary: Changed the Recording Studio FM Synth gain control to present a normal 0-100% scale while keeping the underlying WebAudio gain in the safer existing range.
