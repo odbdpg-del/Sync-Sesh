@@ -2087,7 +2087,10 @@ export function ThreeDModeShell({
   const localStation = resolvedLocalStation.station;
   const revealRig = useMemo(() => getStationRevealRig(levelConfig, localStation ?? undefined), [levelConfig, localStation]);
   const canRenderCanvas = status === "loading" || status === "ready";
-  const areInteractionsEnabled = status === "ready" && revealState === "complete" && !isTopDownViewActive && controlState !== "idle";
+  const areInteractionsEnabled = status === "ready" && revealState === "complete" && (
+    (!isTopDownViewActive && controlState !== "idle") ||
+    isTopDownFreeCamActive
+  );
   const canShowAreaFeedback = status === "ready" && revealState === "complete";
   const updateLocalPlayerPose = useCallback((pose: LocalPlayerPose) => {
     localPlayerPoseRef.current = pose;

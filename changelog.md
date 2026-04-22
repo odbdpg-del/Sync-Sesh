@@ -8,6 +8,24 @@ Entries must be in reverse chronological order. New entries go at the top, above
 
 Use a level-two heading for every entry so the editor can fold each change.
 
+## [2352] - 2026-04-21 23:52 - `DJ-branch / Free-Cam Click Interactions`
+
+- Summary: Enabled aimed click interactions while the Tab top-down camera is in free-fly mode, while keeping normal top-down player-cam interactions disabled.
+- Areas touched: `src/3d/ThreeDModeShell.tsx`.
+- Verification: Manager `npm.cmd run build` passed with the existing Vite large chunk warning.
+
+## [2350] - 2026-04-21 23:50 - `DJ-branch / V6-2 Recording Room Truth Panel`
+
+- Summary: Replaced the Recording Studio room-status screen with a Studio Truth panel that reports engine state, piano route, drum mixer route, speaker route, and local-only patch behavior.
+- Areas touched: `src/3d/Level1RecordingStudioRoom.tsx`, `docs/3d/3dvision6-recording-room-cleanup.md`.
+- Verification: Manager `npm.cmd run build` passed with the existing Vite large chunk warning.
+
+## [2347] - 2026-04-21 23:47 - `DJ-branch / V6-1 Recording Room Patch Reset`
+
+- Summary: Added a Recording Studio in-world Reset Patch control near the Audio Interface that restores the local patch graph to default routing and briefly confirms the reset.
+- Areas touched: `src/3d/Level1RecordingStudioRoom.tsx`, `docs/3d/3dvision6-recording-room-cleanup.md`.
+- Verification: Manager `npm.cmd run build` passed with the existing Vite large chunk warning.
+
 ## [2328] - 2026-04-21 23:28 - `DJ-branch / Tiered Looper Control Spacing`
 
 - Summary: Reworked the Recording Studio looper into a tiered layout with scene pads on the front deck, bar-length controls on a raised rear shelf, and the local MIDI status display on a back panel.

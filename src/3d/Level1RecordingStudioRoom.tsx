@@ -1,17 +1,20 @@
-import { useCallback, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { LevelAreaConfig, LevelOpeningConfig } from "./levels";
 import type { PhaseVisuals } from "./phaseVisuals";
 import { useInteractionRegistry, useRegisterInteractable } from "./interactions";
 import { getSharedDawClipSlotId } from "../lib/daw/sharedDaw";
 import {
   AUDIO_INTERFACE_INPUT_PORT_IDS,
+  canDrumMixerPatchReachInterface,
   canDrumHitPatchReachSpeakers,
   canConnectActivePatchCableToPort,
   canPianoLivePatchReachSpeakers,
   getActivePatchCable,
   getPatchPortPeerLabel,
+  isAudioInterfaceOutputPatchedToSpeakers,
   isPatchCablePluggedBetween,
   isPatchPortConnected,
+  isPortPatchedToAudioInterfaceInput,
 } from "./useLocalDawState";
 import type {
   LocalDawAudioEngineActions,
@@ -4343,7 +4346,7 @@ function StudioAudioInterfacePort({
       </mesh>
       <mesh position={[0, 0.025, -0.066]} rotation={[-Math.PI / 2, 0, 0]}>
         <planeGeometry args={[0.17, 0.064]} />
-        <meshBasicMaterial args={[{ transparent: true, opacity: 0.78, toneMapped: false }]} >
+        <meshBasicMaterial args={[{ transparent: true, opacity: 0.78, toneMapped: false }]}>
           <canvasTexture key={`studio-audio-interface-port-${label}-${accentColor}`} attach="map" args={[labelCanvas]} />
         </meshBasicMaterial>
       </mesh>
@@ -4496,6 +4499,110 @@ function StudioAudioInterface({
           </meshBasicMaterial>
         </mesh>
       </group>
+    </group>
+  );
+}
+
+function StudioPatchResetControl({
+  localDawActions,
+  localDawState,
+  phaseVisuals,
+}: {
+  localDawActions?: LocalDawActions;
+  localDawState?: LocalDawState;
+  phaseVisuals: PhaseVisuals;
+}) {
+  const controlRef = useRef<React.ElementRef<"mesh">>(null);
+  const [isConfirmingReset, setIsConfirmingReset] = useState(false);
+  const defaultPatchReady = useMemo(() => {
+    const patch = localDawState?.patch;
+
+    return Boolean(
+      patch &&
+      isPatchCablePluggedBetween(patch, "kick-mic-out", "drum-mixer-kick-in") &&
+      isPatchCablePluggedBetween(patch, "snare-mic-out", "drum-mixer-snare-in") &&
+      isPatchCablePluggedBetween(patch, "hat-mic-out", "drum-mixer-hat-in") &&
+      isPatchCablePluggedBetween(patch, "overhead-left-mic-out", "drum-mixer-overhead-left-in") &&
+      isPatchCablePluggedBetween(patch, "overhead-right-mic-out", "drum-mixer-overhead-right-in") &&
+      isPatchCablePluggedBetween(patch, "drum-mixer-out", "audio-interface-input-1") &&
+      isPatchCablePluggedBetween(patch, "piano-out", "audio-interface-input-2") &&
+      isPatchCablePluggedBetween(patch, "audio-interface-out", "speaker-system-input")
+    );
+  }, [localDawState?.patch]);
+  const accentColor = isConfirmingReset
+    ? "#73ff4c"
+    : defaultPatchReady
+      ? "#f8d36a"
+      : phaseVisuals.timerAccent;
+  const caption = isConfirmingReset
+    ? "Defaults Restored"
+    : defaultPatchReady
+      ? "Default Ready"
+      : "Default Routing";
+  const labelCanvas = useMemo(() => createStudioTransportControlCanvas({
+    accentColor,
+    caption,
+    isActive: isConfirmingReset || defaultPatchReady,
+    label: "Reset Patch",
+  }), [accentColor, caption, defaultPatchReady, isConfirmingReset]);
+  const handleResetPatch = useCallback(() => {
+    localDawActions?.resetPatchToDefaults();
+    setIsConfirmingReset(true);
+  }, [localDawActions]);
+
+  useEffect(() => {
+    if (!isConfirmingReset) {
+      return undefined;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      setIsConfirmingReset(false);
+    }, 1600);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [isConfirmingReset]);
+
+  useRegisterInteractable(useMemo(() => ({
+    id: "studio-patch-reset-defaults",
+    label: caption,
+    objectRef: controlRef,
+    modes: ["clickable" as const],
+    enabled: Boolean(localDawActions),
+    onActivate: handleResetPatch,
+  }), [caption, handleResetPatch, localDawActions]));
+
+  if (!localDawActions) {
+    return null;
+  }
+
+  return (
+    <group position={[-21.25, 0, -4.6]} rotation={[0, Math.PI / 2, 0]}>
+      <mesh position={[-2.25, 0.832, -0.38]}>
+        <boxGeometry args={[0.72, 0.035, 0.26]} />
+        <meshBasicMaterial args={[{ color: accentColor, transparent: true, opacity: isConfirmingReset ? 0.22 : 0.12, toneMapped: false }]} />
+      </mesh>
+      <mesh ref={controlRef} position={[-2.25, 0.875, -0.38]}>
+        <boxGeometry args={[0.62, 0.052, 0.19]} />
+        <meshStandardMaterial args={[{
+          color: isConfirmingReset ? "#132b27" : "#10192b",
+          emissive: accentColor,
+          emissiveIntensity: isConfirmingReset ? 0.22 : 0.12,
+          roughness: 0.68,
+          metalness: 0.05,
+        }]} />
+      </mesh>
+      <mesh position={[-2.25, 0.908, -0.38]} rotation={[-Math.PI / 2, 0, 0]}>
+        <planeGeometry args={[0.48, 0.14]} />
+        <meshBasicMaterial args={[{ transparent: true, opacity: 0.78, toneMapped: false }]} >
+          <canvasTexture key={`studio-patch-reset-${caption}-${defaultPatchReady ? "ready" : "dirty"}`} attach="map" args={[labelCanvas]} />
+        </meshBasicMaterial>
+      </mesh>
+      <mesh position={[-1.89, 0.891, -0.38]}>
+        <cylinderGeometry args={[0.024, 0.024, 0.014, 16]} />
+        <meshBasicMaterial args={[{ color: accentColor, opacity: defaultPatchReady || isConfirmingReset ? 0.82 : 0.46, toneMapped: false, transparent: true }]} />
+      </mesh>
     </group>
   );
 }
@@ -5480,7 +5587,7 @@ function createStudioOverviewScreenCanvas(screen: StudioOverviewScreenSpec) {
   context.fillStyle = "rgba(169, 189, 201, 0.46)";
   context.font = "700 22px monospace";
   context.textAlign = "right";
-  context.fillText("STATIC PLAN", canvas.width - 62, canvas.height - 62);
+  context.fillText(screen.id === "studio-truth" ? "LOCAL PATCH" : "STATIC PLAN", canvas.width - 62, canvas.height - 62);
 
   return canvas;
 }
@@ -5600,36 +5707,64 @@ function formatDawDeviceLines(localDawState?: LocalDawState) {
   ].slice(0, 6);
 }
 
-function formatDawAudioStatus(localDawAudioState: LocalDawAudioEngineState) {
-  if (localDawAudioState.status === "idle") {
-    return "AUDIO: OFF";
+function getStudioTruthEngineLine(localDawAudioState?: LocalDawAudioEngineState) {
+  if (!localDawAudioState || localDawAudioState.status !== "ready") {
+    return "ENGINE OFF";
   }
 
-  return `AUDIO: ${localDawAudioState.status.toUpperCase()}`;
+  if (localDawAudioState.isMuted) {
+    return "MUTED";
+  }
+
+  if (localDawAudioState.masterVolume <= 0) {
+    return "VOLUME ZERO";
+  }
+
+  return "READY";
 }
 
-function formatDawRoomStatusLines(localDawState?: LocalDawState, localDawAudioState?: LocalDawAudioEngineState) {
-  if (!localDawState && !localDawAudioState) {
-    return ["STUDIO PLAN", "VISUAL ONLY", "NO AUDIO ENGINE", "NO SYNC"];
-  }
+function getStudioTruthState(localDawState?: LocalDawState, localDawAudioState?: LocalDawAudioEngineState) {
+  const patch = localDawState?.patch;
+  const engineLine = getStudioTruthEngineLine(localDawAudioState);
+  const isEngineReady = engineLine === "READY";
+  const isPianoPatched = patch ? isPortPatchedToAudioInterfaceInput(patch, "piano-out") : false;
+  const isDrumMixPatched = patch ? canDrumMixerPatchReachInterface(patch) : false;
+  const areSpeakersPatched = patch ? isAudioInterfaceOutputPatchedToSpeakers(patch) : false;
 
-  if (localDawAudioState) {
-    return [
-      formatDawAudioStatus(localDawAudioState),
-      `${localDawAudioState.isMuted ? "MUTED" : "UNMUTED"} M${Math.round(localDawAudioState.masterVolume * 100)}%`,
-      `PN ${localDawAudioState.lastPianoLiveNoteLabel ?? "IDLE"} ${(localDawAudioState.lastPianoLiveTarget ?? "fm-synth").toUpperCase()}`,
-      `FM ${localDawAudioState.lastFmSynthNoteLabel ?? "IDLE"} V${localDawAudioState.activeFmSynthVoiceCount}`,
-      `DR ${localDawAudioState.lastDrumHitLabel ?? "IDLE"} BA ${localDawAudioState.lastBassNoteLabel ?? "IDLE"}${localDawAudioState.isBassPatternAuditioning ? " RIFF" : ""}`,
-      "NO SYNC",
-    ];
-  }
+  return {
+    areSpeakersPatched,
+    engineLine,
+    isDrumMixPatched,
+    isEngineReady,
+    isPianoPatched,
+    isReady: isEngineReady && isPianoPatched && isDrumMixPatched && areSpeakersPatched,
+  };
+}
+
+function formatStudioTruthPanelLines(localDawState?: LocalDawState, localDawAudioState?: LocalDawAudioEngineState) {
+  const truth = getStudioTruthState(localDawState, localDawAudioState);
 
   return [
-    "STUDIO PLAN",
-    `SELECTED: ${localDawState?.selectedStationId.toUpperCase() ?? "DAW"}`,
-    "NO AUDIO ENGINE",
-    "NO SYNC",
+    truth.engineLine,
+    truth.isPianoPatched ? "PIANO PATCHED" : "PIANO MISSING",
+    truth.isDrumMixPatched ? "DRUM MIX PATCHED" : "DRUM MIX MISSING",
+    truth.areSpeakersPatched ? "SPEAKERS PATCHED" : "SPEAKERS MISSING",
+    "PATCHES LOCAL ONLY",
   ];
+}
+
+function getStudioTruthPanelAccentColor(localDawState?: LocalDawState, localDawAudioState?: LocalDawAudioEngineState) {
+  const truth = getStudioTruthState(localDawState, localDawAudioState);
+
+  if (truth.isReady) {
+    return "#73ff4c";
+  }
+
+  if (!truth.isPianoPatched || !truth.isDrumMixPatched || !truth.areSpeakersPatched) {
+    return "#ff9f4a";
+  }
+
+  return "#f8d36a";
 }
 
 function getStudioSoundActivity(localDawAudioState: LocalDawAudioEngineState | undefined, hasSpeakerPatch: boolean) {
@@ -5919,13 +6054,13 @@ export function Level1RecordingStudioRoom({
       size: [2.25, 0.78],
     },
     {
-      id: "room-status",
-      title: "Room Status",
-      lines: formatDawRoomStatusLines(localDawState, localDawAudioState),
-      accentColor: "#f8d36a",
-      position: [-10.62, 2.45, -7.0],
-      rotation: [0, -Math.PI / 2, 0],
-      size: [1.55, 0.72],
+      id: "studio-truth",
+      title: "Studio Truth",
+      lines: formatStudioTruthPanelLines(localDawState, localDawAudioState),
+      accentColor: getStudioTruthPanelAccentColor(localDawState, localDawAudioState),
+      position: [-22.28, 1.48, -2.82],
+      rotation: [0, Math.PI / 2, 0],
+      size: [2.15, 0.9],
     },
   ], [
     phaseVisuals.gridPrimary,
@@ -6025,6 +6160,7 @@ export function Level1RecordingStudioRoom({
       />
       <StudioAudioEngineControl localDawAudioState={localDawAudioState} localDawAudioActions={localDawAudioActions} phaseVisuals={phaseVisuals} />
       <StudioAudioInterface localDawAudioState={localDawAudioState} localDawState={localDawState} phaseVisuals={phaseVisuals} />
+      <StudioPatchResetControl localDawActions={localDawActions} localDawState={localDawState} phaseVisuals={phaseVisuals} />
       <StudioPianoShell
         accentColor="#73ff4c"
         localDawState={localDawState}
