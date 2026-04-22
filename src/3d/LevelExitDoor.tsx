@@ -1,6 +1,7 @@
 import { useMemo, useRef } from "react";
 import { useRegisterInteractable } from "./interactions";
 import type { LevelExitConfig } from "./levels";
+import { getCanvasFont } from "../lib/ui/typography";
 
 function createDoorLabelCanvas(label: string) {
   const canvas = document.createElement("canvas");
@@ -26,11 +27,11 @@ function createDoorLabelCanvas(label: string) {
   context.textAlign = "center";
   context.textBaseline = "middle";
   context.fillStyle = "#effcff";
-  context.font = "800 72px 'Courier New', monospace";
+  context.font = getCanvasFont("display", 800, 72);
   context.fillText(label, canvas.width / 2, 106);
 
   context.fillStyle = "#8ba0c7";
-  context.font = "700 30px 'Courier New', monospace";
+  context.font = getCanvasFont("ui", 700, 30);
   context.fillText("E", canvas.width / 2, 178);
 
   return canvas;

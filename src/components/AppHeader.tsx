@@ -6,24 +6,56 @@ interface AppHeaderProps {
   session: SessionInfo;
   syncStatus: SyncStatus;
   zoomPercent: number;
+  secretEntryProgress?: number;
+  secretUnlockCount?: number;
 }
 
-export function AppHeader({ session, syncStatus, zoomPercent }: AppHeaderProps) {
+const TITLE_LETTERS = ["S", "Y", "N", "C", " ", "S", "E", "S", "H"] as const;
+
+export function AppHeader({ session, syncStatus, zoomPercent, secretEntryProgress = 0, secretUnlockCount = 0 }: AppHeaderProps) {
   const sessionLabel = session.id.startsWith("discord-") ? "DISCORD" : session.code;
   const displayRoundNumber = getDisplayRoundNumber(session);
+  let matchedLetterCount = 0;
 
   return (
     <header className="panel app-header">
+      <span className="app-header-frame" aria-hidden="true" />
+      <span className="app-header-accent" aria-hidden="true" />
       <div className="brand-lockup">
         <div className="brand-logo-frame">
+          <span className="brand-logo-frame-inner" aria-hidden="true" />
           <img src={syncSeshLogo} alt="Sync Sesh logo" className="brand-logo" />
         </div>
         <div className="brand-copy">
           <p className="eyebrow">Discord Activity</p>
-          <div className="brand-title-shell">
+          <div
+            key={`brand-title-shell-${secretUnlockCount}`}
+            className={`brand-title-shell ${secretEntryProgress > 0 ? "brand-title-shell-secret" : ""} ${
+              secretUnlockCount > 0 ? "brand-title-shell-secret-complete" : ""
+            }`}
+          >
             <span className="brand-title-corner" aria-hidden="true" />
             <span className="brand-title-rail" aria-hidden="true" />
-            <h1 className="brand-title">Sync Sesh</h1>
+            <h1 className="brand-title">
+              {TITLE_LETTERS.map((letter, index) => {
+                if (letter === " ") {
+                  return (
+                    <span key={`space-${index}`} className="brand-title-space" aria-hidden="true">
+                      {" "}
+                    </span>
+                  );
+                }
+
+                matchedLetterCount += 1;
+                const isActive = matchedLetterCount <= secretEntryProgress;
+
+                return (
+                  <span key={`${letter}-${index}`} className={`brand-title-letter ${isActive ? "brand-title-letter-secret" : ""}`}>
+                    {letter}
+                  </span>
+                );
+              })}
+            </h1>
           </div>
         </div>
       </div>

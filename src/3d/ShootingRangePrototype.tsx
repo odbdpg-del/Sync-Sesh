@@ -3,6 +3,7 @@ import { useInteractionRegistry, useRegisterInteractable } from "./interactions"
 import type { ShotEvent } from "./interactions";
 import type { DisplaySurfaceConfig, ShootingRangeConfig, ShootingRangeLaneConfig, ShootingRangeTargetConfig } from "./levels";
 import type { RangeScoreResult, RangeScoreSubmission } from "../types/session";
+import { getCanvasFont } from "../lib/ui/typography";
 
 type ChallengePhase = "ready" | "running" | "complete";
 
@@ -134,11 +135,11 @@ function drawChallengeCanvas(stats: ChallengeStats, scoreboardRows: ScoreboardRo
   context.textBaseline = "middle";
 
   context.fillStyle = accentColor;
-  context.font = "800 58px 'Courier New', monospace";
+  context.font = getCanvasFont("display", 800, 58);
   context.fillText(getPhaseLabel(stats.phase), 280, 92);
 
   context.fillStyle = "#effcff";
-  context.font = "800 72px 'Courier New', monospace";
+  context.font = getCanvasFont("mono", 800, 72);
   context.fillText(stats.phase === "ready" ? "FIRE TO START" : getDisplayTime(stats.remainingMs), 280, 216);
 
   const metricY = 376;
@@ -153,21 +154,21 @@ function drawChallengeCanvas(stats: ChallengeStats, scoreboardRows: ScoreboardRo
     const x = 90 + index * 125;
 
     context.fillStyle = "#8ba0c7";
-    context.font = "700 22px 'Courier New', monospace";
+    context.font = getCanvasFont("ui", 700, 22);
     context.fillText(label, x, metricY - 42);
 
     context.fillStyle = "#dce8ff";
-    context.font = "800 38px 'Courier New', monospace";
+    context.font = getCanvasFont("display", 800, 38);
     context.fillText(value, x, metricY + 16);
   });
 
   context.textAlign = "left";
   context.fillStyle = "#57f3ff";
-  context.font = "800 30px 'Courier New', monospace";
+  context.font = getCanvasFont("display", 800, 30);
   context.fillText("SCOREBOARD", 590, 92);
 
   context.fillStyle = "#8ba0c7";
-  context.font = "700 20px 'Courier New', monospace";
+  context.font = getCanvasFont("ui", 700, 20);
   context.fillText("PILOT", 590, 134);
   context.fillText("PTS", 795, 134);
   context.fillText("H/M", 865, 134);
@@ -175,7 +176,7 @@ function drawChallengeCanvas(stats: ChallengeStats, scoreboardRows: ScoreboardRo
 
   if (scoreboardRows.length === 0) {
     context.fillStyle = "#dce8ff";
-    context.font = "700 28px 'Courier New', monospace";
+    context.font = getCanvasFont("ui", 700, 28);
     context.fillText("NO FINISHES YET", 590, 214);
   }
 
@@ -186,7 +187,7 @@ function drawChallengeCanvas(stats: ChallengeStats, scoreboardRows: ScoreboardRo
     context.fillRect(578, y - 25, 390, 38);
 
     context.fillStyle = "#effcff";
-    context.font = "800 22px 'Courier New', monospace";
+    context.font = getCanvasFont("display", 800, 22);
     context.fillText(`${index + 1}. ${formatDisplayName(row.displayName)}`, 590, y);
 
     context.textAlign = "right";

@@ -2,6 +2,7 @@ import { useCallback, useMemo, useRef, useState } from "react";
 import { useRegisterInteractable } from "./interactions";
 import type { ControlRoomDisplayColorRole, ControlRoomDisplayConfig } from "./levels";
 import type { CountdownDisplayState, RangeScoreResult, SessionUser } from "../types/session";
+import { getCanvasFont } from "../lib/ui/typography";
 
 type SessionPanelMode = "summary" | "roster" | "status";
 
@@ -117,17 +118,17 @@ function drawPanelCanvas({ title, subtitle, lines, canvasWidth, canvasHeight, ac
   context.textBaseline = "middle";
 
   context.fillStyle = accent;
-  context.font = "800 46px 'Courier New', monospace";
+  context.font = getCanvasFont("display", 800, 46);
   context.fillText(title, 48, 68);
 
   if (subtitle) {
     context.fillStyle = "#8ba0c7";
-    context.font = "700 24px 'Courier New', monospace";
+    context.font = getCanvasFont("ui", 700, 24);
     context.fillText(subtitle, 50, 112);
   }
 
   context.fillStyle = "#effcff";
-  context.font = "700 25px 'Courier New', monospace";
+  context.font = getCanvasFont("ui", 700, 25);
 
   const startY = subtitle ? 154 : 118;
   lines.forEach((line, index) => {
@@ -166,24 +167,24 @@ function drawTimerCanvas(countdownDisplay: CountdownDisplayState, levelLabel: st
 
   context.textAlign = "left";
   context.fillStyle = accent;
-  context.font = "800 44px 'Courier New', monospace";
+  context.font = getCanvasFont("display", 800, 44);
   context.fillText(`${levelLabel} / ${areaLabel}`, 54, 68);
   context.fillStyle = "#8ba0c7";
-  context.font = "700 22px 'Courier New', monospace";
+  context.font = getCanvasFont("ui", 700, 22);
   context.fillText(countdownDisplay.phase.toUpperCase(), 54, 110);
 
   context.textAlign = "center";
   context.fillStyle = "#effcff";
-  context.font = "800 112px 'Courier New', monospace";
+  context.font = getCanvasFont("mono", 800, 112);
   context.fillText(countdownDisplay.timerText, canvas.width / 2, 146);
 
   context.fillStyle = "#dce8ff";
-  context.font = "700 30px 'Courier New', monospace";
+  context.font = getCanvasFont("display", 700, 30);
   context.fillText(countdownDisplay.headline, canvas.width / 2, 208);
 
   context.textAlign = "right";
   context.fillStyle = "#8ba0c7";
-  context.font = "700 22px 'Courier New', monospace";
+  context.font = getCanvasFont("ui", 700, 22);
   context.fillText(countdownDisplay.subheadline, canvas.width - 54, 68);
 
   if (countdownDisplay.accentText) {
@@ -239,20 +240,20 @@ function drawMainDashboardCanvas({
   context.textBaseline = "middle";
   context.textAlign = "left";
   context.fillStyle = accent;
-  context.font = "800 72px 'Courier New', monospace";
+  context.font = getCanvasFont("display", 800, 72);
   context.fillText("SYNC SESH DASHBOARD", 88, 112);
 
   context.fillStyle = "#8ba0c7";
-  context.font = "700 34px 'Courier New', monospace";
+  context.font = getCanvasFont("ui", 700, 34);
   context.fillText(`${levelLabel.toUpperCase()} / ${areaLabel.toUpperCase()} / ${hostLabel}`, 92, 178);
 
   context.textAlign = "center";
   context.fillStyle = "#effcff";
-  context.font = "800 142px 'Courier New', monospace";
+  context.font = getCanvasFont("mono", 800, 142);
   context.fillText(countdownDisplay.timerText, canvas.width / 2, 330);
 
   context.fillStyle = "#dce8ff";
-  context.font = "700 44px 'Courier New', monospace";
+  context.font = getCanvasFont("display", 700, 44);
   context.fillText(countdownDisplay.headline, canvas.width / 2, 444);
 
   const metrics = [
@@ -269,11 +270,11 @@ function drawMainDashboardCanvas({
     context.fillRect(x - 128, 540, 256, 108);
 
     context.fillStyle = "#8ba0c7";
-    context.font = "700 30px 'Courier New', monospace";
+    context.font = getCanvasFont("ui", 700, 30);
     context.fillText(label, x, 574);
 
     context.fillStyle = index === 1 ? accent : "#effcff";
-    context.font = "800 46px 'Courier New', monospace";
+    context.font = getCanvasFont("display", 800, 46);
     context.fillText(value, x, 622);
   });
 

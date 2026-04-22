@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import type { StationConfig } from "./levels";
 import type { SessionUser } from "../types/session";
+import { getCanvasFont } from "../lib/ui/typography";
 
 interface StationOccupantMarkerProps {
   user: SessionUser;
@@ -71,18 +72,18 @@ function createLabelCanvas(user: SessionUser, isLocal: boolean, isHost: boolean)
   context.fill();
 
   context.fillStyle = "#03060c";
-  context.font = "700 32px Arial, sans-serif";
+  context.font = getCanvasFont("display", 700, 32);
   context.textAlign = "center";
   context.textBaseline = "middle";
   context.fillText(user.avatarSeed.slice(0, 2).toUpperCase(), 76, 70);
 
   context.textAlign = "left";
   context.fillStyle = "#f4f7ff";
-  context.font = "700 40px Arial, sans-serif";
+  context.font = getCanvasFont("display", 700, 40);
   context.fillText(truncateLabel(user.displayName, 16), 142, 66);
 
   context.fillStyle = accentColor;
-  context.font = "700 24px Arial, sans-serif";
+  context.font = getCanvasFont("ui", 700, 24);
   context.fillText(truncateLabel(`${getStatusText(user, isLocal, isHost)} | STATION`, 28), 142, 122);
 
   return canvas;

@@ -46,7 +46,7 @@ function getUserSubcopy(user: SessionUser) {
     case "ready":
       return "Locked in for launch";
     case "spectating":
-      return "Observing until replay";
+      return "Observing until next round";
     default:
       return "Standing by in lobby";
   }

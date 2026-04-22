@@ -57,6 +57,7 @@ export function AdminPanel({
 
   const testUsers = state.users.filter((user) => user.isTestUser);
   const soundCloudState = soundCloudPlayer.state;
+  const isActiveCountdown = state.session.phase === "precount" || state.session.phase === "countdown";
 
   return (
     <aside className="panel admin-panel">
@@ -86,6 +87,7 @@ export function AdminPanel({
         <p>Phase: {state.session.phase}</p>
         <p>Connected users: {state.users.length}</p>
         <p>Sim users: {testUsers.length}</p>
+        <p>{isActiveCountdown ? "Countdown is live: admin controls can now complete or reset the round manually." : "Admin controls can modify the current session state."}</p>
         <p>Toggle this panel with `</p>
       </div>
 
@@ -175,11 +177,11 @@ export function AdminPanel({
       ) : null}
 
       <div className="admin-grid">
-        <button type="button" className="primary-button" onClick={onForceStartRound}>
+        <button type="button" className="primary-button" onClick={onForceStartRound} disabled={isActiveCountdown}>
           Start Test Countdown
         </button>
         <button type="button" className="ghost-button" onClick={onForceCompleteRound}>
-          Force Complete
+          Complete Round
         </button>
         <button type="button" className="ghost-button" onClick={onResetSession}>
           Reset To Lobby

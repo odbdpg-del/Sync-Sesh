@@ -141,6 +141,7 @@ export interface CountdownDisplayState {
 
 export type SessionEvent =
   | { type: "join_session" }
+  | { type: "leave_session" }
   | { type: "ready_hold_start" }
   | { type: "ready_hold_end" }
   | { type: "set_timer_duration"; durationSeconds: number }

@@ -1,8 +1,11 @@
-import { useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { getDisplayRoundNumber } from "../lib/lobby/sessionState";
 import { useReadyHold } from "../hooks/useReadyHold";
 import { useRoundEffects } from "../hooks/useRoundEffects";
+import { SevenSegmentDisplay, isSegmentDisplayValue } from "./SevenSegmentDisplay";
 import type { CountdownDisplayState, DabSyncState, DerivedLobbyState, SyncStatus } from "../types/session";
+
+void React;
 
 interface TimerPanelProps {
   state: DabSyncState;
@@ -12,14 +15,13 @@ interface TimerPanelProps {
   onEndReadyHold: () => void;
   onSetTimerDuration: (durationSeconds: number) => void;
   onSetPrecountDuration: (preCountSeconds: number) => void;
-  onResetRound: () => void;
 }
 
 function getPrecountSequenceLabel(preCountSeconds: number) {
   return Array.from({ length: preCountSeconds }, (_, index) => String(preCountSeconds - index)).join("...");
 }
 
-function getStatusCopy(lobbyState: DerivedLobbyState, syncStatus: SyncStatus) {
+function getStatusCopy(lobbyState: DerivedLobbyState, syncStatus: SyncStatus, phase: DabSyncState["session"]["phase"]) {
   if (syncStatus.connection === "connecting") {
     return "Connecting to sync layer";
   }
@@ -32,12 +34,12 @@ function getStatusCopy(lobbyState: DerivedLobbyState, syncStatus: SyncStatus) {
     return syncStatus.warning;
   }
 
-  if (lobbyState.isArmed) {
-    return "Release to start";
+  if (phase === "completed") {
+    return "Preparing next round";
   }
 
-  if (lobbyState.canResetRound) {
-    return "Replay to return to lobby";
+  if (lobbyState.isArmed) {
+    return "Release to start";
   }
 
   return "Release starts the round";
@@ -47,7 +49,7 @@ function getActionLabel(lobbyState: DerivedLobbyState, isHolding: boolean) {
   if (lobbyState.isLocalUserSpectating) {
     return {
       title: "Spectating This Round",
-      subtitle: "Wait for replay to rejoin",
+      subtitle: "Wait for the next round",
     };
   }
 
@@ -79,7 +81,6 @@ export function TimerPanel({
   onEndReadyHold,
   onSetTimerDuration,
   onSetPrecountDuration,
-  onResetRound,
 }: TimerPanelProps) {
   const { isCelebrating } = useRoundEffects(state.session.phase);
   const [draftDuration, setDraftDuration] = useState(state.timerConfig.durationSeconds.toString());
@@ -100,6 +101,7 @@ export function TimerPanel({
   const armedLabel =
     state.session.phase === "completed" ? "Complete" : lobbyState.isArmed ? "Armed" : state.session.phase === "precount" ? "Launch" : "Standby";
   const displayRoundNumber = getDisplayRoundNumber(state.session);
+  const showsSegmentDisplay = isSegmentDisplayValue(countdownDisplay.headline);
 
   return (
     <section className={`panel timer-panel timer-shell phase-shell-${state.session.phase} ${isCelebrating ? "round-complete-burst" : ""}`}>
@@ -130,7 +132,11 @@ export function TimerPanel({
           <span />
         </div>
         <div className="timer-center">
-          <span className="timer-value">{countdownDisplay.headline}</span>
+          {showsSegmentDisplay ? (
+            <SevenSegmentDisplay value={countdownDisplay.headline} className="timer-value timer-value-segmented" />
+          ) : (
+            <span className="timer-value timer-value-text">{countdownDisplay.headline}</span>
+          )}
           <span className="timer-subcopy">{countdownDisplay.subheadline}</span>
           {countdownDisplay.accentText ? <span className="timer-accent">{countdownDisplay.accentText}</span> : null}
         </div>
@@ -145,14 +151,16 @@ export function TimerPanel({
 
       <div className={`armed-banner ${lobbyState.isArmed ? "armed-live" : ""} ${state.session.phase === "precount" ? "armed-banner-hot" : ""}`}>
         <span className="armed-prefix">
-          <span className="armed-prefix-icon" aria-hidden="true">
-            ◉
-          </span>
+          <span className="armed-prefix-icon" aria-hidden="true" />
           {armedLabel}
         </span>
-        <span className="armed-copy">{getStatusCopy(lobbyState, state.syncStatus)}</span>
+        <span className="armed-divider" aria-hidden="true" />
+        <span className="armed-copy">{getStatusCopy(lobbyState, state.syncStatus, state.session.phase)}</span>
         <span className="armed-chevron" aria-hidden="true">
-          •••
+          <span />
+          <span />
+          <span />
+          <span />
         </span>
       </div>
 
@@ -174,13 +182,34 @@ export function TimerPanel({
           disabled={!lobbyState.canHoldToReady || !syncReady}
           {...bindHoldButton}
         >
-          <span className="hold-orb" aria-hidden="true" />
+          <span className="hold-orb" aria-hidden="true">
+            <span className="hold-orb-core" />
+          </span>
           <span className="hold-copy">
             <span className="hold-title">{actionLabel.title}</span>
             <span className="hold-subtitle">{actionLabel.subtitle}</span>
           </span>
           <span className="hold-grid" aria-hidden="true">
-            ......
+            <span />
+            <span />
+            <span />
+            <span />
+            <span />
+            <span />
+            <span />
+            <span />
+            <span />
+            <span />
+            <span />
+            <span />
+            <span />
+            <span />
+            <span />
+            <span />
+            <span />
+            <span />
+            <span />
+            <span />
           </span>
         </button>
       </div>
@@ -253,21 +282,6 @@ export function TimerPanel({
             </div>
           </div>
         </div>
-      </div>
-
-      <div className="cta-row cta-row-bottom">
-        <button type="button" className="primary-button run-it-back" disabled={!lobbyState.canResetRound || !syncReady} onClick={onResetRound}>
-          <span className="button-icon" aria-hidden="true">
-            ↻
-          </span>
-          Reset / Replay
-        </button>
-        <button type="button" className="ghost-button settings-button" disabled>
-          <span className="button-icon" aria-hidden="true">
-            ⚙
-          </span>
-          Settings
-        </button>
       </div>
     </section>
   );

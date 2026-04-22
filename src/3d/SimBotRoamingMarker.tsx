@@ -3,6 +3,7 @@ import { useFrame } from "@react-three/fiber";
 import type { LevelConfig } from "./levels";
 import { getSimBotRoamingPose } from "./simBotRoaming";
 import type { SessionUser } from "../types/session";
+import { getCanvasFont } from "../lib/ui/typography";
 
 const DOUBLE_SIDE = 2;
 
@@ -41,18 +42,18 @@ function createSimRoamLabelCanvas(user: SessionUser, isHost: boolean) {
   context.fill();
 
   context.fillStyle = "#03060c";
-  context.font = "700 32px Arial, sans-serif";
+  context.font = getCanvasFont("display", 700, 32);
   context.textAlign = "center";
   context.textBaseline = "middle";
   context.fillText(user.avatarSeed.slice(0, 2).toUpperCase(), 74, 70);
 
   context.textAlign = "left";
   context.fillStyle = "#f4f7ff";
-  context.font = "700 40px Arial, sans-serif";
+  context.font = getCanvasFont("display", 700, 40);
   context.fillText(truncateLabel(user.displayName, 16), 140, 66);
 
   context.fillStyle = accentColor;
-  context.font = "700 24px Arial, sans-serif";
+  context.font = getCanvasFont("ui", 700, 24);
   context.fillText(truncateLabel(`${isHost ? "HOST | " : ""}SIM ROAM`, 28), 140, 122);
 
   return canvas;

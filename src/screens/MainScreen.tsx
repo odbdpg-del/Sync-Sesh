@@ -24,7 +24,7 @@ export function MainScreen() {
   const [isThreeDModeOpen, setIsThreeDModeOpen] = useState(false);
   const [soundCloudWaveformBarCount, setSoundCloudWaveformBarCount] = useState(60);
   const { zoomPercent } = useAppViewportControls();
-  const { isSecretUnlocked, resetSecretEntry, unlockCount } = useSecretCodeUnlock();
+  const { isSecretUnlocked, resetSecretEntry, unlockCount, entryProgress, entryStepCount, lastMatchedLength } = useSecretCodeUnlock();
   const {
     state,
     lobbyState,
@@ -34,7 +34,6 @@ export function MainScreen() {
     endReadyHold,
     setTimerDuration,
     setPrecountDuration,
-    resetRound,
     forceStartRound,
     forceCompleteRound,
     adminResetSession,
@@ -48,15 +47,22 @@ export function MainScreen() {
     clearFreeRoamPresence,
   } = useDabSyncSession();
   const countdownDisplay = useCountdownDisplay(state);
-  const { playCue } = useSoundEffects(state, lobbyState, countdownDisplay);
+  const { playCue, playSecretCodeStep } = useSoundEffects(state, lobbyState, countdownDisplay);
   const { isOpen: isAdminOpen, setIsOpen: setIsAdminOpen } = useAdminPanelHotkey(lobbyState.canUseAdminTools);
   const soundCloudPlayer = useSoundCloudPlayer({ waveformBarCount: soundCloudWaveformBarCount });
 
   useEffect(() => {
     if (unlockCount > 0) {
+      playCue("ui_secret_unlock");
       setIsThreeDModeOpen(true);
     }
-  }, [unlockCount]);
+  }, [playCue, unlockCount]);
+
+  useEffect(() => {
+    if (entryStepCount > 0 && lastMatchedLength > 0) {
+      playSecretCodeStep(lastMatchedLength - 1);
+    }
+  }, [entryStepCount, lastMatchedLength, playSecretCodeStep]);
 
   const handleJoinSession = () => {
     playCue("ui_join_ping");
@@ -76,10 +82,6 @@ export function MainScreen() {
     endReadyHold();
   };
 
-  const handleResetRound = () => {
-    resetRound();
-  };
-
   return (
     <main
       className="app-shell"
@@ -87,7 +89,13 @@ export function MainScreen() {
       data-3d-shell-open={isThreeDModeOpen ? "true" : undefined}
       onClickCapture={!isThreeDModeOpen ? resetSecretEntry : undefined}
     >
-      <AppHeader session={state.session} syncStatus={state.syncStatus} zoomPercent={zoomPercent} />
+      <AppHeader
+        session={state.session}
+        syncStatus={state.syncStatus}
+        zoomPercent={zoomPercent}
+        secretEntryProgress={entryProgress}
+        secretUnlockCount={unlockCount}
+      />
 
       {state.syncStatus.connection === "connecting" ? (
         <div className="panel sync-banner">
@@ -111,7 +119,6 @@ export function MainScreen() {
           onEndReadyHold={handleEndReadyHold}
           onSetTimerDuration={setTimerDuration}
           onSetPrecountDuration={setPrecountDuration}
-          onResetRound={handleResetRound}
         />
       </div>
 

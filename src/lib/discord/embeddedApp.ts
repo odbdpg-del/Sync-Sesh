@@ -60,35 +60,46 @@ function patchActivityUrlMappings() {
 }
 
 async function resolveDiscordLocalProfile(sdk: DiscordSDK): Promise<LocalProfile | undefined> {
+  let authenticatedUserProfile: LocalProfile | undefined;
+
   try {
     const auth = await sdk.commands.authenticate({});
-
-    return {
+    authenticatedUserProfile = {
       id: auth.user.id,
       displayName: getDiscordDisplayName(auth.user),
       avatarSeed: buildAvatarSeed(getDiscordDisplayName(auth.user)),
       avatarUrl: getDiscordAvatarUrl(auth.user),
     };
   } catch {
-    try {
-      const { participants } = await sdk.commands.getInstanceConnectedParticipants();
-
-      if (participants.length !== 1) {
-        return undefined;
-      }
-
-      const participant = participants[0];
-
-      return {
-        id: participant.id,
-        displayName: getDiscordDisplayName(participant),
-        avatarSeed: buildAvatarSeed(getDiscordDisplayName(participant)),
-        avatarUrl: getDiscordAvatarUrl(participant),
-      };
-    } catch {
-      return undefined;
-    }
+    authenticatedUserProfile = undefined;
   }
+
+  try {
+    const { participants } = await sdk.commands.getInstanceConnectedParticipants();
+    const matchingParticipant =
+      authenticatedUserProfile
+        ? participants.find((participant) => participant.id === authenticatedUserProfile?.id)
+        : participants.length === 1
+          ? participants[0]
+          : undefined;
+
+    if (matchingParticipant) {
+      return {
+        id: matchingParticipant.id,
+        displayName: getDiscordDisplayName(matchingParticipant),
+        avatarSeed: buildAvatarSeed(getDiscordDisplayName(matchingParticipant)),
+        avatarUrl: getDiscordAvatarUrl(matchingParticipant),
+      };
+    }
+  } catch {
+    // Fall through to the authenticated profile or local fallback.
+  }
+
+  if (authenticatedUserProfile) {
+    return authenticatedUserProfile;
+  }
+
+  return undefined;
 }
 
 export async function initializeEmbeddedApp(): Promise<EmbeddedAppState> {

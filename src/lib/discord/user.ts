@@ -2,11 +2,19 @@ export interface DiscordUserLike {
   id: string;
   username?: string | null;
   global_name?: string | null;
+  nick?: string | null;
+  nickname?: string | null;
   discriminator?: string | null;
   avatar?: string | null;
 }
 
 export function getDiscordDisplayName(user: DiscordUserLike): string {
+  const guildNickname = user.nickname?.trim() || user.nick?.trim();
+
+  if (guildNickname) {
+    return guildNickname;
+  }
+
   const globalName = user.global_name?.trim();
 
   if (globalName) {

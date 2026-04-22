@@ -4,6 +4,7 @@ import type { RangeScoreResult, RangeScoreSubmission } from "../types/session";
 import type { ShootingRangeConfig, LightConfig } from "./levels";
 import { useRegisterInteractable } from "./interactions";
 import { ShootingRangePrototype } from "./ShootingRangePrototype";
+import { getCanvasFont } from "../lib/ui/typography";
 
 type GunRackWeaponKind =
   | "compact-pistol"
@@ -138,16 +139,16 @@ function createRackStatusCanvas(selectedWeaponLabel: string) {
   context.strokeRect(18, 18, canvas.width - 36, canvas.height - 36);
 
   context.fillStyle = "#57f3ff";
-  context.font = "700 42px Inter, Arial, sans-serif";
+  context.font = getCanvasFont("display", 700, 42);
   context.textAlign = "center";
   context.fillText("RACK SELECT", canvas.width / 2, 88);
 
   context.fillStyle = "#f4f7ff";
-  context.font = "800 48px Inter, Arial, sans-serif";
+  context.font = getCanvasFont("display", 800, 48);
   context.fillText(selectedWeaponLabel.toUpperCase(), canvas.width / 2, 166);
 
   context.fillStyle = "rgba(115, 255, 76, 0.72)";
-  context.font = "600 24px Inter, Arial, sans-serif";
+  context.font = getCanvasFont("ui", 600, 24);
   context.fillText("PRESS E TO INSPECT", canvas.width / 2, 214);
 
   return canvas;

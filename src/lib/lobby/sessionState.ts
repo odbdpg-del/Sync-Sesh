@@ -19,6 +19,7 @@ export const DEFAULT_TIMER_SECONDS = 50;
 export const DEFAULT_PRECOUNT_SECONDS = 3;
 export const TIMER_PRESETS = [30, 45, 60];
 export const PRECOUNT_PRESETS = [3, 5];
+const AUTO_REPLAY_DELAY_MS = 900;
 const MAX_RANGE_SCORE_RESULTS = 32;
 const FREE_ROAM_PRESENCE_TTL_MS = 10_000;
 
@@ -229,6 +230,10 @@ function removeTestUsers(users: SessionUser[]) {
   return users.filter((user) => !user.isTestUser);
 }
 
+function removeUser(users: SessionUser[], userId: string) {
+  return users.filter((user) => user.id !== userId);
+}
+
 function setAllTestUsersPresence(users: SessionUser[], presence: SessionUser["presence"]) {
   return users.map((user) => {
     if (!user.isTestUser || user.presence === "spectating") {
@@ -309,6 +314,10 @@ function hasValidCountdownTimeline(snapshot: SessionSnapshot) {
   return true;
 }
 
+function isTimelineOwnedPhase(phase: SessionPhase) {
+  return phase === "precount" || phase === "countdown" || phase === "completed";
+}
+
 function getBaseLobbyPhase(users: SessionUser[]): SessionPhase {
   const activeUsers = users.filter((user) => user.presence !== "spectating");
 
@@ -317,6 +326,29 @@ function getBaseLobbyPhase(users: SessionUser[]): SessionPhase {
   }
 
   return activeUsers.every((user) => user.presence === "ready") ? "armed" : "lobby";
+}
+
+function resolveSessionPhase(snapshot: SessionSnapshot, users: SessionUser[]) {
+  if (isTimelineOwnedPhase(snapshot.session.phase) && hasValidCountdownTimeline(snapshot)) {
+    return snapshot.session.phase;
+  }
+
+  return getBaseLobbyPhase(users);
+}
+
+function resolveOwnerId(users: SessionUser[], preferredOwnerId: string) {
+  if (users.some((user) => user.id === preferredOwnerId)) {
+    return preferredOwnerId;
+  }
+
+  return users.find((user) => !user.isTestUser)?.id ?? users[0]?.id ?? "";
+}
+
+function applyOwnerToUsers(users: SessionUser[], ownerId: string) {
+  return users.map((user) => ({
+    ...user,
+    isHost: ownerId !== "" && user.id === ownerId,
+  }));
 }
 
 function beginPrecount(snapshot: SessionSnapshot, triggerUserId: string, nowMs: number): SessionSnapshot {
@@ -337,6 +369,22 @@ function beginPrecount(snapshot: SessionSnapshot, triggerUserId: string, nowMs: 
       countdownStartAt,
       countdownEndAt,
       triggeredByUserId: triggerUserId,
+    },
+  };
+}
+
+function replayRound(snapshot: SessionSnapshot): SessionSnapshot {
+  const nextUsers = moveUsersToLobby(snapshot.users);
+
+  return {
+    ...snapshot,
+    users: nextUsers,
+    countdown: createEmptyCountdown(),
+    rangeScoreboard: [],
+    session: {
+      ...snapshot.session,
+      phase: getBaseLobbyPhase(nextUsers),
+      roundNumber: snapshot.session.roundNumber + 1,
     },
   };
 }
@@ -465,19 +513,18 @@ export function deriveLobbyState(state: DabSyncState): DerivedLobbyState {
   const canHoldToReady = isJoined && !isLocalUserSpectating && (state.session.phase === "lobby" || state.session.phase === "armed");
   const isArmed = state.session.phase === "armed";
   const releaseStartsCountdown = isArmed && isLocalUserReady;
-  const canResetRound = state.session.phase === "completed";
+  const canResetRound = false;
   const canEditTimer =
     state.session.phase === "idle" ||
     state.session.phase === "lobby" ||
-    state.session.phase === "armed" ||
-    state.session.phase === "completed";
+    state.session.phase === "armed";
 
   const instructions = !isJoined
     ? ["Join session", "Hold SPACE or the on-screen button to ready", "Release to start once armed"]
     : isLocalUserSpectating
-      ? ["You are spectating this round", "Late joiners stay out until replay", "Reset the session to re-enter the lobby"]
+      ? ["You are spectating this round", "Late joiners stay out until the next round", "Reset the session to re-enter the lobby"]
       : state.session.phase === "completed"
-        ? ["Round complete", "Adjust the timer if needed", "Replay to return everyone to the lobby"]
+        ? ["Round complete", "Preparing the next round", "Stand by for reset"]
         : ["Hold SPACE to ready", "Use the hold button on mouse or touch", "Release to start once all active users are armed"];
 
   return {
@@ -504,18 +551,6 @@ export function reduceSessionEvent(snapshot: SessionSnapshot, event: SessionEven
     case "join_session": {
       const existingUser = snapshot.users.find((user) => user.id === actor.id);
 
-      if (existingUser) {
-        return snapshot;
-      }
-
-      const nextJoinedAt = new Date(nowMs).toISOString();
-      const shouldClaimOwnership = !hasRealHost(snapshot);
-      const availableUsers = shouldClaimOwnership ? removeTestUsers(snapshot.users) : snapshot.users;
-
-      if (availableUsers.length >= snapshot.session.capacity.max) {
-        return snapshot;
-      }
-
       const isActiveCountdownJoin = snapshot.session.phase === "precount" || snapshot.session.phase === "countdown";
       const isCompletedJoin = snapshot.session.phase === "completed";
       const joinedPresence: SessionUser["presence"] = isActiveCountdownJoin
@@ -525,6 +560,36 @@ export function reduceSessionEvent(snapshot: SessionSnapshot, event: SessionEven
         : isCompletedJoin
           ? "spectating"
           : "idle";
+
+      if (existingUser) {
+        const nextUsers = snapshot.users.map((user) => (
+          user.id === actor.id
+            ? {
+                ...user,
+                displayName: actor.displayName,
+                avatarSeed: actor.avatarSeed,
+                avatarUrl: actor.avatarUrl,
+              }
+            : user
+        ));
+
+        return {
+          ...snapshot,
+          users: nextUsers,
+          session: {
+            ...snapshot.session,
+            phase: resolveSessionPhase(snapshot, nextUsers),
+          },
+        };
+      }
+
+      const nextJoinedAt = new Date(nowMs).toISOString();
+      const shouldClaimOwnership = !hasRealHost(snapshot);
+      const availableUsers = shouldClaimOwnership ? removeTestUsers(snapshot.users) : snapshot.users;
+
+      if (availableUsers.length >= snapshot.session.capacity.max) {
+        return snapshot;
+      }
       const nextUser: SessionUser = {
         id: actor.id,
         displayName: actor.displayName,
@@ -554,7 +619,30 @@ export function reduceSessionEvent(snapshot: SessionSnapshot, event: SessionEven
         session: {
           ...snapshot.session,
           ownerId: shouldClaimOwnership ? actor.id : snapshot.session.ownerId,
-          phase: getBaseLobbyPhase(nextUsers),
+          phase: resolveSessionPhase(snapshot, nextUsers),
+        },
+      };
+    }
+    case "leave_session": {
+      const existingUser = snapshot.users.find((user) => user.id === actor.id);
+
+      if (!existingUser) {
+        return snapshot;
+      }
+
+      const nextUsers = removeUser(snapshot.users, actor.id);
+      const nextOwnerId = resolveOwnerId(nextUsers, snapshot.session.ownerId);
+      const normalizedUsers = applyOwnerToUsers(nextUsers, nextOwnerId);
+      const nextFreeRoamPresence = snapshot.freeRoamPresence.filter((presence) => presence.userId !== actor.id);
+
+      return {
+        ...snapshot,
+        users: normalizedUsers,
+        freeRoamPresence: nextFreeRoamPresence,
+        session: {
+          ...snapshot.session,
+          ownerId: nextOwnerId,
+          phase: resolveSessionPhase(snapshot, normalizedUsers),
         },
       };
     }
@@ -629,19 +717,7 @@ export function reduceSessionEvent(snapshot: SessionSnapshot, event: SessionEven
         return snapshot;
       }
 
-      const nextUsers = moveUsersToLobby(snapshot.users);
-
-      return {
-        ...snapshot,
-        users: nextUsers,
-        countdown: createEmptyCountdown(),
-        rangeScoreboard: [],
-        session: {
-          ...snapshot.session,
-          phase: getBaseLobbyPhase(nextUsers),
-          roundNumber: snapshot.session.roundNumber + 1,
-        },
-      };
+      return replayRound(snapshot);
     }
     case "admin_force_start_round": {
       if (!isActorHost(snapshot, actor) || snapshot.session.phase === "precount" || snapshot.session.phase === "countdown") {
@@ -749,7 +825,7 @@ export function reduceSessionEvent(snapshot: SessionSnapshot, event: SessionEven
         freeRoamPresence: snapshot.freeRoamPresence.filter((presence) => nextUsers.some((user) => user.id === presence.userId)),
         session: {
           ...snapshot.session,
-          phase: getBaseLobbyPhase(nextUsers),
+          phase: resolveSessionPhase(snapshot, nextUsers),
         },
       };
     }
@@ -766,7 +842,7 @@ export function reduceSessionEvent(snapshot: SessionSnapshot, event: SessionEven
         users: nextUsers,
         session: {
           ...snapshot.session,
-          phase: getBaseLobbyPhase(nextUsers),
+          phase: resolveSessionPhase(snapshot, nextUsers),
         },
       };
     }
@@ -782,7 +858,7 @@ export function reduceSessionEvent(snapshot: SessionSnapshot, event: SessionEven
         users: nextUsers,
         session: {
           ...snapshot.session,
-          phase: getBaseLobbyPhase(nextUsers),
+          phase: resolveSessionPhase(snapshot, nextUsers),
         },
       };
     }
@@ -929,6 +1005,14 @@ export function advanceSessionTime(snapshot: SessionSnapshot, nowMs = Date.now()
           completedAt: new Date(nowMs).toISOString(),
         },
       };
+    }
+  }
+
+  if (snapshotWithFreshPresence.session.phase === "completed") {
+    const completedAtMs = parseTimestamp(snapshotWithFreshPresence.countdown.completedAt);
+
+    if (completedAtMs !== undefined && nowMs >= completedAtMs + AUTO_REPLAY_DELAY_MS) {
+      return replayRound(snapshotWithFreshPresence);
     }
   }
 

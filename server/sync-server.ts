@@ -18,9 +18,14 @@ interface SessionRoom {
   clients: Set<import("ws").WebSocket>;
 }
 
+interface SocketSessionInfo {
+  sessionId: string;
+  localProfile: LocalProfile;
+}
+
 const port = Number(process.env.PORT ?? 8787);
 const rooms = new Map<string, SessionRoom>();
-const socketToRoomId = new Map<import("ws").WebSocket, string>();
+const socketToSessionInfo = new Map<import("ws").WebSocket, SocketSessionInfo>();
 
 function createRoom(sessionId: string): SessionRoom {
   return {
@@ -105,7 +110,10 @@ wsServer.on("connection", (socket) => {
     if (payload.type === "hello") {
       const room = getRoom(payload.sessionId);
       room.clients.add(socket);
-      socketToRoomId.set(socket, payload.sessionId);
+      socketToSessionInfo.set(socket, {
+        sessionId: payload.sessionId,
+        localProfile: payload.localProfile,
+      });
       send(socket, {
         type: "snapshot",
         snapshot: room.snapshot,
@@ -116,6 +124,10 @@ wsServer.on("connection", (socket) => {
 
     if (payload.type === "event") {
       const room = getRoom(payload.sessionId);
+      socketToSessionInfo.set(socket, {
+        sessionId: payload.sessionId,
+        localProfile: payload.localProfile,
+      });
       room.snapshot = reduceSessionEvent(room.snapshot, payload.event, payload.localProfile, Date.now());
       broadcast(payload.sessionId);
       return;
@@ -138,20 +150,27 @@ wsServer.on("connection", (socket) => {
   });
 
   socket.on("close", () => {
-    const roomId = socketToRoomId.get(socket);
+    const sessionInfo = socketToSessionInfo.get(socket);
 
-    if (!roomId) {
+    if (!sessionInfo) {
       return;
     }
 
-    const room = rooms.get(roomId);
+    const room = rooms.get(sessionInfo.sessionId);
     room?.clients.delete(socket);
 
     if (room && room.clients.size === 0) {
-      rooms.delete(roomId);
+      rooms.delete(sessionInfo.sessionId);
+    } else if (room) {
+      const nextSnapshot = reduceSessionEvent(room.snapshot, { type: "leave_session" }, sessionInfo.localProfile, Date.now());
+
+      if (nextSnapshot !== room.snapshot) {
+        room.snapshot = nextSnapshot;
+        broadcast(sessionInfo.sessionId);
+      }
     }
 
-    socketToRoomId.delete(socket);
+    socketToSessionInfo.delete(socket);
   });
 });
 

@@ -3,6 +3,8 @@ export type SoundCueId =
   | "ui_ready_hold_start"
   | "ui_ready_release_cancel"
   | "state_armed_lock"
+  | "ui_secret_unlock"
+  | "count_second_tick"
   | "count_pre_3"
   | "count_pre_2"
   | "count_pre_1"
@@ -47,6 +49,20 @@ export const SOUND_CUES: Record<SoundCueId, SoundCueDefinition> = {
     label: "Armed Lock",
     description: "Plays when all active participants are ready.",
     priority: "high",
+  },
+  ui_secret_unlock: {
+    id: "ui_secret_unlock",
+    category: "ui",
+    label: "Secret Unlock",
+    description: "Confirms the hidden 3D unlock sequence completed.",
+    priority: "high",
+  },
+  count_second_tick: {
+    id: "count_second_tick",
+    category: "countdown",
+    label: "Second Tick",
+    description: "Light boop for each countdown second before the urgent window.",
+    priority: "low",
   },
   count_pre_3: {
     id: "count_pre_3",
@@ -104,6 +120,8 @@ export const SOUND_TRIGGER_NOTES: Record<SoundCueId, string> = {
   ui_ready_hold_start: "Trigger when the local hold begins.",
   ui_ready_release_cancel: "Trigger when the local hold ends before ARMED.",
   state_armed_lock: "Trigger on transition into armed.",
+  ui_secret_unlock: "Trigger when the secret 3D code is fully entered.",
+  count_second_tick: "Trigger once per second during the main countdown before the urgent window.",
   count_pre_3: "Trigger when the pre-count headline becomes 3.",
   count_pre_2: "Trigger when the pre-count headline becomes 2.",
   count_pre_1: "Trigger when the pre-count headline becomes 1.",

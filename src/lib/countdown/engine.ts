@@ -75,9 +75,9 @@ export function deriveCountdownDisplay(state: DabSyncState, serverNowMs: number)
       return {
         phase: state.session.phase,
         headline: "00:00",
-        subheadline: "Round complete",
+        subheadline: "Loading next round",
         timerText: "00:00",
-        accentText: "Replay to return to lobby",
+        accentText: "Stand by",
         isUrgent: false,
       };
     case "idle":

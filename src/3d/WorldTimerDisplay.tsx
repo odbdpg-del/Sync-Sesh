@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import type { TimerDisplayConfig } from "./levels";
 import type { PhaseVisuals } from "./phaseVisuals";
 import type { CountdownDisplayState } from "../types/session";
+import { getCanvasFont } from "../lib/ui/typography";
 
 interface WorldTimerDisplayProps {
   countdownDisplay: CountdownDisplayState;
@@ -37,15 +38,15 @@ function drawTimerCanvas(countdownDisplay: CountdownDisplayState, phaseVisuals: 
   context.textBaseline = "middle";
 
   context.fillStyle = accentColor;
-  context.font = "700 132px 'Courier New', monospace";
+  context.font = getCanvasFont("mono", 700, 132);
   context.fillText(countdownDisplay.timerText, canvas.width / 2, 224);
 
   context.fillStyle = "#dce8ff";
-  context.font = "700 46px 'Courier New', monospace";
+  context.font = getCanvasFont("display", 700, 46);
   context.fillText(countdownDisplay.phase.toUpperCase(), canvas.width / 2, 92);
 
   context.fillStyle = "#8ba0c7";
-  context.font = "32px 'Trebuchet MS', 'Segoe UI', sans-serif";
+  context.font = getCanvasFont("ui", 600, 32);
   context.fillText(countdownDisplay.subheadline, canvas.width / 2, 370);
 
   return canvas;

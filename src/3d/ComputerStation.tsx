@@ -3,6 +3,7 @@ import { useRegisterInteractable } from "./interactions";
 import type { StationConfig } from "./levels";
 import type { PhaseVisuals } from "./phaseVisuals";
 import type { CountdownDisplayState, SessionUser } from "../types/session";
+import { getCanvasFont } from "../lib/ui/typography";
 
 interface ComputerStationProps {
   station: StationConfig;
@@ -68,11 +69,11 @@ function drawMetric(
 
   context.textAlign = "center";
   context.fillStyle = "#8ba0c7";
-  context.font = "700 18px 'Courier New', monospace";
+  context.font = getCanvasFont("mono", 700, 18);
   context.fillText(label, x + width / 2, y + 24);
 
   context.fillStyle = accent;
-  context.font = "800 34px 'Courier New', monospace";
+  context.font = getCanvasFont("display", 800, 34);
   context.fillText(value, x + width / 2, y + 58);
 }
 
@@ -132,51 +133,51 @@ function drawDashboardCanvas({
   context.textBaseline = "middle";
   context.textAlign = "left";
   context.fillStyle = "#8b7cff";
-  context.font = "700 22px 'Courier New', monospace";
+  context.font = getCanvasFont("ui", 700, 22);
   context.fillText("DISCORD ACTIVITY", 64, 76);
 
   context.fillStyle = "#effcff";
-  context.font = "800 52px 'Courier New', monospace";
+  context.font = getCanvasFont("mono", 800, 52);
   context.fillText("SYNC SESH", 62, 128);
 
   context.fillStyle = "#8ba0c7";
-  context.font = "700 20px 'Courier New', monospace";
+  context.font = getCanvasFont("ui", 700, 20);
   context.fillText(`${stationLabel.toUpperCase()} / LIVE DASHBOARD`, 66, 176);
 
   if (assignedUser) {
     const isAssignedHost = assignedUser.id === ownerId || assignedUser.isHost;
 
     context.fillStyle = isAssignedHost ? "#f8d36a" : "#31f6ff";
-    context.font = "800 26px 'Courier New', monospace";
+    context.font = getCanvasFont("display", 800, 26);
     context.fillText(truncateLabel(`${assignedUser.displayName}'S COMPUTER`, 22).toUpperCase(), 66, 216);
 
     context.fillStyle = "#8ba0c7";
-    context.font = "700 18px 'Courier New', monospace";
+    context.font = getCanvasFont("ui", 700, 18);
     context.fillText(formatUserStatus(assignedUser, isAssignedHost), 66, 246);
   }
 
   context.textAlign = "right";
   context.fillStyle = accent;
-  context.font = "800 24px 'Courier New', monospace";
+  context.font = getCanvasFont("display", 800, 24);
   context.fillText(countdownDisplay.phase.toUpperCase(), canvas.width - 64, 78);
   context.fillStyle = "#dce8ff";
-  context.font = "700 20px 'Courier New', monospace";
+  context.font = getCanvasFont("ui", 700, 20);
   context.fillText(`${activeUsers}/${users.length || 0} CONNECTED`, canvas.width - 64, 120);
 
   context.textAlign = "center";
   context.fillStyle = accent;
   context.shadowColor = accent;
   context.shadowBlur = 24;
-  context.font = "800 124px 'Courier New', monospace";
+  context.font = getCanvasFont("mono", 800, 124);
   context.fillText(countdownDisplay.timerText, canvas.width / 2, 292);
 
   context.shadowBlur = 0;
   context.fillStyle = "#73ff4c";
-  context.font = "700 26px 'Courier New', monospace";
+  context.font = getCanvasFont("display", 700, 26);
   context.fillText(countdownDisplay.headline.toUpperCase(), canvas.width / 2, 382);
 
   context.fillStyle = "#dce8ff";
-  context.font = "700 20px 'Courier New', monospace";
+  context.font = getCanvasFont("ui", 700, 20);
   context.fillText(countdownDisplay.subheadline.toUpperCase(), canvas.width / 2, 426);
 
   const metricY = 478;
@@ -190,7 +191,7 @@ function drawDashboardCanvas({
 
   context.textAlign = "left";
   context.fillStyle = "#8b7cff";
-  context.font = "700 18px 'Courier New', monospace";
+  context.font = getCanvasFont("mono", 700, 18);
   context.fillText("SESSION DECK", 720, 470);
 
   users.slice(0, 3).forEach((user, index) => {
@@ -198,11 +199,11 @@ function drawDashboardCanvas({
     const isHost = user.id === ownerId || user.isHost;
 
     context.fillStyle = isHost ? "#f8d36a" : "#dce8ff";
-    context.font = "800 20px 'Courier New', monospace";
+    context.font = getCanvasFont("display", 800, 20);
     context.fillText(truncateLabel(user.displayName, 12), 720, y);
 
     context.fillStyle = "#8ba0c7";
-    context.font = "700 14px 'Courier New', monospace";
+    context.font = getCanvasFont("ui", 700, 14);
     context.fillText(formatUserStatus(user, isHost), 720, y + 18);
   });
 

@@ -39,6 +39,7 @@ export class WebSocketSyncClient implements SyncClient {
   private reconnectTimeoutId?: number;
   private reconnectAttempt = 0;
   private destroyed = false;
+  private shouldRestoreJoinedSession = false;
 
   constructor({ localProfile, serverUrl, sessionId }: WebSocketSyncClientOptions) {
     this.localProfile = localProfile;
@@ -94,6 +95,17 @@ export class WebSocketSyncClient implements SyncClient {
               localProfile: this.localProfile,
             }),
           );
+
+          if (this.shouldRestoreJoinedSession) {
+            socket.send(
+              JSON.stringify({
+                type: "event",
+                sessionId: this.sessionId,
+                event: { type: "join_session" },
+                localProfile: this.localProfile,
+              }),
+            );
+          }
         }
 
         this.pingIntervalId = window.setInterval(() => {
@@ -124,6 +136,7 @@ export class WebSocketSyncClient implements SyncClient {
 
         if (payload.type === "snapshot") {
           this.snapshot = payload.snapshot;
+          this.shouldRestoreJoinedSession = this.snapshot.users.some((user) => user.id === this.localProfile.id);
           this.syncStatus = {
             ...this.syncStatus,
             connection: "connected",
@@ -174,6 +187,7 @@ export class WebSocketSyncClient implements SyncClient {
         if (this.pingIntervalId !== undefined) {
           window.clearInterval(this.pingIntervalId);
         }
+        this.shouldRestoreJoinedSession = this.snapshot.users.some((user) => user.id === this.localProfile.id);
 
         this.syncStatus = {
           ...this.syncStatus,
@@ -192,6 +206,7 @@ export class WebSocketSyncClient implements SyncClient {
 
   disconnect() {
     this.destroyed = true;
+    this.shouldRestoreJoinedSession = false;
     if (this.pingIntervalId !== undefined) {
       window.clearInterval(this.pingIntervalId);
     }
