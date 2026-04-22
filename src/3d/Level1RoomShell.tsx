@@ -6,6 +6,7 @@ import { ComputerStation } from "./ComputerStation";
 import { FreeRoamPresenceMarker } from "./FreeRoamPresenceMarker";
 import { LevelExitDoor } from "./LevelExitDoor";
 import { Level1RangeRoom } from "./Level1RangeRoom";
+import { Level1RecordingStudioRoom } from "./Level1RecordingStudioRoom";
 import { ShootingRangePrototype } from "./ShootingRangePrototype";
 import { SimBotRoamingMarker } from "./SimBotRoamingMarker";
 import { StationOccupantMarker } from "./StationOccupantMarker";
@@ -13,6 +14,8 @@ import { WorldTimerDisplay } from "./WorldTimerDisplay";
 import { useRegisterInteractable } from "./interactions";
 import { getPhaseVisuals } from "./phaseVisuals";
 import type { PhaseVisuals } from "./phaseVisuals";
+import type { LocalDawAudioEngineActions, LocalDawAudioEngineState } from "./useLocalDawAudioEngine";
+import type { LocalDawActions, LocalDawState } from "./useLocalDawState";
 import type { JukeboxConfig, JukeboxControlZoneConfig, JukeboxScreenColorRole, JukeboxScreenSurfaceConfig } from "./levels";
 import type { JukeboxActions, JukeboxDisplayState } from "../hooks/useSoundCloudPlayer";
 import type {
@@ -21,6 +24,10 @@ import type {
   RangeScoreResult,
   RangeScoreSubmission,
   SessionUser,
+  SharedDawClipPublishPayload,
+  SharedDawClipsState,
+  SharedDawTransport,
+  SharedDawTrackId,
 } from "../types/session";
 
 const WALL_THICKNESS = 0.18;
@@ -107,6 +114,54 @@ function ControlRoomOpeningStub({
         <boxGeometry args={[stubWallThickness, 4 - opening.size.height, opening.size.width]} />
         <meshStandardMaterial args={[{ color: wallColor, roughness: 0.82, metalness: 0.04 }]} />
       </mesh>
+    </>
+  );
+}
+
+function ControlRoomWestOpeningWall({
+  opening,
+  roomWestWallX,
+  wallCenterY,
+  wallColor,
+  roomHeight,
+  roomMinZ,
+  roomMaxZ,
+}: {
+  opening: NonNullable<LevelConfig["openings"]>[number];
+  roomWestWallX: number;
+  wallCenterY: number;
+  wallColor: string;
+  roomHeight: number;
+  roomMinZ: number;
+  roomMaxZ: number;
+}) {
+  const openingHalfWidth = opening.size.width / 2;
+  const openingLeftEdge = opening.position[2] - openingHalfWidth;
+  const openingRightEdge = opening.position[2] + openingHalfWidth;
+  const lowerWallDepth = Math.max(0, openingLeftEdge - roomMinZ);
+  const upperWallDepth = Math.max(0, roomMaxZ - openingRightEdge);
+
+  return (
+    <>
+      {lowerWallDepth > 0 ? (
+        <Wall
+          position={[roomWestWallX, wallCenterY, roomMinZ + lowerWallDepth / 2]}
+          args={[WALL_THICKNESS, roomHeight, lowerWallDepth]}
+          color={wallColor}
+        />
+      ) : null}
+      {upperWallDepth > 0 ? (
+        <Wall
+          position={[roomWestWallX, wallCenterY, openingRightEdge + upperWallDepth / 2]}
+          args={[WALL_THICKNESS, roomHeight, upperWallDepth]}
+          color={wallColor}
+        />
+      ) : null}
+      <Wall
+        position={[roomWestWallX, opening.size.height + (roomHeight - opening.size.height) / 2, opening.position[2]]}
+        args={[WALL_THICKNESS, roomHeight - opening.size.height, opening.size.width]}
+        color={wallColor}
+      />
     </>
   );
 }
@@ -422,6 +477,201 @@ function ControlRoomKitchenIslandProps({ phaseVisuals }: { phaseVisuals: PhaseVi
           <meshBasicMaterial args={[{ color: "#f8d36a" }]} />
         </mesh>
       </group>
+    </group>
+  );
+}
+
+function createAudioWorkbenchReadoutCanvas(phaseVisuals: PhaseVisuals) {
+  const canvas = document.createElement("canvas");
+  canvas.width = 1024;
+  canvas.height = 512;
+
+  const context = canvas.getContext("2d");
+
+  if (!context) {
+    return canvas;
+  }
+
+  context.fillStyle = "#040914";
+  context.fillRect(0, 0, canvas.width, canvas.height);
+  context.strokeStyle = phaseVisuals.gridPrimary;
+  context.lineWidth = 12;
+  context.strokeRect(24, 24, canvas.width - 48, canvas.height - 48);
+  context.strokeStyle = "rgba(87, 243, 255, 0.24)";
+  context.lineWidth = 3;
+
+  for (let x = 78; x < canvas.width - 70; x += 82) {
+    context.beginPath();
+    context.moveTo(x, 84);
+    context.lineTo(x, canvas.height - 72);
+    context.stroke();
+  }
+
+  context.fillStyle = phaseVisuals.gridPrimary;
+  context.font = "700 58px monospace";
+  context.fillText("AUDIO WORKBENCH", 70, 112);
+  context.fillStyle = "#f8d36a";
+  context.font = "700 42px monospace";
+  context.fillText("PATCHBAY OFFLINE", 74, 188);
+  context.fillStyle = "#73ff4c";
+  context.font = "700 34px monospace";
+  context.fillText("FM VOICE: STANDBY", 74, 262);
+  context.fillStyle = "#f64fff";
+  context.fillText("NO AUDIO ENGINE", 74, 326);
+
+  context.fillStyle = "rgba(87, 243, 255, 0.18)";
+  context.fillRect(72, 382, 880, 34);
+  context.fillStyle = phaseVisuals.timerAccent;
+  [0.08, 0.2, 0.34, 0.48, 0.62, 0.78].forEach((position, index) => {
+    context.fillRect(84 + position * 820, 374 - (index % 3) * 18, 24, 76 + (index % 3) * 18);
+  });
+
+  return canvas;
+}
+
+function createAudioWorkbenchLabelCanvas(label: string, color: string) {
+  const canvas = document.createElement("canvas");
+  canvas.width = 384;
+  canvas.height = 192;
+
+  const context = canvas.getContext("2d");
+
+  if (!context) {
+    return canvas;
+  }
+
+  context.fillStyle = "#050914";
+  context.fillRect(0, 0, canvas.width, canvas.height);
+  context.strokeStyle = color;
+  context.lineWidth = 10;
+  context.strokeRect(16, 16, canvas.width - 32, canvas.height - 32);
+  context.fillStyle = color;
+  context.font = "700 72px monospace";
+  context.textAlign = "center";
+  context.textBaseline = "middle";
+  context.fillText(label, canvas.width / 2, canvas.height / 2 + 4);
+
+  return canvas;
+}
+
+function AudioWorkbenchLabel({
+  label,
+  color,
+  position,
+}: {
+  label: string;
+  color: string;
+  position: [number, number, number];
+}) {
+  const labelCanvas = useMemo(() => createAudioWorkbenchLabelCanvas(label, color), [color, label]);
+
+  return (
+    <mesh position={position} rotation={[-0.52, 0, 0]}>
+      <planeGeometry args={[0.34, 0.16]} />
+      <meshBasicMaterial args={[{ transparent: true, toneMapped: false }]}>
+        <canvasTexture key={`audio-workbench-label-${label}-${color}`} attach="map" args={[labelCanvas]} />
+      </meshBasicMaterial>
+    </mesh>
+  );
+}
+
+function ControlRoomAudioWorkbench({ phaseVisuals }: { phaseVisuals: PhaseVisuals }) {
+  const readoutCanvas = useMemo(() => createAudioWorkbenchReadoutCanvas(phaseVisuals), [
+    phaseVisuals.gridPrimary,
+    phaseVisuals.timerAccent,
+  ]);
+  const readoutTextureKey = `audio-workbench-readout-${phaseVisuals.gridPrimary}-${phaseVisuals.timerAccent}`;
+  const modules = [
+    { id: "clock", label: "CLOCK", x: -0.72, color: phaseVisuals.gridPrimary },
+    { id: "fm", label: "FM", x: -0.36, color: "#73ff4c" },
+    { id: "seq", label: "SEQ", x: 0, color: "#f8d36a" },
+    { id: "gain", label: "GAIN", x: 0.36, color: "#f64fff" },
+    { id: "out", label: "OUT", x: 0.72, color: phaseVisuals.timerAccent },
+  ];
+  const sequencerPads = Array.from({ length: 8 }, (_, index) => index);
+
+  return (
+    <group position={[-8.85, 0, -4.6]} rotation={[0, Math.PI / 2, 0]}>
+      <mesh position={[0, 0.42, 0]}>
+        <boxGeometry args={[2.28, 0.84, 0.78]} />
+        <meshStandardMaterial args={[{ color: "#07101e", emissive: "#050914", emissiveIntensity: 0.18, roughness: 0.74, metalness: 0.08 }]} />
+      </mesh>
+      <mesh position={[0, 0.91, 0.02]} rotation={[-0.18, 0, 0]}>
+        <boxGeometry args={[2.42, 0.14, 0.96]} />
+        <meshStandardMaterial args={[{ color: "#131d30", emissive: "#08111e", emissiveIntensity: 0.22, roughness: 0.66, metalness: 0.12 }]} />
+      </mesh>
+      <mesh position={[0, 1.42, -0.24]} rotation={[0.08, 0, 0]}>
+        <boxGeometry args={[1.36, 0.74, 0.08]} />
+        <meshStandardMaterial args={[{ color: "#03060d", emissive: "#07111f", emissiveIntensity: 0.28, roughness: 0.62, metalness: 0.1 }]} />
+      </mesh>
+      <mesh position={[0, 1.42, -0.19]} rotation={[0.08, 0, 0]}>
+        <planeGeometry args={[1.16, 0.52]} />
+        <meshBasicMaterial args={[{ transparent: false, toneMapped: false }]}>
+          <canvasTexture key={readoutTextureKey} attach="map" args={[readoutCanvas]} />
+        </meshBasicMaterial>
+      </mesh>
+
+      <mesh position={[-0.88, 1.2, -0.18]} rotation={[0.08, 0, 0]}>
+        <boxGeometry args={[0.34, 0.42, 0.06]} />
+        <meshBasicMaterial args={[{ color: "#0b3143" }]} />
+      </mesh>
+      <mesh position={[0.88, 1.2, -0.18]} rotation={[0.08, 0, 0]}>
+        <boxGeometry args={[0.34, 0.42, 0.06]} />
+        <meshBasicMaterial args={[{ color: "#31123e" }]} />
+      </mesh>
+
+      {modules.map((module) => (
+        <group key={module.id} position={[module.x, 0.98, 0.12]}>
+          <mesh>
+            <boxGeometry args={[0.28, 0.08, 0.28]} />
+            <meshStandardMaterial args={[{ color: "#050914", emissive: module.color, emissiveIntensity: 0.1, roughness: 0.62, metalness: 0.12 }]} />
+          </mesh>
+          <AudioWorkbenchLabel label={module.label} color={module.color} position={[0, 0.07, -0.03]} />
+          {[-0.07, 0.07].map((portX) => (
+            <mesh key={portX} position={[portX, 0.07, 0.15]} rotation={[Math.PI / 2, 0, 0]}>
+              <cylinderGeometry args={[0.035, 0.035, 0.035, 18]} />
+              <meshBasicMaterial args={[{ color: module.color }]} />
+            </mesh>
+          ))}
+        </group>
+      ))}
+
+      {[-0.54, -0.18, 0.18, 0.54].map((x, index) => (
+        <mesh key={`wire-${x}`} position={[x, 1.035, 0.27]} rotation={[0, 0, index % 2 === 0 ? 0.16 : -0.16]}>
+          <boxGeometry args={[0.34, 0.025, 0.025]} />
+          <meshBasicMaterial args={[{ color: index % 2 === 0 ? phaseVisuals.gridPrimary : "#f64fff" }]} />
+        </mesh>
+      ))}
+
+      <mesh position={[0, 0.88, 0.42]}>
+        <boxGeometry args={[1.54, 0.045, 0.22]} />
+        <meshStandardMaterial args={[{ color: "#050914", roughness: 0.7, metalness: 0.08 }]} />
+      </mesh>
+      {sequencerPads.map((pad) => (
+        <mesh key={pad} position={[-0.63 + pad * 0.18, 0.925, 0.42]}>
+          <boxGeometry args={[0.12, 0.035, 0.14]} />
+          <meshStandardMaterial args={[{
+            color: pad % 2 === 0 ? "#123143" : "#1f2037",
+            emissive: pad % 3 === 0 ? phaseVisuals.gridPrimary : "#111827",
+            emissiveIntensity: pad % 3 === 0 ? 0.28 : 0.12,
+            roughness: 0.62,
+            metalness: 0.1,
+          }]} />
+        </mesh>
+      ))}
+
+      <mesh position={[0, 0.68, 0.49]}>
+        <boxGeometry args={[1.88, 0.04, 0.035]} />
+        <meshBasicMaterial args={[{ color: phaseVisuals.gridSecondary }]} />
+      </mesh>
+      <mesh position={[-1.18, 0.7, 0.02]}>
+        <boxGeometry args={[0.045, 0.54, 0.8]} />
+        <meshBasicMaterial args={[{ color: phaseVisuals.gridPrimary }]} />
+      </mesh>
+      <mesh position={[1.18, 0.7, 0.02]}>
+        <boxGeometry args={[0.045, 0.54, 0.8]} />
+        <meshBasicMaterial args={[{ color: phaseVisuals.timerAccent }]} />
+      </mesh>
     </group>
   );
 }
@@ -1251,6 +1501,20 @@ interface Level1RoomShellProps {
   localStationSource: "joined" | "temporary" | "emergency";
   jukeboxDisplay?: JukeboxDisplayState;
   jukeboxActions?: JukeboxActions;
+  localDawState?: LocalDawState;
+  localDawActions?: LocalDawActions;
+  localDawAudioState?: LocalDawAudioEngineState;
+  localDawAudioActions?: LocalDawAudioEngineActions;
+  sharedDawTransport?: SharedDawTransport;
+  sharedDawClips?: SharedDawClipsState;
+  canControlSharedDawTransport?: boolean;
+  canAdminSharedDawClips?: boolean;
+  onSetSharedDawTempo?: (bpm: number) => void;
+  onPlaySharedDawTransport?: () => void;
+  onStopSharedDawTransport?: () => void;
+  localUserIdForSharedDawClips?: string;
+  onPublishSharedDawClip?: (clip: SharedDawClipPublishPayload) => void;
+  onClearSharedDawClip?: (trackId: SharedDawTrackId, sceneIndex: number) => void;
 }
 
 export function Level1RoomShell({
@@ -1269,6 +1533,20 @@ export function Level1RoomShell({
   localStationSource,
   jukeboxDisplay,
   jukeboxActions,
+  localDawState,
+  localDawActions,
+  localDawAudioState,
+  localDawAudioActions,
+  sharedDawTransport,
+  sharedDawClips,
+  canControlSharedDawTransport,
+  canAdminSharedDawClips,
+  onSetSharedDawTempo,
+  onPlaySharedDawTransport,
+  onStopSharedDawTransport,
+  localUserIdForSharedDawClips,
+  onPublishSharedDawClip,
+  onClearSharedDawClip,
 }: Level1RoomShellProps) {
   const { dimensions, exits, lighting, openings, stations, timerDisplay } = levelConfig;
   const activeControlRoomArea = levelConfig.areas?.find((area) => (
@@ -1287,11 +1565,23 @@ export function Level1RoomShell({
     area.kind === "shooting-range" &&
     area.status === "active"
   ));
+  const activeRecordingStudioArea = levelConfig.areas?.find((area) => (
+    area.id === "recording-studio" &&
+    area.kind === "recording-studio" &&
+    area.status === "active"
+  ));
+  const activeRecordingStudioOpening = openings?.find((opening) => (
+    opening.id === "control-room-recording-studio-opening" &&
+    opening.fromAreaId === "control-room" &&
+    opening.toAreaId === "recording-studio" &&
+    opening.status === "active"
+  ));
   const halfWidth = dimensions.width / 2;
   const halfDepth = dimensions.depth / 2;
   const wallCenterY = dimensions.height / 2;
   const gridSize = Math.max(dimensions.width, dimensions.depth);
-  const roomEastWallX = levelConfig.collisionBounds.room.min[0] + dimensions.width;
+  const roomWestWallX = activeControlRoomArea?.bounds.min[0] ?? -halfWidth;
+  const roomEastWallX = activeControlRoomArea?.bounds.max[0] ?? halfWidth;
   const connectorEndX = activeShootingRangeArea?.bounds.min[0] ?? levelConfig.collisionBounds.room.max[0];
   const phaseVisuals = getPhaseVisuals(countdownDisplay.phase, countdownDisplay.isUrgent);
   const shouldRenderControlRoomDisplays = levelConfig.id === "level-1" && Boolean(activeControlRoomArea);
@@ -1355,7 +1645,19 @@ export function Level1RoomShell({
 
       <Wall position={[0, wallCenterY, -halfDepth]} args={[dimensions.width, dimensions.height, WALL_THICKNESS]} color={phaseVisuals.wall} />
       <Wall position={[0, wallCenterY, halfDepth]} args={[dimensions.width, dimensions.height, WALL_THICKNESS]} color={phaseVisuals.wall} />
-      <Wall position={[-halfWidth, wallCenterY, 0]} args={[WALL_THICKNESS, dimensions.height, dimensions.depth]} color={phaseVisuals.wall} />
+      {activeRecordingStudioOpening ? (
+        <ControlRoomWestOpeningWall
+          opening={activeRecordingStudioOpening}
+          roomWestWallX={roomWestWallX}
+          wallCenterY={wallCenterY}
+          wallColor={phaseVisuals.wall}
+          roomHeight={dimensions.height}
+          roomMinZ={activeControlRoomArea?.bounds.min[2] ?? -halfDepth}
+          roomMaxZ={activeControlRoomArea?.bounds.max[2] ?? halfDepth}
+        />
+      ) : (
+        <Wall position={[-halfWidth, wallCenterY, 0]} args={[WALL_THICKNESS, dimensions.height, dimensions.depth]} color={phaseVisuals.wall} />
+      )}
       {activeControlRoomOpening ? (
         <ControlRoomOpeningStub
           opening={activeControlRoomOpening}
@@ -1429,6 +1731,36 @@ export function Level1RoomShell({
 
       {shouldRenderControlRoomDisplays && activeControlRoomArea ? (
         <ControlRoomKitchenIslandProps phaseVisuals={phaseVisuals} />
+      ) : null}
+
+      {shouldRenderControlRoomDisplays && activeControlRoomArea ? (
+        <ControlRoomAudioWorkbench phaseVisuals={phaseVisuals} />
+      ) : null}
+
+      {levelConfig.id === "level-1" && activeRecordingStudioArea && activeRecordingStudioOpening ? (
+        <Level1RecordingStudioRoom
+          area={activeRecordingStudioArea}
+          opening={activeRecordingStudioOpening}
+          phaseVisuals={phaseVisuals}
+          users={users}
+          localUserId={localUserId}
+          ownerId={ownerId}
+          freeRoamPresence={[...freshPresenceByUserId.values()]}
+          localDawState={localDawState}
+          localDawActions={localDawActions}
+          localDawAudioState={localDawAudioState}
+          localDawAudioActions={localDawAudioActions}
+          sharedDawTransport={sharedDawTransport}
+          sharedDawClips={sharedDawClips}
+          canControlSharedDawTransport={canControlSharedDawTransport}
+          canAdminSharedDawClips={canAdminSharedDawClips}
+          onSetSharedDawTempo={onSetSharedDawTempo}
+          onPlaySharedDawTransport={onPlaySharedDawTransport}
+          onStopSharedDawTransport={onStopSharedDawTransport}
+          localUserIdForSharedDawClips={localUserIdForSharedDawClips}
+          onPublishSharedDawClip={onPublishSharedDawClip}
+          onClearSharedDawClip={onClearSharedDawClip}
+        />
       ) : null}
 
       {shouldRenderControlRoomDisplays && activeControlRoomArea && levelConfig.jukebox ? (

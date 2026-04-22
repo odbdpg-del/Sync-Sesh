@@ -254,6 +254,41 @@ Wishlist:
 - [x] Avoid continuous 3D scrolling in the first version; use page controls instead.
 - [x] Do not embed the SoundCloud iframe directly into Three.js.
 
+### 3D Audio Engine / Patchbay Wishlist
+
+The archived `docs/3d/DJ/Archive/audiopatchbay.md` idea should come into Sync Sesh as a playful in-world audio generator, not as a raw SoundCloud processing graph.
+
+Vision 4 is now the source of truth for the larger DAW/studio version of this idea. Keep the V3-47 and V3-48 entries here as historical setup for the first visual workbench, then plan future Ableton-style audio work in `docs/3d/3dvision4.md`.
+
+The product read is a tiny Ableton-like generator desk inside the main Control Room: part instrument, part patchbay, part toy lab. It should feel like users found a music workstation in the hidden world. The first pass should be local-only, generated, and safe. SoundCloud remains the normal React widget/jukebox source, while the audio engine starts with sounds the app owns.
+
+Wishlist:
+
+- [ ] Add an in-world audio workbench or patchbay station to the Control Room.
+- [ ] Keep it visually distinct from the existing SoundCloud jukebox.
+- [ ] Make the first audio engine local-only and generated; do not route SoundCloud streams through Web Audio effects.
+- [ ] Add a tiny transport surface with play/stop, tempo/readout, and loop status.
+- [ ] Add a simple generated source such as an FM Voice or tone voice.
+- [ ] Add a simple step sequencer surface with a small number of steps.
+- [ ] Add in-world controls that can change the generated pattern or sound locally.
+- [ ] Show patchbay-style node/wire language in 3D without building a full 2D node editor.
+- [ ] Keep the first version small enough to run inside the hidden 3D shell.
+- [ ] Avoid synced audio state until local behavior feels good and a reducer-owned event is explicitly designed.
+- [ ] Keep the normal 2D app free of visible audio-engine affordances.
+
+Early product shape:
+
+- Workbench/cabinet in the main Control Room, near but separate from the existing jukebox.
+- Canvas-texture screens for transport, pattern, and voice status.
+- Physical in-world pads or buttons activated with the existing `E` clickable interaction path.
+- Web Audio generated sound only after an explicit implementation phase.
+- No imported files, no plugin hosting, no external stream proxying, no SoundCloud effects graph.
+
+Preferred first sound direction:
+
+- `FM Voice` is the flagship generated-source candidate because it is app-owned, procedural, compact, and matches the archived patchbay doc's generator identity.
+- The first FM pass can be much smaller than a real synth: carrier frequency, mod ratio, modulation index, envelope preset, and gain are enough.
+
 ### Sim Bot Roaming Wishlist
 
 Sim/test users should help the 3D world feel alive during solo development and demos. Idle sim bots can roam locally through the 3D space, while real users remain governed by actual synced presence.
@@ -397,6 +432,8 @@ Add new sync only after a phase explicitly designs the reducer event.
 - No production security boundary for unlocks.
 - No shared monitor-control state until explicitly designed.
 - No direct SoundCloud iframe embedding inside Three.js.
+- No SoundCloud raw-stream proxying or SoundCloud effect graph.
+- No external audio processing unless the source is imported, self-hosted, generated, or otherwise explicitly controllable.
 - No sync traffic for sim bot roaming.
 - No AI/pathfinding dependency for sim bot roaming.
 
@@ -438,7 +475,37 @@ Recommended order if the goal is "make the shooting range feel more like a room"
 - Phase V3-44: Static Gun Rack Render
 - Phase V3-45: Gun Rack Interaction Prep
 
+Recommended order if the goal is "build a light 3D audio engine":
+
+- Phase V3-47: 3D Audio Engine Vision Port
+- Phase V3-48: Audio Workbench Shell
+- Phase V3-49: Local Transport And Pattern State
+- Phase V3-50: First Generated Voice
+- Phase V3-51: Step Sequencer Controls
+- Phase V3-52: Patchbay Visual Language
+
 Every implementation phase should still follow the worker loop: prepare the phase for implementation, write/revise the spec in this document if needed, then implement only after approval and run `npm.cmd run build`.
+
+### Manager / Worker Dispatch
+
+Use the simple agent flow in `docs/Agents/agent.md` for future 3D work.
+
+The main Codex session is the manager:
+
+- Read the user's vision idea.
+- Read this vision doc and the relevant source files.
+- Extract wishlist items.
+- Cut the idea into phases small enough for one Codex implementation pass.
+- Block out phase structure in this document when the direction is clear.
+- Review and approve the worker's proposed implementation spec.
+- Verify the implementation, review scope, and close the docs.
+
+The worker has two jobs:
+
+- Prepare a phase for implementation by researching code seams and drafting the implementation spec in chat.
+- Implement an approved phase, run `npm.cmd run build`, and fix phase-caused build failures.
+
+Do not start implementation until the phase has an approved implementation spec. After approval, write the spec into this document under the phase's `Implementation Spec` section, then implement exactly that phase. Keep this loop small and repeatable.
 
 ### [x] Phase V3-1: Level 1 Multi-Room Plan
 
@@ -6314,3 +6381,362 @@ Manual checks:
 - No shared reticle changes.
 - No rewrite of `src/3d/interactions.tsx`.
 - No interaction folder creation.
+
+### [x] Phase V3-47: 3D Audio Engine Vision Port
+
+#### Summary
+
+Port the useful `Audio Patchbay` idea from `docs/3d/DJ/Archive/audiopatchbay.md` into the current Sync Sesh 3D vision without implementing runtime audio yet.
+
+#### Implementation Spec
+
+- Documentation-only.
+- Define the Sync Sesh version as a local generated-audio workbench in the Control Room.
+- Keep SoundCloud as widget/jukebox playback, not an effect-capable patchbay source.
+- Identify the first safe generated source direction, likely `FM Voice`.
+- Define the first small phase sequence from workbench shell through generated voice and step sequencing.
+- Do not edit source code.
+- Do not add Web Audio runtime code.
+- Do not add new package dependencies.
+- Do not change SoundCloud behavior.
+
+#### Checklist Items Achieved
+
+- [x] Carry the archived patchbay idea into the Sync Sesh 3D roadmap.
+- [x] Keep the SoundCloud policy/ownership guardrail explicit.
+- [x] Pick a small first implementation direction.
+
+#### Completed Implementation
+
+- Added a dedicated 3D Audio Engine / Patchbay wishlist to the Vision 3 doc.
+- Adapted the archived `Audio Patchbay` idea into a Sync Sesh-specific generated-audio workbench direction.
+- Kept SoundCloud scoped to widget/jukebox playback and explicitly ruled out raw-stream proxying or a SoundCloud effects graph.
+- Selected app-owned generated audio, with `FM Voice` as the preferred first flagship source direction.
+- Added the V3-48 through V3-52 follow-up phase sequence.
+- No source code was changed for this docs-only phase.
+
+#### Acceptance Criteria
+
+- The Vision 3 doc has a dedicated 3D audio engine / patchbay wishlist.
+- The doc states that SoundCloud should not be routed into a raw Web Audio effects graph.
+- The doc identifies generated/app-owned audio as the first implementation path.
+- The doc lists small follow-up phases that can be prepared by the worker loop.
+
+#### Build And Manual Checks
+
+- No build required for documentation-only changes.
+
+#### Risks
+
+- The feature can easily balloon into a full DAW if early phases are not kept tiny.
+- The existing jukebox may confuse the boundary between SoundCloud playback and generated audio unless the workbench is visually and architecturally distinct.
+
+#### Wishlist Mapping
+
+- Add a light Ableton-like audio engine generator in the main 3D area.
+- Preserve the archived Audio Patchbay idea while adapting it to Sync Sesh.
+
+#### Non-Goals
+
+- No code changes.
+- No runtime audio generation.
+- No full node editor.
+- No SoundCloud stream processing.
+- No sync/session state.
+
+### [x] Phase V3-48: Audio Workbench Shell
+
+#### Summary
+
+Add a non-audible in-world audio workbench shell to the Control Room so the feature has a clear physical home before adding Web Audio behavior.
+
+#### Implementation Spec
+
+- Add the shell in `src/3d/Level1RoomShell.tsx` as a Control Room-only decorative component.
+- Add a `ControlRoomAudioWorkbench` component near the existing Control Room prop helpers.
+- Render it only behind the same `shouldRenderControlRoomDisplays && activeControlRoomArea` gate used for the Control Room-only props.
+- Keep this phase file-local to `Level1RoomShell.tsx`; do not add config/type expansion yet.
+- Place the workbench near but clearly separate from the SoundCloud jukebox. Candidate placement: a compact station near the west/left wall around `[-8.85, 0, -4.6]`, facing inward with rotation `[0, Math.PI / 2, 0]`, tuned to avoid overlap with existing workstations and walking lanes.
+- Build the shell from procedural geometry only:
+  - low cabinet or desk body.
+  - angled console surface.
+  - two or three small screen planes.
+  - small module blocks labeled visually as `CLOCK`, `FM`, `SEQ`, `GAIN`, and `OUT`.
+  - colored patch points or ports.
+  - short static wire/rail segments between modules.
+  - inactive pads/buttons.
+- Add at least one readable canvas-texture title/readout screen with static text:
+  - `AUDIO WORKBENCH`
+  - `PATCHBAY OFFLINE`
+  - `FM VOICE: STANDBY`
+  - `NO AUDIO ENGINE`
+- Add a small visual sequencer strip, likely eight pads with alternating low-emissive colors, with no state.
+- Add a patchbay panel that implies node-and-wire signal flow without creating a full node editor.
+- Use `phaseVisuals` for accent colors so the workbench belongs to the room lighting.
+- Render the workbench in the main `Level1RoomShell` return near the other Control Room props, after `ControlRoomKitchenIslandProps` and before or after `ControlRoomJukebox`.
+- Do not register interactables in this phase.
+- Do not add collision blockers by default. If testing later shows movement confusion, handle collision as a separate implementation decision.
+- Do not add Web Audio, `AudioContext`, oscillators, samples, effects, scheduling, or generated sound.
+- Do not change SoundCloud hooks, widget state, jukebox behavior, session/reducer/sync files, range scoring, movement, normal 2D UI, package files, or `src/3d/interactions.tsx`.
+
+#### Checklist Items Achieved
+
+- [x] Add a visible in-world workbench/station for the audio engine.
+- [x] Keep it distinct from the existing SoundCloud jukebox.
+- [x] Show patchbay-style node/wire language in 3D without building a full 2D node editor.
+
+#### Completed Implementation
+
+- Added a file-local `ControlRoomAudioWorkbench` component in `src/3d/Level1RoomShell.tsx`.
+- Rendered the workbench only behind the existing Control Room-only `shouldRenderControlRoomDisplays && activeControlRoomArea` gate.
+- Placed the compact station near the west/left Control Room wall around `[-8.85, 0, -4.6]`, separate from the existing SoundCloud jukebox.
+- Built the shell from procedural geometry only:
+  - low cabinet/desk body.
+  - angled console surface.
+  - central readout screen plus side display panels.
+  - labeled `CLOCK`, `FM`, `SEQ`, `GAIN`, and `OUT` module blocks.
+  - colored patch points and static wire/rail segments.
+  - inactive eight-pad sequencer strip.
+- Added a readable in-world canvas-texture readout with:
+  - `AUDIO WORKBENCH`
+  - `PATCHBAY OFFLINE`
+  - `FM VOICE: STANDBY`
+  - `NO AUDIO ENGINE`
+- Kept the phase decorative and non-audible:
+  - no interactable registrations.
+  - no collision blockers.
+  - no Web Audio, `AudioContext`, oscillators, samples, effects, scheduling, or generated sound.
+  - no SoundCloud, session/reducer/sync, range scoring, movement, normal 2D UI, package, or `src/3d/interactions.tsx` changes.
+- `npm.cmd run build` passed with the existing Vite large chunk warning.
+
+#### Acceptance Criteria
+
+- A visible audio workbench appears in the Level 1 Control Room.
+- It is visually distinct from the SoundCloud jukebox.
+- It reads as a generated-audio patchbay/workbench, not another music player.
+- It includes static transport, patchbay, sequencer, and voice visual language.
+- It includes at least one readable in-world screen/canvas label.
+- It produces no audio.
+- It does not create or use `AudioContext`.
+- It does not route, inspect, or process SoundCloud audio.
+- It does not add reducer/session/sync state.
+- It does not alter movement, shooting range, jukebox controls, monitor return, or normal 2D UI.
+- It does not register clickable or shootable interactions.
+- `npm.cmd run build` passes.
+
+#### Build And Manual Checks
+
+- `npm.cmd run build`
+
+Manual checks:
+
+- Enter hidden world with `syncsesh`.
+- Complete or skip reveal.
+- Walk around the Control Room in first-person view.
+- Verify the workbench is visible and readable from normal walking distance.
+- Verify it does not overlap the jukebox, station rows, lounge, kitchen island, range opening, balcony, or stairs.
+- Press Tab and confirm the shell reads as a small station without hiding important room paths.
+- Aim at the workbench and press `E`; verify nothing activates in V3-48.
+- Confirm SoundCloud jukebox behavior is unchanged.
+- Walk into the Shooting Range and confirm range behavior still works.
+
+#### Risks
+
+- `Level1RoomShell.tsx` is already large, so this adds more inline render code. Keep the helper compact and avoid unrelated refactors.
+- Static pads/buttons can imply interactivity before V3-49. Use copy like `OFFLINE`, `STANDBY`, or unlit pad styling to set expectations.
+- If placed too close to the jukebox, users may confuse generated audio with SoundCloud playback.
+- If placed too close to existing west-wall workstations, it may visually crowd the room. Tune placement in first-person view.
+- Adding collision too early can affect movement; keep the first shell decorative unless a later phase explicitly adds collision.
+
+#### Wishlist Mapping
+
+- Add an in-world audio workbench or patchbay station to the Control Room.
+- Show patchbay-style node/wire language in 3D without building a full 2D node editor.
+- Keep it visually distinct from the existing SoundCloud jukebox.
+- Keep the first version small enough to run inside the hidden 3D shell.
+- Keep the normal 2D app free of visible audio-engine affordances.
+- Preserve the archived `Audio Patchbay` idea as app-owned/generated audio, with `FM Voice` as the future flagship source.
+
+#### Non-Goals
+
+- No Web Audio runtime.
+- No generated sound yet.
+- No SoundCloud behavior changes.
+- No sync/session state.
+- No transport state.
+- No sequencer state.
+- No clickable controls yet.
+- No imported audio files.
+- No plugin hosting.
+- No external stream proxying.
+- No full node editor.
+- No new packages.
+- No unrelated Control Room, movement, range, jukebox, or normal 2D UI refactors.
+
+### [ ] Phase V3-49: Local Transport And Pattern State
+
+#### Summary
+
+Add local-only UI/state for a tiny transport and pattern display on the audio workbench, still without audible output.
+
+#### Implementation Spec
+
+- Pending worker preparation.
+
+#### Checklist Items Achieved
+
+- [ ] Add local play/stop or armed transport state.
+- [ ] Add tempo/readout and loop/pattern display.
+
+#### Completed Implementation
+
+- Pending.
+
+#### Acceptance Criteria
+
+- Pending worker preparation.
+
+#### Build And Manual Checks
+
+- `npm.cmd run build`
+
+#### Risks
+
+- Pending worker preparation.
+
+#### Wishlist Mapping
+
+- Add a tiny transport surface with play/stop, tempo/readout, and loop status.
+- Add a simple step sequencer surface with a small number of steps.
+
+#### Non-Goals
+
+- No audible synthesis.
+- No SoundCloud routing.
+- No synced transport.
+
+### [ ] Phase V3-50: First Generated Voice
+
+#### Summary
+
+Add the first local generated voice using Web Audio, preferably a small FM Voice or simpler tone voice if implementation research shows FM needs another prep phase.
+
+#### Implementation Spec
+
+- Pending worker preparation.
+
+#### Checklist Items Achieved
+
+- [ ] Generate app-owned audio locally.
+- [ ] Keep the voice small and browser-safe.
+
+#### Completed Implementation
+
+- Pending.
+
+#### Acceptance Criteria
+
+- Pending worker preparation.
+
+#### Build And Manual Checks
+
+- `npm.cmd run build`
+
+#### Risks
+
+- Pending worker preparation.
+
+#### Wishlist Mapping
+
+- Add a simple generated source such as an FM Voice or tone voice.
+- Make the first audio engine local-only and generated.
+
+#### Non-Goals
+
+- No SoundCloud processing.
+- No imported audio files.
+- No plugin hosting.
+- No synced audio state.
+
+### [ ] Phase V3-51: Step Sequencer Controls
+
+#### Summary
+
+Make the audio workbench playable by adding local in-world step controls that alter the generated pattern.
+
+#### Implementation Spec
+
+- Pending worker preparation.
+
+#### Checklist Items Achieved
+
+- [ ] Add local in-world controls for a short step pattern.
+- [ ] Let the user change pattern data from the 3D workbench.
+
+#### Completed Implementation
+
+- Pending.
+
+#### Acceptance Criteria
+
+- Pending worker preparation.
+
+#### Build And Manual Checks
+
+- `npm.cmd run build`
+
+#### Risks
+
+- Pending worker preparation.
+
+#### Wishlist Mapping
+
+- Add a simple step sequencer surface with a small number of steps.
+- Add in-world controls that can change the generated pattern or sound locally.
+
+#### Non-Goals
+
+- No synced pattern state.
+- No full piano roll.
+- No full DAW timeline.
+
+### [ ] Phase V3-52: Patchbay Visual Language
+
+#### Summary
+
+Add small 3D node-and-wire visual language to the audio workbench so it reads as a patchbay without becoming a full node editor.
+
+#### Implementation Spec
+
+- Pending worker preparation.
+
+#### Checklist Items Achieved
+
+- [ ] Show source, sequencer, voice, gain, and output as readable in-world modules.
+- [ ] Use visual wires or rails to imply signal flow.
+
+#### Completed Implementation
+
+- Pending.
+
+#### Acceptance Criteria
+
+- Pending worker preparation.
+
+#### Build And Manual Checks
+
+- `npm.cmd run build`
+
+#### Risks
+
+- Pending worker preparation.
+
+#### Wishlist Mapping
+
+- Show patchbay-style node/wire language in 3D without building a full 2D node editor.
+
+#### Non-Goals
+
+- No draggable node canvas.
+- No arbitrary graph serialization.
+- No typed wire editor yet.

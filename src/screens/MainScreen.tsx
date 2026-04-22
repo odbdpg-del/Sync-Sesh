@@ -46,6 +46,11 @@ export function MainScreen() {
     submitRangeScore,
     updateFreeRoamPresence,
     clearFreeRoamPresence,
+    setDawTempo,
+    playDawTransport,
+    stopDawTransport,
+    publishDawClip,
+    clearDawClip,
   } = useDabSyncSession();
   const countdownDisplay = useCountdownDisplay(state);
   const { playCue } = useSoundEffects(state, lobbyState, countdownDisplay);
@@ -151,6 +156,16 @@ export function MainScreen() {
           onClearFreeRoamPresence={clearFreeRoamPresence}
           jukeboxDisplay={soundCloudPlayer.jukeboxDisplay}
           jukeboxActions={soundCloudPlayer.jukeboxActions}
+          sharedDawTransport={state.dawTransport}
+          sharedDawClips={state.dawClips}
+          syncStatus={state.syncStatus}
+          canControlSharedDawTransport={lobbyState.isLocalHost}
+          canAdminSharedDawClips={lobbyState.isLocalHost}
+          onSetSharedDawTempo={setDawTempo}
+          onPlaySharedDawTransport={playDawTransport}
+          onStopSharedDawTransport={stopDawTransport}
+          onPublishSharedDawClip={publishDawClip}
+          onClearSharedDawClip={clearDawClip}
           onExit={() => setIsThreeDModeOpen(false)}
         />
       ) : null}

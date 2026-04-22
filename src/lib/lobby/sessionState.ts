@@ -1,3 +1,9 @@
+import {
+  getAllowedSharedDawLoopLengthBars,
+  getSharedDawClipSlotId,
+  isSharedDawTrackId,
+} from "../daw/sharedDaw";
+import { SHARED_DAW_LOOP_LENGTH_BARS } from "../../types/session";
 import type {
   CountdownTimeline,
   DabSyncState,
@@ -12,6 +18,11 @@ import type {
   SessionPhase,
   SessionSnapshot,
   SessionUser,
+  SharedDawClip,
+  SharedDawClipKind,
+  SharedDawClipPublishPayload,
+  SharedDawControlEvent,
+  SharedDawMidiNote,
 } from "../../types/session";
 
 export const DEFAULT_TIMER_SECONDS = 50;
@@ -20,6 +31,15 @@ export const TIMER_PRESETS = [30, 45, 60];
 export const PRECOUNT_PRESETS = [3, 5];
 const MAX_RANGE_SCORE_RESULTS = 32;
 const FREE_ROAM_PRESENCE_TTL_MS = 10_000;
+const DEFAULT_DAW_BPM = 120;
+const MIN_DAW_BPM = 60;
+const MAX_DAW_BPM = 180;
+const INITIAL_SHARED_DAW_TRANSPORT_AT = "2026-04-19T19:00:00.000Z";
+const MAX_SHARED_DAW_CLIPS = 20;
+const MAX_SHARED_CLIP_NOTES = 128;
+const MAX_SHARED_CLIP_CONTROL_EVENTS = 64;
+const MAX_SHARED_CLIP_JSON_CHARS = 16000;
+const SHARED_DAW_SCENE_COUNT = 4;
 
 function createEmptyCountdown(): CountdownTimeline {
   return {};
@@ -198,6 +218,175 @@ function clampPrecountDuration(value: number) {
   }
 
   return PRECOUNT_PRESETS.includes(Math.round(value)) ? Math.round(value) : DEFAULT_PRECOUNT_SECONDS;
+}
+
+function clampDawBpm(value: number) {
+  return clampInteger(value, MIN_DAW_BPM, MAX_DAW_BPM);
+}
+
+function sanitizeSharedLabel(label: string, maxLength: number) {
+  return label.replace(/[\u0000-\u001f\u007f]/g, "").trim().slice(0, maxLength);
+}
+
+function sanitizeSharedDawMidiNote(note: SharedDawMidiNote, stepsPerClip: number): SharedDawMidiNote | null {
+  if (
+    !Number.isFinite(note.pitch) ||
+    !Number.isFinite(note.startStep) ||
+    !Number.isFinite(note.durationSteps) ||
+    !Number.isFinite(note.velocity)
+  ) {
+    return null;
+  }
+
+  const startStep = Math.round(note.startStep);
+
+  if (startStep < 0 || startStep >= stepsPerClip) {
+    return null;
+  }
+
+  const durationSteps = Math.min(stepsPerClip - startStep, Math.max(1, Math.round(note.durationSteps)));
+  const label = sanitizeSharedLabel(note.label, 8);
+
+  if (!label) {
+    return null;
+  }
+
+  return {
+    pitch: clampInteger(note.pitch, 0, 127),
+    label,
+    startStep,
+    durationSteps,
+    velocity: clampNumber(note.velocity, 0, 1),
+  };
+}
+
+function sanitizeSharedDawControlEvent(event: SharedDawControlEvent, stepsPerClip: number): SharedDawControlEvent | null {
+  if (!["clip-length", "track-volume", "track-mute", "device-enabled"].includes(event.target)) {
+    return null;
+  }
+
+  if (!Number.isFinite(event.step)) {
+    return null;
+  }
+
+  const step = Math.round(event.step);
+
+  if (step < 0 || step >= stepsPerClip) {
+    return null;
+  }
+
+  if (event.target === "track-mute" || event.target === "device-enabled") {
+    if (typeof event.value !== "boolean") {
+      return null;
+    }
+
+    return {
+      target: event.target,
+      step,
+      value: event.value,
+    };
+  }
+
+  if (typeof event.value !== "number" || !Number.isFinite(event.value)) {
+    return null;
+  }
+
+  return {
+    target: event.target,
+    step,
+    value: event.target === "clip-length"
+      ? getAllowedSharedDawLoopLengthBars(event.value) ?? SHARED_DAW_LOOP_LENGTH_BARS[2]
+      : clampNumber(event.value, 0, 1),
+  };
+}
+
+function createSharedDawClipChecksum(payload: SharedDawClipPublishPayload) {
+  const canonicalJson = JSON.stringify(payload);
+  let hash = 0;
+
+  for (let index = 0; index < canonicalJson.length; index += 1) {
+    hash = (hash * 31 + canonicalJson.charCodeAt(index)) >>> 0;
+  }
+
+  return hash.toString(16).padStart(8, "0");
+}
+
+function sanitizeSharedDawClipPublishPayload(payload: SharedDawClipPublishPayload): SharedDawClipPublishPayload | null {
+  const serializedPayload = JSON.stringify(payload);
+
+  if (serializedPayload.length > MAX_SHARED_CLIP_JSON_CHARS) {
+    return null;
+  }
+
+  if (!isSharedDawTrackId(payload.trackId)) {
+    return null;
+  }
+
+  const sceneIndex = Math.round(payload.sceneIndex);
+
+  if (sceneIndex < 0 || sceneIndex >= SHARED_DAW_SCENE_COUNT) {
+    return null;
+  }
+
+  if (!["midi", "control", "mixed"].includes(payload.kind)) {
+    return null;
+  }
+
+  const lengthBars = getAllowedSharedDawLoopLengthBars(payload.lengthBars);
+
+  if (!lengthBars) {
+    return null;
+  }
+
+  if (!Array.isArray(payload.midiNotes) || !Array.isArray(payload.controlEvents)) {
+    return null;
+  }
+
+  const stepsPerClip = lengthBars * 16;
+  const midiNotes = payload.midiNotes
+    .slice(0, MAX_SHARED_CLIP_NOTES)
+    .map((note) => sanitizeSharedDawMidiNote(note, stepsPerClip))
+    .filter((note): note is SharedDawMidiNote => Boolean(note));
+  const controlEvents = payload.controlEvents
+    .slice(0, MAX_SHARED_CLIP_CONTROL_EVENTS)
+    .map((event) => sanitizeSharedDawControlEvent(event, stepsPerClip))
+    .filter((event): event is SharedDawControlEvent => Boolean(event));
+
+  if (midiNotes.length === 0 && controlEvents.length === 0) {
+    return null;
+  }
+
+  const label = sanitizeSharedLabel(payload.label, 24);
+
+  if (!label) {
+    return null;
+  }
+
+  let kind: SharedDawClipKind = payload.kind;
+
+  if (midiNotes.length > 0 && controlEvents.length > 0) {
+    kind = "mixed";
+  } else if (midiNotes.length > 0) {
+    kind = "midi";
+  } else {
+    kind = "control";
+  }
+
+  return {
+    trackId: payload.trackId,
+    sceneIndex,
+    label,
+    kind,
+    lengthBars,
+    midiNotes,
+    controlEvents,
+  };
+}
+
+function isEligibleDawClipActor(snapshot: SessionSnapshot, actor: LocalProfile) {
+  const actorUser = snapshot.users.find((user) => user.id === actor.id);
+
+  return Boolean(actorUser && actorUser.presence !== "spectating");
 }
 
 function parseTimestamp(value?: string) {
@@ -385,6 +574,8 @@ export function createSessionSnapshot(overrides?: Partial<SessionSnapshot>): Ses
     countdown: createEmptyCountdown(),
     rangeScoreboard: [],
     freeRoamPresence: [],
+    dawTransport: createInitialSharedDawTransport(),
+    dawClips: createInitialSharedDawClipsState(),
   };
 
   return {
@@ -402,7 +593,46 @@ export function createSessionSnapshot(overrides?: Partial<SessionSnapshot>): Ses
       ...base.countdown,
       ...overrides?.countdown,
     },
+    dawTransport: {
+      ...base.dawTransport,
+      ...overrides?.dawTransport,
+    },
+    dawClips: {
+      ...base.dawClips,
+      ...overrides?.dawClips,
+      clips: overrides?.dawClips?.clips ?? base.dawClips.clips,
+    },
     users: overrides?.users ?? base.users,
+  };
+}
+
+export function createInitialSharedDawTransport(updatedAt = INITIAL_SHARED_DAW_TRANSPORT_AT): SessionSnapshot["dawTransport"] {
+  return {
+    state: "stopped",
+    bpm: DEFAULT_DAW_BPM,
+    timeSignature: "4 / 4",
+    anchorBar: 1,
+    anchorBeat: 1,
+    stoppedAt: updatedAt,
+    updatedAt,
+    updatedByUserId: "system",
+    revision: 0,
+  };
+}
+
+export function createInitialSharedDawClipsState(updatedAt = INITIAL_SHARED_DAW_TRANSPORT_AT): SessionSnapshot["dawClips"] {
+  return {
+    clips: [],
+    revision: 0,
+    updatedAt,
+  };
+}
+
+export function normalizeSessionSnapshot(snapshot: SessionSnapshot): SessionSnapshot {
+  return {
+    ...snapshot,
+    dawTransport: snapshot.dawTransport ?? createInitialSharedDawTransport(),
+    dawClips: snapshot.dawClips ?? createInitialSharedDawClipsState(),
   };
 }
 
@@ -411,14 +641,15 @@ export function attachLocalProfile(
   localProfile: LocalProfile,
   state?: Partial<DabSyncState>,
 ): DabSyncState {
+  const normalizedSnapshot = normalizeSessionSnapshot(snapshot);
   const normalizedTimerConfig = {
-    ...snapshot.timerConfig,
-    preCountSeconds: clampPrecountDuration(snapshot.timerConfig.preCountSeconds),
-    preCountPresets: snapshot.timerConfig.preCountPresets ?? PRECOUNT_PRESETS,
+    ...normalizedSnapshot.timerConfig,
+    preCountSeconds: clampPrecountDuration(normalizedSnapshot.timerConfig.preCountSeconds),
+    preCountPresets: normalizedSnapshot.timerConfig.preCountPresets ?? PRECOUNT_PRESETS,
   };
 
   return {
-    ...snapshot,
+    ...normalizedSnapshot,
     timerConfig: normalizedTimerConfig,
     syncStatus: state?.syncStatus ?? {
       mode: "mock",
@@ -495,6 +726,8 @@ export function deriveLobbyState(state: DabSyncState): DerivedLobbyState {
 }
 
 export function reduceSessionEvent(snapshot: SessionSnapshot, event: SessionEvent, actor: LocalProfile, nowMs = Date.now()): SessionSnapshot {
+  snapshot = normalizeSessionSnapshot(snapshot);
+
   switch (event.type) {
     case "join_session": {
       const existingUser = snapshot.users.find((user) => user.id === actor.id);
@@ -702,6 +935,7 @@ export function reduceSessionEvent(snapshot: SessionSnapshot, event: SessionEven
         countdown: createEmptyCountdown(),
         rangeScoreboard: [],
         freeRoamPresence: [],
+        dawClips: createInitialSharedDawClipsState(new Date(nowMs).toISOString()),
         session: {
           ...snapshot.session,
           phase: getBaseLobbyPhase(nextUsers),
@@ -867,12 +1101,160 @@ export function reduceSessionEvent(snapshot: SessionSnapshot, event: SessionEven
         freeRoamPresence: nextFreeRoamPresence,
       };
     }
+    case "daw_transport_set_tempo": {
+      if (!isActorHost(snapshot, actor)) {
+        return snapshot;
+      }
+
+      const updatedAt = new Date(nowMs).toISOString();
+
+      return {
+        ...snapshot,
+        dawTransport: {
+          ...snapshot.dawTransport,
+          bpm: clampDawBpm(event.bpm),
+          updatedAt,
+          updatedByUserId: actor.id,
+          revision: snapshot.dawTransport.revision + 1,
+        },
+      };
+    }
+    case "daw_transport_play": {
+      if (!isActorHost(snapshot, actor)) {
+        return snapshot;
+      }
+
+      const updatedAt = new Date(nowMs).toISOString();
+
+      return {
+        ...snapshot,
+        dawTransport: {
+          ...snapshot.dawTransport,
+          state: "playing",
+          anchorBar: 1,
+          anchorBeat: 1,
+          startedAt: updatedAt,
+          stoppedAt: undefined,
+          updatedAt,
+          updatedByUserId: actor.id,
+          revision: snapshot.dawTransport.revision + 1,
+        },
+      };
+    }
+    case "daw_transport_stop": {
+      if (!isActorHost(snapshot, actor)) {
+        return snapshot;
+      }
+
+      const updatedAt = new Date(nowMs).toISOString();
+
+      return {
+        ...snapshot,
+        dawTransport: {
+          ...snapshot.dawTransport,
+          state: "stopped",
+          anchorBar: 1,
+          anchorBeat: 1,
+          startedAt: undefined,
+          stoppedAt: updatedAt,
+          updatedAt,
+          updatedByUserId: actor.id,
+          revision: snapshot.dawTransport.revision + 1,
+        },
+      };
+    }
+    case "daw_clip_publish": {
+      if (!isEligibleDawClipActor(snapshot, actor)) {
+        return snapshot;
+      }
+
+      const sanitizedClip = sanitizeSharedDawClipPublishPayload(event.clip);
+
+      if (!sanitizedClip) {
+        return snapshot;
+      }
+
+      const slotId = getSharedDawClipSlotId(sanitizedClip.trackId, sanitizedClip.sceneIndex);
+      const existingClipIndex = snapshot.dawClips.clips.findIndex((clip) => clip.summary.id === slotId);
+      const existingClip = existingClipIndex >= 0 ? snapshot.dawClips.clips[existingClipIndex] : null;
+      const canEditExistingClip = !existingClip || existingClip.summary.ownerUserId === actor.id || isActorHost(snapshot, actor);
+
+      if (!canEditExistingClip || (!existingClip && snapshot.dawClips.clips.length >= MAX_SHARED_DAW_CLIPS)) {
+        return snapshot;
+      }
+
+      const updatedAt = new Date(nowMs).toISOString();
+      const nextRevision = (existingClip?.summary.revision ?? 0) + 1;
+      const nextClip: SharedDawClip = {
+        summary: {
+          id: slotId,
+          trackId: sanitizedClip.trackId,
+          sceneIndex: sanitizedClip.sceneIndex,
+          label: sanitizedClip.label,
+          kind: sanitizedClip.kind,
+          state: "recorded",
+          lengthBars: sanitizedClip.lengthBars,
+          noteCount: sanitizedClip.midiNotes.length,
+          controlEventCount: sanitizedClip.controlEvents.length,
+          ownerUserId: existingClip?.summary.ownerUserId ?? actor.id,
+          updatedByUserId: actor.id,
+          updatedAt,
+          revision: nextRevision,
+          checksum: createSharedDawClipChecksum(sanitizedClip),
+        },
+        midiNotes: sanitizedClip.midiNotes,
+        controlEvents: sanitizedClip.controlEvents,
+      };
+      const nextClips = existingClipIndex >= 0
+        ? snapshot.dawClips.clips.map((clip, index) => (index === existingClipIndex ? nextClip : clip))
+        : [...snapshot.dawClips.clips, nextClip];
+
+      return {
+        ...snapshot,
+        dawClips: {
+          clips: nextClips,
+          revision: snapshot.dawClips.revision + 1,
+          updatedAt,
+        },
+      };
+    }
+    case "daw_clip_clear": {
+      if (!isEligibleDawClipActor(snapshot, actor) || !isSharedDawTrackId(event.trackId)) {
+        return snapshot;
+      }
+
+      const sceneIndex = Math.round(event.sceneIndex);
+
+      if (sceneIndex < 0 || sceneIndex >= SHARED_DAW_SCENE_COUNT) {
+        return snapshot;
+      }
+
+      const slotId = getSharedDawClipSlotId(event.trackId, sceneIndex);
+      const existingClip = snapshot.dawClips.clips.find((clip) => clip.summary.id === slotId);
+
+      if (!existingClip || (existingClip.summary.ownerUserId !== actor.id && !isActorHost(snapshot, actor))) {
+        return snapshot;
+      }
+
+      const updatedAt = new Date(nowMs).toISOString();
+
+      return {
+        ...snapshot,
+        dawClips: {
+          clips: snapshot.dawClips.clips.filter((clip) => clip.summary.id !== slotId),
+          revision: snapshot.dawClips.revision + 1,
+          updatedAt,
+        },
+      };
+    }
     default:
       return snapshot;
   }
 }
 
 export function advanceSessionTime(snapshot: SessionSnapshot, nowMs = Date.now()): SessionSnapshot {
+  snapshot = normalizeSessionSnapshot(snapshot);
+
   const prunedFreeRoamPresence = pruneFreeRoamPresence(snapshot.freeRoamPresence, nowMs);
   const snapshotWithFreshPresence = prunedFreeRoamPresence.length === snapshot.freeRoamPresence.length
     ? snapshot

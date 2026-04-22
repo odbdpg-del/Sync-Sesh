@@ -6,6 +6,10 @@ import { ThreeDModeErrorBoundary } from "./ThreeDModeErrorBoundary";
 import { AimInteractionController, InteractionProvider, InteractionReticle } from "./interactions";
 import { DEFAULT_LEVEL_ID, getLevelConfig } from "./levels";
 import type { LevelConfig } from "./levels";
+import { useLocalDawAudioEngine } from "./useLocalDawAudioEngine";
+import type { LocalDawAudioEngineActions } from "./useLocalDawAudioEngine";
+import { useLocalDawState } from "./useLocalDawState";
+import type { DawTrackId, LocalDawActions, LocalDawMidiNoteEvent, LocalDawState } from "./useLocalDawState";
 import type {
   CountdownDisplayState,
   FreeRoamPresenceState,
@@ -13,6 +17,11 @@ import type {
   RangeScoreResult,
   RangeScoreSubmission,
   SessionUser,
+  SharedDawClipPublishPayload,
+  SharedDawClipsState,
+  SharedDawTransport,
+  SharedDawTrackId,
+  SyncStatus,
 } from "../types/session";
 import type { JukeboxActions, JukeboxDisplayState } from "../hooks/useSoundCloudPlayer";
 
@@ -20,6 +29,7 @@ type RevealState = "revealing" | "complete" | "returning";
 type ThreeDStatus = "checking" | "loading" | "ready" | "unsupported" | "error";
 type ControlState = "idle" | "focused" | "pointer-locked" | "pointer-lock-unavailable";
 type MovementKey = "KeyW" | "KeyA" | "KeyS" | "KeyD";
+type TopDownPanKey = "ArrowUp" | "ArrowDown" | "ArrowLeft" | "ArrowRight";
 type Vec3 = [number, number, number];
 type LookState = { yaw: number; pitch: number };
 type LocalPlayerPose = { position: Vec3; yaw: number };
@@ -46,6 +56,16 @@ interface ThreeDModeShellProps {
   onClearFreeRoamPresence: () => void;
   jukeboxDisplay?: JukeboxDisplayState;
   jukeboxActions?: JukeboxActions;
+  sharedDawTransport: SharedDawTransport;
+  sharedDawClips: SharedDawClipsState;
+  syncStatus: SyncStatus;
+  canControlSharedDawTransport: boolean;
+  canAdminSharedDawClips: boolean;
+  onSetSharedDawTempo: (bpm: number) => void;
+  onPlaySharedDawTransport: () => void;
+  onStopSharedDawTransport: () => void;
+  onPublishSharedDawClip: (clip: SharedDawClipPublishPayload) => void;
+  onClearSharedDawClip: (trackId: SharedDawTrackId, sceneIndex: number) => void;
   onExit: () => void;
 }
 
@@ -78,8 +98,16 @@ const SLIDE_CAMERA_DIP = 0.08;
 const SPRINT_CAMERA_FOV = 58;
 const SLIDE_CAMERA_FOV = 59;
 const CAMERA_FOV_LERP_SPEED = 8;
+const TOP_DOWN_PAN_SPEED_UNITS_PER_SECOND = 7;
+const TOP_DOWN_FREE_CAM_SPEED_UNITS_PER_SECOND = 9;
+const FREE_FLY_CAMERA_MIN_Y = 0.25;
+const FREE_FLY_CAMERA_MAX_Y = 28;
+const TOP_DOWN_PAN_LIMIT_UNITS = 18;
+const INSPECT_ZOOM_MIN_FOV = 28;
+const INSPECT_ZOOM_MAX_FOV = 76;
+const INSPECT_ZOOM_STEP_FOV = 4;
 const INITIAL_LOOK_STATE: LookState = { yaw: 0, pitch: -0.35 };
-const MIN_LOOK_PITCH = -0.9;
+const MIN_LOOK_PITCH = -1.35;
 const MAX_LOOK_PITCH = 0.55;
 const MOUSE_LOOK_SENSITIVITY = 0.0035;
 const POINTER_LOCK_LOOK_SENSITIVITY = 0.0025;
@@ -141,6 +169,32 @@ function interpolateVec3(start: readonly [number, number, number], end: readonly
     lerp(start[1], end[1], progress),
     lerp(start[2], end[2], progress),
   ] as const;
+}
+
+function getSharedDawTransportPosition(sharedDawTransport: SharedDawTransport, syncStatus: SyncStatus) {
+  const anchorBar = Math.max(1, Math.round(sharedDawTransport.anchorBar));
+  const anchorBeat = Math.min(4, Math.max(1, Math.round(sharedDawTransport.anchorBeat)));
+
+  if (sharedDawTransport.state !== "playing" || !sharedDawTransport.startedAt) {
+    return { bar: anchorBar, beat: anchorBeat };
+  }
+
+  const startedAtMs = Date.parse(sharedDawTransport.startedAt);
+
+  if (!Number.isFinite(startedAtMs)) {
+    return { bar: anchorBar, beat: anchorBeat };
+  }
+
+  const serverAlignedNowMs = Date.now() + (syncStatus.serverTimeOffsetMs ?? 0);
+  const beatMs = 60000 / Math.max(60, Math.min(180, sharedDawTransport.bpm));
+  const elapsedBeats = Math.max(0, Math.floor((serverAlignedNowMs - startedAtMs) / beatMs));
+  const anchorTotalBeats = (anchorBar - 1) * 4 + (anchorBeat - 1);
+  const totalBeats = anchorTotalBeats + elapsedBeats;
+
+  return {
+    bar: Math.floor(totalBeats / 4) + 1,
+    beat: (totalBeats % 4) + 1,
+  };
 }
 
 function getLookStateFromPose(position: readonly [number, number, number], target: readonly [number, number, number]): LookState {
@@ -365,6 +419,20 @@ function isMovementKey(code: string): code is MovementKey {
   return code === "KeyW" || code === "KeyA" || code === "KeyS" || code === "KeyD";
 }
 
+function isBackquoteToggle(event: KeyboardEvent) {
+  return event.code === "Backquote" || event.key === "`" || event.key === "~";
+}
+
+function isFreeCamVerticalKey(code: string) {
+  return (
+    code === "Space" ||
+    code === "KeyE" ||
+    code === "KeyQ" ||
+    code === "ControlLeft" ||
+    code === "ControlRight"
+  );
+}
+
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
 }
@@ -510,6 +578,10 @@ function getPerspectiveCamera(camera: object): PerspectiveCameraLike | null {
   return null;
 }
 
+function isTopDownPanKey(code: string): code is TopDownPanKey {
+  return code === "ArrowUp" || code === "ArrowDown" || code === "ArrowLeft" || code === "ArrowRight";
+}
+
 function updateCameraFov(camera: object, targetFov: number, delta: number) {
   const perspectiveCamera = getPerspectiveCamera(camera);
 
@@ -555,6 +627,7 @@ function FirstPersonMovementController({
   const movementVelocityRef = useRef({ x: 0, z: 0 });
   const slideRequestRef = useRef(false);
   const slideStateRef = useRef<SlideState | null>(null);
+  const activeShiftKeysRef = useRef(new Set<string>());
   const lastSprintMomentumAtMsRef = useRef<number | null>(null);
   const lastMovementDirectionRef = useRef<HorizontalVector | null>(null);
   const slideCooldownUntilMsRef = useRef(0);
@@ -562,6 +635,7 @@ function FirstPersonMovementController({
   const controlStateRef = useRef<ControlState>(controlState);
   const unpolishedCameraPositionRef = useRef<Vec3 | null>(null);
   const isDragLookingRef = useRef(false);
+  const inspectZoomFovRef = useRef<number | null>(null);
   const clearSlideState = () => {
     slideRequestRef.current = false;
     slideStateRef.current = null;
@@ -575,10 +649,12 @@ function FirstPersonMovementController({
 
     if (!enabled) {
       activeKeysRef.current.clear();
+      activeShiftKeysRef.current.clear();
       isSprintActiveRef.current = false;
       movementVelocityRef.current = { x: 0, z: 0 };
       clearSlideState();
       isDragLookingRef.current = false;
+      inspectZoomFovRef.current = null;
 
       if (document.pointerLockElement === gl.domElement) {
         document.exitPointerLock();
@@ -591,10 +667,12 @@ function FirstPersonMovementController({
 
     if (controlState === "idle") {
       activeKeysRef.current.clear();
+      activeShiftKeysRef.current.clear();
       isSprintActiveRef.current = false;
       movementVelocityRef.current = { x: 0, z: 0 };
       clearSlideState();
       isDragLookingRef.current = false;
+      inspectZoomFovRef.current = null;
     }
   }, [controlState]);
 
@@ -602,10 +680,12 @@ function FirstPersonMovementController({
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.code === "Escape" && document.pointerLockElement === gl.domElement) {
         activeKeysRef.current.clear();
+        activeShiftKeysRef.current.clear();
         isSprintActiveRef.current = false;
         movementVelocityRef.current = { x: 0, z: 0 };
         clearSlideState();
         isDragLookingRef.current = false;
+        inspectZoomFovRef.current = null;
         document.exitPointerLock();
         return;
       }
@@ -616,6 +696,7 @@ function FirstPersonMovementController({
         }
 
         event.preventDefault();
+        activeShiftKeysRef.current.add(event.code);
         isSprintActiveRef.current = true;
         return;
       }
@@ -657,7 +738,12 @@ function FirstPersonMovementController({
 
     const handleKeyUp = (event: KeyboardEvent) => {
       if (event.code === "ShiftLeft" || event.code === "ShiftRight") {
-        isSprintActiveRef.current = false;
+        activeShiftKeysRef.current.delete(event.code);
+        isSprintActiveRef.current = activeShiftKeysRef.current.size > 0;
+
+        if (activeShiftKeysRef.current.size === 0) {
+          inspectZoomFovRef.current = null;
+        }
 
         if (isEnabledRef.current && controlStateRef.current !== "idle" && !isInteractiveTarget(event.target)) {
           event.preventDefault();
@@ -684,7 +770,9 @@ function FirstPersonMovementController({
 
     const handleBlur = () => {
       activeKeysRef.current.clear();
+      activeShiftKeysRef.current.clear();
       isSprintActiveRef.current = false;
+      inspectZoomFovRef.current = null;
       movementVelocityRef.current = { x: 0, z: 0 };
       clearSlideState();
     };
@@ -695,7 +783,9 @@ function FirstPersonMovementController({
 
     return () => {
       activeKeysRef.current.clear();
+      activeShiftKeysRef.current.clear();
       isSprintActiveRef.current = false;
+      inspectZoomFovRef.current = null;
       movementVelocityRef.current = { x: 0, z: 0 };
       clearSlideState();
       window.removeEventListener("keydown", handleKeyDown);
@@ -794,7 +884,9 @@ function FirstPersonMovementController({
 
       if (controlStateRef.current === "pointer-locked") {
         activeKeysRef.current.clear();
+        activeShiftKeysRef.current.clear();
         isSprintActiveRef.current = false;
+        inspectZoomFovRef.current = null;
         movementVelocityRef.current = { x: 0, z: 0 };
         clearSlideState();
         isDragLookingRef.current = false;
@@ -811,12 +903,35 @@ function FirstPersonMovementController({
       isDragLookingRef.current = false;
     };
 
+    const handleWheel = (event: WheelEvent) => {
+      if (
+        !isEnabledRef.current ||
+        controlStateRef.current === "idle" ||
+        !event.shiftKey ||
+        isInteractiveTarget(event.target)
+      ) {
+        return;
+      }
+
+      event.preventDefault();
+      const perspectiveCamera = getPerspectiveCamera(camera);
+      const currentFov = inspectZoomFovRef.current ?? perspectiveCamera?.fov ?? NORMAL_CAMERA_FOV;
+      const direction = event.deltaY > 0 ? 1 : -1;
+
+      inspectZoomFovRef.current = clamp(
+        currentFov + direction * INSPECT_ZOOM_STEP_FOV,
+        INSPECT_ZOOM_MIN_FOV,
+        INSPECT_ZOOM_MAX_FOV,
+      );
+    };
+
     canvas.tabIndex = -1;
     canvas.addEventListener("pointerdown", handlePointerDown);
     canvas.addEventListener("pointermove", handlePointerMove);
     canvas.addEventListener("pointerup", handlePointerUp);
     canvas.addEventListener("pointercancel", handlePointerUp);
     canvas.addEventListener("pointerleave", handlePointerLeave);
+    canvas.addEventListener("wheel", handleWheel, { passive: false });
     document.addEventListener("pointermove", handleDocumentPointerMove);
     document.addEventListener("pointerlockchange", handlePointerLockChange);
     document.addEventListener("pointerlockerror", handlePointerLockError);
@@ -824,7 +939,9 @@ function FirstPersonMovementController({
     return () => {
       isDragLookingRef.current = false;
       activeKeysRef.current.clear();
+      activeShiftKeysRef.current.clear();
       isSprintActiveRef.current = false;
+      inspectZoomFovRef.current = null;
       movementVelocityRef.current = { x: 0, z: 0 };
       clearSlideState();
 
@@ -837,6 +954,7 @@ function FirstPersonMovementController({
       canvas.removeEventListener("pointerup", handlePointerUp);
       canvas.removeEventListener("pointercancel", handlePointerUp);
       canvas.removeEventListener("pointerleave", handlePointerLeave);
+      canvas.removeEventListener("wheel", handleWheel);
       document.removeEventListener("pointermove", handleDocumentPointerMove);
       document.removeEventListener("pointerlockchange", handlePointerLockChange);
       document.removeEventListener("pointerlockerror", handlePointerLockError);
@@ -849,12 +967,14 @@ function FirstPersonMovementController({
     if (!enabled) {
       movementVelocityRef.current = { x: 0, z: 0 };
       clearSlideState();
+      inspectZoomFovRef.current = null;
       return;
     }
 
     if (controlState === "idle") {
       movementVelocityRef.current = { x: 0, z: 0 };
       clearSlideState();
+      inspectZoomFovRef.current = null;
       updateCameraFov(camera, NORMAL_CAMERA_FOV, delta);
       return;
     }
@@ -948,7 +1068,7 @@ function FirstPersonMovementController({
     }
 
     if (Math.hypot(nextVelocity.x, nextVelocity.z) === 0) {
-      updateCameraFov(camera, NORMAL_CAMERA_FOV, delta);
+      updateCameraFov(camera, inspectZoomFovRef.current ?? NORMAL_CAMERA_FOV, delta);
       return;
     }
 
@@ -995,13 +1115,14 @@ function FirstPersonMovementController({
       ? SLIDE_CAMERA_DIP * Math.sin(Math.min(1, (nowMs - activeSlide.startedAtMs) / SLIDE_DURATION_MS) * Math.PI)
       : 0;
     const cameraY = resolvedY + headBob - slideDip;
-    const targetFov = prefersReducedMotion
+    const movementTargetFov = prefersReducedMotion
       ? NORMAL_CAMERA_FOV
       : activeSlide
         ? SLIDE_CAMERA_FOV
         : isSprintPolishActive
           ? SPRINT_CAMERA_FOV
           : NORMAL_CAMERA_FOV;
+    const targetFov = inspectZoomFovRef.current ?? movementTargetFov;
 
     unpolishedCameraPositionRef.current = [resolved.position.x, resolvedY, resolved.position.z];
     updateCameraFov(camera, targetFov, delta);
@@ -1022,28 +1143,115 @@ interface TopDownViewControllerProps {
   isActive: boolean;
   lookStateRef: MutableRefObject<LookState>;
   onActiveChange: (isActive: boolean) => void;
+  onFreeCamActiveChange: (isActive: boolean) => void;
+  onLocalPoseChange: (pose: LocalPlayerPose) => void;
   onMarkerPositionChange: (position: Vec3 | null) => void;
 }
 
-function TopDownViewController({ levelConfig, enabled, isActive, lookStateRef, onActiveChange, onMarkerPositionChange }: TopDownViewControllerProps) {
-  const { camera } = useThree();
+function TopDownViewController({
+  levelConfig,
+  enabled,
+  isActive,
+  lookStateRef,
+  onActiveChange,
+  onFreeCamActiveChange,
+  onLocalPoseChange,
+  onMarkerPositionChange,
+}: TopDownViewControllerProps) {
+  const { camera, gl } = useThree();
   const firstPersonPositionRef = useRef<Vec3 | null>(null);
+  const topDownEntryPositionRef = useRef<Vec3 | null>(null);
+  const freeCamPositionRef = useRef<Vec3 | null>(null);
+  const freeCamLookStateRef = useRef<LookState | null>(null);
   const isActiveRef = useRef(isActive);
+  const isFreeCamActiveRef = useRef(false);
+  const isFreeCamDragLookingRef = useRef(false);
+  const activeMovementKeysRef = useRef(new Set<MovementKey>());
+  const activeFreeCamVerticalKeysRef = useRef(new Set<string>());
+  const activePanKeysRef = useRef(new Set<TopDownPanKey>());
+  const panOffsetRef = useRef({ x: 0, z: 0 });
 
   useEffect(() => {
     isActiveRef.current = isActive;
   }, [isActive]);
 
+  const setFreeCamActive = useCallback((nextIsActive: boolean) => {
+    isFreeCamActiveRef.current = nextIsActive;
+    isFreeCamDragLookingRef.current = false;
+
+    if (nextIsActive) {
+      freeCamPositionRef.current = [camera.position.x, camera.position.y, camera.position.z];
+      freeCamLookStateRef.current = { yaw: lookStateRef.current.yaw, pitch: -0.72 };
+      panOffsetRef.current = { x: 0, z: 0 };
+    } else {
+      freeCamPositionRef.current = null;
+      freeCamLookStateRef.current = null;
+      activeFreeCamVerticalKeysRef.current.clear();
+    }
+
+    onFreeCamActiveChange(nextIsActive);
+  }, [camera, lookStateRef, onFreeCamActiveChange]);
+
   useEffect(() => {
     if (!enabled) {
       firstPersonPositionRef.current = null;
+      topDownEntryPositionRef.current = null;
+      freeCamPositionRef.current = null;
+      freeCamLookStateRef.current = null;
+      isFreeCamDragLookingRef.current = false;
+      setFreeCamActive(false);
+      activeMovementKeysRef.current.clear();
+      activeFreeCamVerticalKeysRef.current.clear();
+      activePanKeysRef.current.clear();
+      panOffsetRef.current = { x: 0, z: 0 };
       onMarkerPositionChange(null);
       onActiveChange(false);
     }
-  }, [enabled, onActiveChange, onMarkerPositionChange]);
+  }, [enabled, onActiveChange, onMarkerPositionChange, setFreeCamActive]);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
+      if (
+        enabled &&
+        isActiveRef.current &&
+        isBackquoteToggle(event) &&
+        !event.repeat &&
+        !event.ctrlKey &&
+        !event.metaKey &&
+        !event.altKey &&
+        !isInteractiveTarget(event.target)
+      ) {
+        event.preventDefault();
+        const nextIsFreeCamActive = !isFreeCamActiveRef.current;
+
+        setFreeCamActive(nextIsFreeCamActive);
+        activeMovementKeysRef.current.clear();
+
+        if (!nextIsFreeCamActive) {
+          panOffsetRef.current = { x: 0, z: 0 };
+        }
+
+        return;
+      }
+
+      if (enabled && isActiveRef.current && isMovementKey(event.code) && !isInteractiveTarget(event.target)) {
+        event.preventDefault();
+        activeMovementKeysRef.current.add(event.code);
+        return;
+      }
+
+      if (enabled && isActiveRef.current && isFreeCamActiveRef.current && isFreeCamVerticalKey(event.code) && !isInteractiveTarget(event.target)) {
+        event.preventDefault();
+        activeFreeCamVerticalKeysRef.current.add(event.code);
+        return;
+      }
+
+      if (enabled && isActiveRef.current && isTopDownPanKey(event.code) && !isInteractiveTarget(event.target)) {
+        event.preventDefault();
+        activePanKeysRef.current.add(event.code);
+        return;
+      }
+
       if (
         !enabled ||
         event.code !== "Tab" ||
@@ -1061,6 +1269,44 @@ function TopDownViewController({ levelConfig, enabled, isActive, lookStateRef, o
     };
 
     const handleKeyUp = (event: KeyboardEvent) => {
+      if (isBackquoteToggle(event)) {
+        if (enabled && isActiveRef.current) {
+          event.preventDefault();
+        }
+
+        return;
+      }
+
+      if (isMovementKey(event.code)) {
+        activeMovementKeysRef.current.delete(event.code);
+
+        if (enabled && isActiveRef.current) {
+          event.preventDefault();
+        }
+
+        return;
+      }
+
+      if (isFreeCamVerticalKey(event.code)) {
+        activeFreeCamVerticalKeysRef.current.delete(event.code);
+
+        if (enabled && isActiveRef.current && isFreeCamActiveRef.current) {
+          event.preventDefault();
+        }
+
+        return;
+      }
+
+      if (isTopDownPanKey(event.code)) {
+        activePanKeysRef.current.delete(event.code);
+
+        if (enabled && isActiveRef.current) {
+          event.preventDefault();
+        }
+
+        return;
+      }
+
       if (!enabled || event.code !== "Tab") {
         return;
       }
@@ -1069,6 +1315,10 @@ function TopDownViewController({ levelConfig, enabled, isActive, lookStateRef, o
     };
 
     const handleBlur = () => {
+      setFreeCamActive(false);
+      activeMovementKeysRef.current.clear();
+      activeFreeCamVerticalKeysRef.current.clear();
+      activePanKeysRef.current.clear();
       onActiveChange(false);
     };
 
@@ -1078,14 +1328,91 @@ function TopDownViewController({ levelConfig, enabled, isActive, lookStateRef, o
 
     return () => {
       onMarkerPositionChange(null);
+      setFreeCamActive(false);
+      activeMovementKeysRef.current.clear();
+      activeFreeCamVerticalKeysRef.current.clear();
+      activePanKeysRef.current.clear();
       onActiveChange(false);
       window.removeEventListener("keydown", handleKeyDown);
       window.removeEventListener("keyup", handleKeyUp);
       window.removeEventListener("blur", handleBlur);
     };
-  }, [enabled, onActiveChange, onMarkerPositionChange]);
+  }, [enabled, onActiveChange, onMarkerPositionChange, setFreeCamActive]);
 
-  useFrame(() => {
+  useEffect(() => {
+    const canvas = gl.domElement;
+
+    const ensureFreeCamPose = () => {
+      if (!freeCamPositionRef.current) {
+        freeCamPositionRef.current = [camera.position.x, camera.position.y, camera.position.z];
+      }
+
+      if (!freeCamLookStateRef.current) {
+        freeCamLookStateRef.current = { yaw: lookStateRef.current.yaw, pitch: -0.72 };
+      }
+    };
+
+    const handlePointerDown = (event: PointerEvent) => {
+      if (!enabled || !isActiveRef.current || !isFreeCamActiveRef.current || event.button !== 0) {
+        return;
+      }
+
+      event.preventDefault();
+      canvas.focus();
+      ensureFreeCamPose();
+      isFreeCamDragLookingRef.current = true;
+      canvas.setPointerCapture(event.pointerId);
+    };
+
+    const handlePointerMove = (event: PointerEvent) => {
+      if (!enabled || !isActiveRef.current || !isFreeCamActiveRef.current || !isFreeCamDragLookingRef.current) {
+        return;
+      }
+
+      event.preventDefault();
+      ensureFreeCamPose();
+      const currentLook = freeCamLookStateRef.current;
+
+      if (!currentLook) {
+        return;
+      }
+
+      freeCamLookStateRef.current = {
+        yaw: currentLook.yaw + event.movementX * MOUSE_LOOK_SENSITIVITY,
+        pitch: clamp(currentLook.pitch - event.movementY * MOUSE_LOOK_SENSITIVITY, MIN_LOOK_PITCH, MAX_LOOK_PITCH),
+      };
+    };
+
+    const handlePointerUp = (event: PointerEvent) => {
+      isFreeCamDragLookingRef.current = false;
+
+      if (canvas.hasPointerCapture(event.pointerId)) {
+        canvas.releasePointerCapture(event.pointerId);
+      }
+    };
+
+    const handlePointerLeave = () => {
+      isFreeCamDragLookingRef.current = false;
+    };
+
+    canvas.tabIndex = -1;
+    canvas.addEventListener("pointerdown", handlePointerDown);
+    canvas.addEventListener("pointermove", handlePointerMove);
+    canvas.addEventListener("pointerup", handlePointerUp);
+    canvas.addEventListener("pointercancel", handlePointerUp);
+    canvas.addEventListener("pointerleave", handlePointerLeave);
+
+    return () => {
+      isFreeCamDragLookingRef.current = false;
+      canvas.removeEventListener("pointerdown", handlePointerDown);
+      canvas.removeEventListener("pointermove", handlePointerMove);
+      canvas.removeEventListener("pointerup", handlePointerUp);
+      canvas.removeEventListener("pointercancel", handlePointerUp);
+      canvas.removeEventListener("pointerleave", handlePointerLeave);
+    };
+  }, [camera, enabled, gl, lookStateRef]);
+
+  useFrame((_, delta) => {
     if (!enabled) {
       return;
     }
@@ -1095,11 +1422,141 @@ function TopDownViewController({ levelConfig, enabled, isActive, lookStateRef, o
 
       if (!firstPersonPositionRef.current) {
         firstPersonPositionRef.current = [camera.position.x, camera.position.y, camera.position.z];
+        topDownEntryPositionRef.current = firstPersonPositionRef.current;
         onMarkerPositionChange(firstPersonPositionRef.current);
       }
 
-      camera.position.set(...levelConfig.topDownCamera.position);
-      camera.lookAt(...levelConfig.topDownCamera.target);
+      const movementKeys = activeMovementKeysRef.current;
+      let forward = 0;
+      let strafe = 0;
+
+      if (movementKeys.has("KeyW")) {
+        forward += 1;
+      }
+
+      if (movementKeys.has("KeyS")) {
+        forward -= 1;
+      }
+
+      if (movementKeys.has("KeyA")) {
+        strafe -= 1;
+      }
+
+      if (movementKeys.has("KeyD")) {
+        strafe += 1;
+      }
+
+      if (isFreeCamActiveRef.current) {
+        const freeCamPosition = freeCamPositionRef.current ?? [camera.position.x, camera.position.y, camera.position.z] as Vec3;
+        const freeCamLookState = freeCamLookStateRef.current ?? { yaw: lookStateRef.current.yaw, pitch: -0.72 };
+        const vertical =
+          (activeFreeCamVerticalKeysRef.current.has("Space") || activeFreeCamVerticalKeysRef.current.has("KeyE") ? 1 : 0) -
+          (activeFreeCamVerticalKeysRef.current.has("KeyQ") ||
+          activeFreeCamVerticalKeysRef.current.has("ControlLeft") ||
+          activeFreeCamVerticalKeysRef.current.has("ControlRight")
+            ? 1
+            : 0);
+        const horizontal = Math.cos(freeCamLookState.pitch);
+        const forwardVector = {
+          x: Math.sin(freeCamLookState.yaw) * horizontal,
+          y: Math.sin(freeCamLookState.pitch),
+          z: -Math.cos(freeCamLookState.yaw) * horizontal,
+        };
+        const strafeVector = {
+          x: Math.cos(freeCamLookState.yaw),
+          y: 0,
+          z: Math.sin(freeCamLookState.yaw),
+        };
+        let moveX = forwardVector.x * forward + strafeVector.x * strafe;
+        let moveY = forwardVector.y * forward + vertical;
+        let moveZ = forwardVector.z * forward + strafeVector.z * strafe;
+        const movementLength = Math.hypot(moveX, moveY, moveZ);
+
+        if (movementLength > 0) {
+          const moveDistance = TOP_DOWN_FREE_CAM_SPEED_UNITS_PER_SECOND * delta;
+
+          moveX = (moveX / movementLength) * moveDistance;
+          moveY = (moveY / movementLength) * moveDistance;
+          moveZ = (moveZ / movementLength) * moveDistance;
+
+          freeCamPositionRef.current = [
+            freeCamPosition[0] + moveX,
+            clamp(freeCamPosition[1] + moveY, FREE_FLY_CAMERA_MIN_Y, FREE_FLY_CAMERA_MAX_Y),
+            freeCamPosition[2] + moveZ,
+          ];
+        } else {
+          freeCamPositionRef.current = freeCamPosition;
+        }
+
+        freeCamLookStateRef.current = freeCamLookState;
+        const renderPosition = freeCamPositionRef.current;
+
+        updateCameraFov(camera, NORMAL_CAMERA_FOV, delta);
+        camera.position.set(...renderPosition);
+        camera.lookAt(...getLookTarget(renderPosition, freeCamLookState));
+        return;
+      }
+
+      if (forward !== 0 || strafe !== 0) {
+        const { yaw } = lookStateRef.current;
+        let dx = Math.sin(yaw) * forward + Math.cos(yaw) * strafe;
+        let dz = -Math.cos(yaw) * forward + Math.sin(yaw) * strafe;
+        const length = Math.hypot(dx, dz);
+
+        dx /= length;
+        dz /= length;
+
+        const currentPosition = firstPersonPositionRef.current;
+        const velocity = {
+          x: dx * WALK_SPEED_UNITS_PER_SECOND,
+          z: dz * WALK_SPEED_UNITS_PER_SECOND,
+        };
+        const resolved = resolveHorizontalMovementCollision({
+          current: { x: currentPosition[0], z: currentPosition[2] },
+          next: {
+            x: currentPosition[0] + velocity.x * delta,
+            z: currentPosition[2] + velocity.z * delta,
+          },
+          velocity,
+          levelConfig,
+        });
+        const resolvedY = levelConfig.playerStart.position[1] + getTraversalFloorHeight(resolved.position.x, resolved.position.z, levelConfig);
+        const nextPosition: Vec3 = [resolved.position.x, resolvedY, resolved.position.z];
+
+        firstPersonPositionRef.current = nextPosition;
+        onMarkerPositionChange(nextPosition);
+        onLocalPoseChange({ position: nextPosition, yaw: lookStateRef.current.yaw });
+      }
+
+      const panKeys = activePanKeysRef.current;
+      const panX = (panKeys.has("ArrowRight") ? 1 : 0) - (panKeys.has("ArrowLeft") ? 1 : 0);
+      const panZ = (panKeys.has("ArrowDown") ? 1 : 0) - (panKeys.has("ArrowUp") ? 1 : 0);
+
+      if (panX !== 0 || panZ !== 0) {
+        const length = Math.hypot(panX, panZ);
+        const panDistance = TOP_DOWN_PAN_SPEED_UNITS_PER_SECOND * delta;
+
+        panOffsetRef.current = {
+          x: clamp(panOffsetRef.current.x + (panX / length) * panDistance, -TOP_DOWN_PAN_LIMIT_UNITS, TOP_DOWN_PAN_LIMIT_UNITS),
+          z: clamp(panOffsetRef.current.z + (panZ / length) * panDistance, -TOP_DOWN_PAN_LIMIT_UNITS, TOP_DOWN_PAN_LIMIT_UNITS),
+        };
+      }
+
+      const playerPosition = firstPersonPositionRef.current;
+      const entryPosition = topDownEntryPositionRef.current ?? playerPosition;
+      const playerOffsetX = playerPosition[0] - entryPosition[0];
+      const playerOffsetZ = playerPosition[2] - entryPosition[2];
+      const panOffset = panOffsetRef.current;
+      camera.position.set(
+        levelConfig.topDownCamera.position[0] + playerOffsetX + panOffset.x,
+        levelConfig.topDownCamera.position[1],
+        levelConfig.topDownCamera.position[2] + playerOffsetZ + panOffset.z,
+      );
+      camera.lookAt(
+        levelConfig.topDownCamera.target[0] + playerOffsetX + panOffset.x,
+        levelConfig.topDownCamera.target[1],
+        levelConfig.topDownCamera.target[2] + playerOffsetZ + panOffset.z,
+      );
 
       if (perspectiveCamera && perspectiveCamera.fov !== TOP_DOWN_CAMERA_FOV) {
         perspectiveCamera.fov = TOP_DOWN_CAMERA_FOV;
@@ -1115,14 +1572,12 @@ function TopDownViewController({ levelConfig, enabled, isActive, lookStateRef, o
       camera.position.set(x, y, z);
       camera.lookAt(...getLookTarget([x, y, z], lookStateRef.current));
       firstPersonPositionRef.current = null;
+      topDownEntryPositionRef.current = null;
+      setFreeCamActive(false);
+      activeMovementKeysRef.current.clear();
+      activePanKeysRef.current.clear();
+      panOffsetRef.current = { x: 0, z: 0 };
       onMarkerPositionChange(null);
-    }
-
-    const perspectiveCamera = getPerspectiveCamera(camera);
-
-    if (perspectiveCamera && perspectiveCamera.fov !== NORMAL_CAMERA_FOV) {
-      perspectiveCamera.fov = NORMAL_CAMERA_FOV;
-      perspectiveCamera.updateProjectionMatrix();
     }
   });
 
@@ -1281,6 +1736,169 @@ function FreeRoamPresenceReporter({
   return null;
 }
 
+function LocalDawClockController({
+  localDawActions,
+  localDawAudioActions,
+  localDawState,
+}: {
+  localDawActions: LocalDawActions;
+  localDawAudioActions: LocalDawAudioEngineActions;
+  localDawState: LocalDawState;
+}) {
+  const localDawStateRef = useRef(localDawState);
+  const triggeredPlaybackKeysRef = useRef(new Set<string>());
+
+  useEffect(() => {
+    localDawStateRef.current = localDawState;
+  }, [localDawState]);
+
+  useEffect(() => {
+    triggeredPlaybackKeysRef.current.clear();
+  }, [
+    localDawState.clips,
+    localDawState.midiNotes,
+    localDawState.transport.bpm,
+    localDawState.transport.state,
+  ]);
+
+  useEffect(() => {
+    if (localDawState.transport.state !== "playing") {
+      triggeredPlaybackKeysRef.current.clear();
+      return undefined;
+    }
+
+    const intervalMs = 60000 / localDawState.transport.bpm;
+    const intervalId = window.setInterval(() => {
+      const currentState = localDawStateRef.current;
+      const currentBeat = currentState.transport.beat;
+      const playingClips = currentState.clips.filter((clip) => clip.state === "playing");
+
+      triggeredPlaybackKeysRef.current.clear();
+      localDawAudioActions.playMetronomeTick(currentBeat === 1);
+
+      playingClips.forEach((clip) => {
+        const relativeBar = ((currentState.transport.bar - 1) % clip.lengthBars) + 1;
+        const notesToPlay = currentState.midiNotes.filter((note) => (
+          note.clipId === clip.id &&
+          note.startBar === relativeBar &&
+          note.startBeat === currentBeat
+        ));
+
+        notesToPlay.forEach((note) => {
+          const playbackKey = `${clip.id}:${note.id}:${currentState.transport.bar}:${currentBeat}`;
+
+          if (triggeredPlaybackKeysRef.current.has(playbackKey)) {
+            return;
+          }
+
+          triggeredPlaybackKeysRef.current.add(playbackKey);
+          playLocalDawClipNote(note, localDawAudioActions, currentState);
+          localDawActions.markClipNotePlayback({
+            bar: currentState.transport.bar,
+            beat: currentBeat,
+            clipId: clip.id,
+            label: note.label,
+            noteId: note.id,
+            trackId: note.trackId,
+          });
+        });
+      });
+
+      localDawActions.advanceTransportBeat();
+    }, intervalMs);
+
+    return () => window.clearInterval(intervalId);
+  }, [
+    localDawActions,
+    localDawAudioActions,
+    localDawState.transport.bpm,
+    localDawState.transport.state,
+  ]);
+
+  return null;
+}
+
+function getClipPlaybackDurationSeconds(note: LocalDawMidiNoteEvent) {
+  return Math.max(0.08, Math.min(1.2, note.durationBeats * (60 / note.recordedAtBpm)));
+}
+
+function getBassPlaybackFrequency(frequency: number) {
+  let nextFrequency = frequency;
+
+  while (nextFrequency > 110) {
+    nextFrequency /= 2;
+  }
+
+  return Math.max(41.2, Math.min(220, nextFrequency));
+}
+
+function getDrumPlaybackHit(note: LocalDawMidiNoteEvent): Parameters<LocalDawAudioEngineActions["playDrumVoice"]>[0] {
+  const label = note.label.toUpperCase();
+
+  if (label.includes("C") || note.frequency < 150) {
+    return { kind: "kick", label: "Kick" };
+  }
+
+  if (label.includes("D") || label.includes("E")) {
+    return { kind: "snare", label: "Snare" };
+  }
+
+  return { kind: "hat", label: "Hat" };
+}
+
+function getLocalDawTrackGainScale(localDawState: LocalDawState, trackId: DawTrackId) {
+  const track = localDawState.tracks.find((candidate) => candidate.id === trackId);
+
+  if (!track || track.muted) {
+    return 0;
+  }
+
+  return Math.max(0, Math.min(1, track.volume));
+}
+
+function playLocalDawClipNote(note: LocalDawMidiNoteEvent, localDawAudioActions: LocalDawAudioEngineActions, localDawState: LocalDawState) {
+  const durationSeconds = getClipPlaybackDurationSeconds(note);
+  const trackId: DawTrackId = note.trackId;
+  const gainScale = getLocalDawTrackGainScale(localDawState, trackId);
+
+  if (trackId === "fm-synth") {
+    localDawAudioActions.playFmSynthNote({
+      durationSeconds,
+      frequency: note.frequency,
+      gainScale,
+      label: note.label,
+    });
+    return;
+  }
+
+  if (trackId === "piano") {
+    localDawAudioActions.playPianoLiveNote({
+      durationSeconds,
+      frequency: note.frequency,
+      gainScale,
+      label: note.label,
+    }, "fm-synth");
+    return;
+  }
+
+  if (trackId === "bass") {
+    localDawAudioActions.playBassNote({
+      durationSeconds,
+      frequency: getBassPlaybackFrequency(note.frequency),
+      gainScale,
+      label: note.label,
+    });
+    return;
+  }
+
+  if (trackId === "drums") {
+    localDawAudioActions.playDrumVoice({
+      ...getDrumPlaybackHit(note),
+      gainScale,
+    });
+  }
+}
+
 function ThreeDStatusPanel({ status, onExit }: { status: ThreeDStatus; onExit: () => void }) {
   const isRecoverableFailure = status === "unsupported" || status === "error";
   const title = isRecoverableFailure ? "This view could not start on this device." : "Starting view...";
@@ -1367,6 +1985,16 @@ export function ThreeDModeShell({
   onClearFreeRoamPresence,
   jukeboxDisplay,
   jukeboxActions,
+  sharedDawTransport,
+  sharedDawClips,
+  syncStatus,
+  canControlSharedDawTransport,
+  canAdminSharedDawClips,
+  onSetSharedDawTempo,
+  onPlaySharedDawTransport,
+  onStopSharedDawTransport,
+  onPublishSharedDawClip,
+  onClearSharedDawClip,
   onExit,
 }: ThreeDModeShellProps) {
   const [currentLevelId, setCurrentLevelId] = useState(getRequestedLevelId);
@@ -1375,6 +2003,7 @@ export function ThreeDModeShell({
   const [controlState, setControlState] = useState<ControlState>("idle");
   const [revealState, setRevealState] = useState<RevealState>("revealing");
   const [isTopDownViewActive, setIsTopDownViewActive] = useState(false);
+  const [isTopDownFreeCamActive, setIsTopDownFreeCamActive] = useState(false);
   const [topDownMarkerPosition, setTopDownMarkerPosition] = useState<Vec3 | null>(null);
   const [currentAreaId, setCurrentAreaId] = useState<string | null>(null);
   const [areaFeedback, setAreaFeedback] = useState<AreaFeedbackState | null>(null);
@@ -1383,6 +2012,8 @@ export function ThreeDModeShell({
   const localPlayerPoseRef = useRef<LocalPlayerPose | null>(null);
   const currentAreaIdRef = useRef<string | null>(null);
   const areaFeedbackKeyRef = useRef(0);
+  const { state: localDawState, actions: localDawActions } = useLocalDawState();
+  const { state: localDawAudioState, actions: localDawAudioActions } = useLocalDawAudioEngine();
   const stationAssignments = useMemo(() => getUserStationAssignments(users, levelConfig), [levelConfig, users]);
   const resolvedLocalStation = useMemo(
     () => resolveLocalStation(stationAssignments, levelConfig, localUserId),
@@ -1414,11 +2045,40 @@ export function ThreeDModeShell({
       });
     }
   }, [canShowAreaFeedback, levelConfig]);
+  const handleExit = useCallback(() => {
+    localDawAudioActions.cleanup();
+    onExit();
+  }, [localDawAudioActions, onExit]);
+
+  useEffect(() => {
+    const sharedTransportPosition = getSharedDawTransportPosition(sharedDawTransport, syncStatus);
+
+    localDawActions.applySharedTransportSnapshot({
+      state: sharedDawTransport.state,
+      bpm: sharedDawTransport.bpm,
+      bar: sharedTransportPosition.bar,
+      beat: sharedTransportPosition.beat,
+    });
+  }, [
+    localDawActions,
+    sharedDawTransport.anchorBar,
+    sharedDawTransport.anchorBeat,
+    sharedDawTransport.bpm,
+    sharedDawTransport.revision,
+    sharedDawTransport.startedAt,
+    sharedDawTransport.state,
+    syncStatus.serverTimeOffsetMs,
+  ]);
+
+  useEffect(() => {
+    localDawActions.applySharedClipsSnapshot(sharedDawClips);
+  }, [localDawActions, sharedDawClips, sharedDawClips.revision]);
 
   const handleReturnToDashboard = useCallback(() => {
     setRevealState("returning");
     setControlState("idle");
     setIsTopDownViewActive(false);
+    setIsTopDownFreeCamActive(false);
     setTopDownMarkerPosition(null);
     setAreaFeedback(null);
   }, []);
@@ -1436,6 +2096,7 @@ export function ThreeDModeShell({
     setRevealState("revealing");
     setControlState("idle");
     setIsTopDownViewActive(false);
+    setIsTopDownFreeCamActive(false);
     setTopDownMarkerPosition(null);
   }, [onClearFreeRoamPresence]);
 
@@ -1509,6 +2170,7 @@ export function ThreeDModeShell({
       aria-label="Unlocked view"
       data-reveal-state={revealState}
       data-camera-view={isTopDownViewActive ? "top-down" : "first-person"}
+      data-camera-mode={isTopDownViewActive ? (isTopDownFreeCamActive ? "free-fly" : "player-cam") : "first-person"}
       data-3d-status={status}
       data-control-state={controlState}
       data-level-id={levelConfig.id}
@@ -1534,7 +2196,7 @@ export function ThreeDModeShell({
                 revealState={revealState}
                 revealRig={revealRig}
                 lookStateRef={lookStateRef}
-                onComplete={onExit}
+                onComplete={handleExit}
               />
               <TopDownViewController
                 levelConfig={levelConfig}
@@ -1542,6 +2204,8 @@ export function ThreeDModeShell({
                 isActive={isTopDownViewActive}
                 lookStateRef={lookStateRef}
                 onActiveChange={setIsTopDownViewActive}
+                onFreeCamActiveChange={setIsTopDownFreeCamActive}
+                onLocalPoseChange={updateLocalPlayerPose}
                 onMarkerPositionChange={setTopDownMarkerPosition}
               />
               <FirstPersonMovementController
@@ -1558,6 +2222,11 @@ export function ThreeDModeShell({
                 levelId={levelConfig.id}
                 localPlayerPoseRef={localPlayerPoseRef}
                 onUpdateFreeRoamPresence={onUpdateFreeRoamPresence}
+              />
+              <LocalDawClockController
+                localDawState={localDawState}
+                localDawActions={localDawActions}
+                localDawAudioActions={localDawAudioActions}
               />
               <FirstPersonBody enabled={status === "ready" && revealState === "complete" && !isTopDownViewActive && controlState !== "idle"} />
               <AimInteractionController enabled={areInteractionsEnabled} enablePointerShoot />
@@ -1577,6 +2246,20 @@ export function ThreeDModeShell({
                 localStationSource={resolvedLocalStation.source}
                 jukeboxDisplay={jukeboxDisplay}
                 jukeboxActions={jukeboxActions}
+                localDawState={localDawState}
+                localDawActions={localDawActions}
+                localDawAudioState={localDawAudioState}
+                localDawAudioActions={localDawAudioActions}
+                sharedDawTransport={sharedDawTransport}
+                sharedDawClips={sharedDawClips}
+                canControlSharedDawTransport={canControlSharedDawTransport}
+                canAdminSharedDawClips={canAdminSharedDawClips}
+                onSetSharedDawTempo={onSetSharedDawTempo}
+                onPlaySharedDawTransport={onPlaySharedDawTransport}
+                onStopSharedDawTransport={onStopSharedDawTransport}
+                localUserIdForSharedDawClips={localUserId}
+                onPublishSharedDawClip={onPublishSharedDawClip}
+                onClearSharedDawClip={onClearSharedDawClip}
               />
               {isTopDownViewActive && topDownMarkerPosition ? <LocalPositionMarker position={topDownMarkerPosition} /> : null}
             </Canvas>
@@ -1586,10 +2269,17 @@ export function ThreeDModeShell({
       ) : null}
 
       {status === "checking" || status === "loading" || status === "unsupported" || status === "error" ? (
-        <ThreeDStatusPanel status={status} onExit={onExit} />
+        <ThreeDStatusPanel status={status} onExit={handleExit} />
       ) : null}
 
       {shouldShowFocusHint ? <div className="three-d-shell-focus-hint">Click view to move</div> : null}
+
+      {status === "ready" && revealState === "complete" && isTopDownViewActive ? (
+        <div className="three-d-camera-mode" aria-live="polite">
+          <span>Camera</span>
+          <strong>{isTopDownFreeCamActive ? "FREE FLY" : "PLAYER CAM"}</strong>
+        </div>
+      ) : null}
 
       {areaFeedback && canShowAreaFeedback ? (
         <div key={areaFeedback.key} className="three-d-area-feedback" aria-hidden="true">
@@ -1605,7 +2295,7 @@ export function ThreeDModeShell({
       ) : null}
 
       {status === "ready" ? (
-        <button type="button" className="three-d-shell-exit" onClick={onExit}>
+        <button type="button" className="three-d-shell-exit" onClick={handleExit}>
           Exit
         </button>
       ) : null}

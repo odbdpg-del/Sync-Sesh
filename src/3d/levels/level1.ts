@@ -14,10 +14,10 @@ export const level1Config = {
     rotation: [0, Math.PI, 0],
   },
   topDownCamera: {
-    position: [6.25, 14.5, 0],
-    target: [6.25, 0, 0],
-    height: 14.5,
-    orthographicSize: 24,
+    position: [0, 18.5, 0],
+    target: [0, 0, 0],
+    height: 18.5,
+    orthographicSize: 30,
   },
   stations: [
     {
@@ -96,7 +96,7 @@ export const level1Config = {
   },
   collisionBounds: {
     room: {
-      min: [-10, 0, -9],
+      min: [-22.5, 0, -9],
       max: [22.5, 4.5, 9],
     },
     blockers: [
@@ -117,6 +117,48 @@ export const level1Config = {
         label: "Timer display",
         min: [-1.8, 1.2, -6],
         max: [1.8, 2.9, -5.7],
+      },
+      {
+        id: "control-room-west-wall-lower",
+        label: "Control room west wall lower segment",
+        min: [-10.1, 0, -9],
+        max: [-9.9, 4.5, -5.8],
+      },
+      {
+        id: "control-room-west-wall-upper",
+        label: "Control room west wall upper segment",
+        min: [-10.1, 0, -3.4],
+        max: [-9.9, 4.5, 9],
+      },
+      {
+        id: "recording-studio-north-wall",
+        label: "Recording Studio north wall",
+        min: [-22.5, 0, -8.8],
+        max: [-10.5, 4.5, -8.62],
+      },
+      {
+        id: "recording-studio-south-wall",
+        label: "Recording Studio south wall",
+        min: [-22.5, 0, 2.62],
+        max: [-10.5, 4.5, 2.8],
+      },
+      {
+        id: "recording-studio-west-wall",
+        label: "Recording Studio west wall",
+        min: [-22.5, 0, -8.8],
+        max: [-22.32, 4.5, 2.8],
+      },
+      {
+        id: "recording-studio-east-wall-lower",
+        label: "Recording Studio east wall lower segment",
+        min: [-10.68, 0, -8.8],
+        max: [-10.5, 4.5, -5.8],
+      },
+      {
+        id: "recording-studio-east-wall-upper",
+        label: "Recording Studio east wall upper segment",
+        min: [-10.68, 0, -3.4],
+        max: [-10.5, 4.5, 2.8],
       },
       {
         id: "control-room-east-wall-lower",
@@ -226,7 +268,7 @@ export const level1Config = {
       },
       spawnPosition: [0, 1.7, 1.2],
       cameraTarget: [0, 1.45, -2.8],
-      connectedAreaIds: ["shooting-range"],
+      connectedAreaIds: ["shooting-range", "recording-studio"],
       status: "active",
     },
     {
@@ -239,6 +281,19 @@ export const level1Config = {
       },
       spawnPosition: [16.5, 1.7, 6.4],
       cameraTarget: [16.5, 1.5, -2.5],
+      connectedAreaIds: ["control-room"],
+      status: "active",
+    },
+    {
+      id: "recording-studio",
+      label: "Recording Studio",
+      kind: "recording-studio",
+      bounds: {
+        min: [-22.5, 0, -8.8],
+        max: [-10.5, 4.5, 2.8],
+      },
+      spawnPosition: [-12.8, 1.7, -4.6],
+      cameraTarget: [-18, 1.45, -4.6],
       connectedAreaIds: ["control-room"],
       status: "active",
     },
@@ -258,6 +313,23 @@ export const level1Config = {
       clearanceBounds: {
         min: [9.95, 0, -1.2],
         max: [10.55, 2.4, 1.2],
+      },
+      status: "active",
+    },
+    {
+      id: "control-room-recording-studio-opening",
+      label: "Recording Studio Opening",
+      fromAreaId: "control-room",
+      toAreaId: "recording-studio",
+      position: [-10.02, 1.2, -4.6],
+      rotation: [0, Math.PI / 2, 0],
+      size: {
+        width: 2.4,
+        height: 2.2,
+      },
+      clearanceBounds: {
+        min: [-10.55, 0, -5.8],
+        max: [-9.95, 2.4, -3.4],
       },
       status: "active",
     },

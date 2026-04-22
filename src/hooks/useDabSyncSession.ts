@@ -1,7 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { initializeEmbeddedApp, type EmbeddedAppState } from "../lib/discord/embeddedApp";
 import { createSyncClient } from "../lib/sync/createSyncClient";
-import type { DabSyncState, FreeRoamPresenceUpdate, RangeScoreSubmission } from "../types/session";
+import type {
+  DabSyncState,
+  FreeRoamPresenceUpdate,
+  RangeScoreSubmission,
+  SharedDawClipPublishPayload,
+  SharedDawTrackId,
+} from "../types/session";
 import { deriveLobbyState } from "../lib/lobby/sessionState";
 
 export function useDabSyncSession() {
@@ -144,6 +150,35 @@ export function useDabSyncSession() {
     syncClient.send({ type: "free_roam_presence_clear" });
   }, [syncClient]);
 
+  const setDawTempo = useCallback(
+    (bpm: number) => {
+      syncClient.send({ type: "daw_transport_set_tempo", bpm });
+    },
+    [syncClient],
+  );
+
+  const playDawTransport = useCallback(() => {
+    syncClient.send({ type: "daw_transport_play" });
+  }, [syncClient]);
+
+  const stopDawTransport = useCallback(() => {
+    syncClient.send({ type: "daw_transport_stop" });
+  }, [syncClient]);
+
+  const publishDawClip = useCallback(
+    (clip: SharedDawClipPublishPayload) => {
+      syncClient.send({ type: "daw_clip_publish", clip });
+    },
+    [syncClient],
+  );
+
+  const clearDawClip = useCallback(
+    (trackId: SharedDawTrackId, sceneIndex: number) => {
+      syncClient.send({ type: "daw_clip_clear", trackId, sceneIndex });
+    },
+    [syncClient],
+  );
+
   return {
     state,
     lobbyState,
@@ -165,5 +200,10 @@ export function useDabSyncSession() {
     submitRangeScore,
     updateFreeRoamPresence,
     clearFreeRoamPresence,
+    setDawTempo,
+    playDawTransport,
+    stopDawTransport,
+    publishDawClip,
+    clearDawClip,
   };
 }

@@ -26,6 +26,8 @@ export class MockSyncClient implements SyncClient {
       countdown: initialState.countdown,
       rangeScoreboard: initialState.rangeScoreboard,
       freeRoamPresence: initialState.freeRoamPresence,
+      dawTransport: initialState.dawTransport,
+      dawClips: initialState.dawClips,
     };
     this.syncStatus = initialState.syncStatus;
   }
