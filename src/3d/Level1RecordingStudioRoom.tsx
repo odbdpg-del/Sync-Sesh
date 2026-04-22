@@ -3684,9 +3684,9 @@ function StudioLooperStatusDisplay({
   }), [accentColor, lines]);
 
   return (
-    <mesh position={[0, 0.73, -0.33]} rotation={[-Math.PI / 2, 0, 0]}>
-      <planeGeometry args={[0.72, 0.18]} />
-      <meshBasicMaterial args={[{ transparent: true, opacity: 0.6, toneMapped: false }]}>
+    <mesh position={[0, 1.16, -0.74]}>
+      <planeGeometry args={[1.2, 0.3]} />
+      <meshBasicMaterial args={[{ transparent: true, opacity: 0.72, toneMapped: false }]}>
         <canvasTexture key={`studio-looper-status-${lines[0]}-${lines[1]}`} attach="map" args={[labelCanvas]} />
       </meshBasicMaterial>
     </mesh>
@@ -3734,8 +3734,8 @@ function StudioLooperControls({
       id: `clip-${clip.sceneIndex + 1}`,
       label: `S${clip.sceneIndex + 1}`,
       caption: `${noteCount} Notes`,
-      position: [-0.33 + (index % 2) * 0.66, 0.65, 0.18 + Math.floor(index / 2) * 0.18] as Vec3,
-      size: [0.46, 0.045, 0.13] as Vec3,
+      position: [-0.78 + index * 0.52, 0.65, 0.08] as Vec3,
+      size: [0.42, 0.045, 0.17] as Vec3,
       accentColor: isSelected ? "#e9fbff" : clip.state === "empty" ? (looperTrack?.color ?? phaseVisuals.gridSecondary) : stateColors.emissive,
       isActive: isSelected || clip.state === "playing" || clip.state === "recording",
       onActivate: () => {
@@ -3756,8 +3756,8 @@ function StudioLooperControls({
     id: `length-${lengthBars}`,
     label: `${lengthBars}`,
     caption: `${lengthBars} Bar`,
-    position: [-0.48 + index * 0.32, 0.718, -0.08] as Vec3,
-    size: [0.22, 0.032, 0.1] as Vec3,
+    position: [-0.69 + index * 0.46, 0.95, -0.52] as Vec3,
+    size: [0.3, 0.04, 0.12] as Vec3,
     accentColor: activeLooperClip?.lengthBars === lengthBars ? "#f8d36a" : phaseVisuals.gridSecondary,
     isActive: activeLooperClip?.lengthBars === lengthBars,
     onActivate: () => {
@@ -3781,9 +3781,17 @@ function StudioLooperControls({
 
   return (
     <group position={[-17.0, 0, -8.1]}>
-      <mesh position={[0, 0.632, 0.2]}>
-        <boxGeometry args={[1.36, 0.02, 0.56]} />
+      <mesh position={[0, 0.632, 0.06]}>
+        <boxGeometry args={[2.02, 0.02, 0.62]} />
         <meshBasicMaterial args={[{ color: looperTrack.color, transparent: true, opacity: 0.075, toneMapped: false }]} />
+      </mesh>
+      <mesh position={[0, 0.895, -0.52]}>
+        <boxGeometry args={[1.82, 0.1, 0.28]} />
+        <meshStandardMaterial args={[{ color: "#151319", emissive: looperTrack.color, emissiveIntensity: 0.08, roughness: 0.74, metalness: 0.04 }]} />
+      </mesh>
+      <mesh position={[0, 1.12, -0.77]}>
+        <boxGeometry args={[1.36, 0.5, 0.06]} />
+        <meshStandardMaterial args={[{ color: "#101827", emissive: looperTrack.color, emissiveIntensity: 0.06, roughness: 0.78, metalness: 0.03 }]} />
       </mesh>
       {clipControls.map((control) => (
         <StudioLooperControl key={control.id} control={control} />
@@ -6038,7 +6046,7 @@ export function Level1RecordingStudioRoom({
         label="Looper"
         position={[-17.0, 0, -8.1]}
         rotation={[0, 0, 0]}
-        size={[1.62, 0.5, 0.54]}
+        size={[2.28, 0.5, 1.02]}
         variant="looper"
       />
       <StudioLooperControls localDawState={localDawState} localDawActions={localDawActions} phaseVisuals={phaseVisuals} />

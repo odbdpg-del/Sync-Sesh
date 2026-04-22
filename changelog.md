@@ -8,6 +8,12 @@ Entries must be in reverse chronological order. New entries go at the top, above
 
 Use a level-two heading for every entry so the editor can fold each change.
 
+## [2328] - 2026-04-21 23:28 - `DJ-branch / Tiered Looper Control Spacing`
+
+- Summary: Reworked the Recording Studio looper into a tiered layout with scene pads on the front deck, bar-length controls on a raised rear shelf, and the local MIDI status display on a back panel.
+- Areas touched: `src/3d/Level1RecordingStudioRoom.tsx`.
+- Verification: Manager `npm.cmd run build` passed with the existing Vite large chunk warning.
+
 ## [2321] - 2026-04-21 23:21 - `DJ-branch / Discord 3D Presence And Piano Audio Recovery`
 
 - Summary: Made Discord-enabled builds default to WebSocket sync when no explicit sync mode is set, auto-joined users when opening the hidden 3D shell so friends render as room occupants, and made the Recording Studio audio engine become audible at a low master level after the user clicks ENGINE.
