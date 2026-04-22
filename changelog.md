@@ -8,6 +8,18 @@ Entries must be in reverse chronological order. New entries go at the top, above
 
 Use a level-two heading for every entry so the editor can fold each change.
 
+## [2025] - 2026-04-21 20:25 - `DJ-branch / FM Synth Gain Display Scale`
+
+- Summary: Changed the Recording Studio FM Synth gain control to present a normal 0-100% scale while keeping the underlying WebAudio gain in the safer existing range.
+- Areas touched: `src/3d/Level1RecordingStudioRoom.tsx`.
+- Verification: Manager `npm.cmd run build` passed with the existing Vite large chunk warning.
+
+## [2022] - 2026-04-21 20:22 - `DJ-branch / Canonical Recording Studio Sounds`
+
+- Summary: Added canonical recording-studio sound events so local synth, drum, bass, and piano triggers broadcast through room session state with sender patch snapshots and play for other users currently in the Recording Studio.
+- Areas touched: `src/types/session.ts`, `src/lib/lobby/sessionState.ts`, `src/hooks/useDabSyncSession.ts`, `src/screens/MainScreen.tsx`, `src/3d/useLocalDawAudioEngine.ts`, `src/3d/ThreeDModeShell.tsx`, `src/3d/Level1RoomShell.tsx`, `src/3d/Level1RecordingStudioRoom.tsx`, `src/lib/sync/mockSyncClient.ts`.
+- Verification: Manager `npm.cmd run build` passed with the existing Vite large chunk warning.
+
 ## [2001] - 2026-04-21 20:01 - `DJ-branch / V5-12 - Audio Interface Downward Nudge`
 
 - Summary: Nudged the Recording Studio Audio Interface side table down relative to the user's screenshot view and shifted the interface patch port registrations with it.

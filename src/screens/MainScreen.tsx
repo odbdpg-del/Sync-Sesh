@@ -51,6 +51,7 @@ export function MainScreen() {
     stopDawTransport,
     publishDawClip,
     clearDawClip,
+    broadcastDawLiveSound,
   } = useDabSyncSession();
   const countdownDisplay = useCountdownDisplay(state);
   const { playCue } = useSoundEffects(state, lobbyState, countdownDisplay);
@@ -158,6 +159,7 @@ export function MainScreen() {
           jukeboxActions={soundCloudPlayer.jukeboxActions}
           sharedDawTransport={state.dawTransport}
           sharedDawClips={state.dawClips}
+          sharedDawLiveSound={state.dawLiveSound}
           syncStatus={state.syncStatus}
           canControlSharedDawTransport={lobbyState.isLocalHost}
           canAdminSharedDawClips={lobbyState.isLocalHost}
@@ -166,6 +168,7 @@ export function MainScreen() {
           onStopSharedDawTransport={stopDawTransport}
           onPublishSharedDawClip={publishDawClip}
           onClearSharedDawClip={clearDawClip}
+          onBroadcastDawLiveSound={broadcastDawLiveSound}
           onExit={() => setIsThreeDModeOpen(false)}
         />
       ) : null}

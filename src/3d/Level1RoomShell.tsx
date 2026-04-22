@@ -26,6 +26,7 @@ import type {
   SessionUser,
   SharedDawClipPublishPayload,
   SharedDawClipsState,
+  SharedDawLiveSoundPayload,
   SharedDawTransport,
   SharedDawTrackId,
 } from "../types/session";
@@ -1515,6 +1516,7 @@ interface Level1RoomShellProps {
   localUserIdForSharedDawClips?: string;
   onPublishSharedDawClip?: (clip: SharedDawClipPublishPayload) => void;
   onClearSharedDawClip?: (trackId: SharedDawTrackId, sceneIndex: number) => void;
+  onBroadcastDawLiveSound?: (sound: SharedDawLiveSoundPayload) => void;
 }
 
 export function Level1RoomShell({
@@ -1547,6 +1549,7 @@ export function Level1RoomShell({
   localUserIdForSharedDawClips,
   onPublishSharedDawClip,
   onClearSharedDawClip,
+  onBroadcastDawLiveSound,
 }: Level1RoomShellProps) {
   const { dimensions, exits, lighting, openings, stations, timerDisplay } = levelConfig;
   const activeControlRoomArea = levelConfig.areas?.find((area) => (
@@ -1760,6 +1763,7 @@ export function Level1RoomShell({
           localUserIdForSharedDawClips={localUserIdForSharedDawClips}
           onPublishSharedDawClip={onPublishSharedDawClip}
           onClearSharedDawClip={onClearSharedDawClip}
+          onBroadcastDawLiveSound={onBroadcastDawLiveSound}
         />
       ) : null}
 

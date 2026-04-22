@@ -6,6 +6,7 @@ import type {
   FreeRoamPresenceUpdate,
   RangeScoreSubmission,
   SharedDawClipPublishPayload,
+  SharedDawLiveSoundPayload,
   SharedDawTrackId,
 } from "../types/session";
 import { deriveLobbyState } from "../lib/lobby/sessionState";
@@ -179,6 +180,13 @@ export function useDabSyncSession() {
     [syncClient],
   );
 
+  const broadcastDawLiveSound = useCallback(
+    (sound: SharedDawLiveSoundPayload) => {
+      syncClient.send({ type: "daw_live_sound", sound });
+    },
+    [syncClient],
+  );
+
   return {
     state,
     lobbyState,
@@ -205,5 +213,6 @@ export function useDabSyncSession() {
     stopDawTransport,
     publishDawClip,
     clearDawClip,
+    broadcastDawLiveSound,
   };
 }

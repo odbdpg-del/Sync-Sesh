@@ -19,6 +19,7 @@ export interface LocalDawFmSynthNote {
   frequency: number;
   durationSeconds?: number;
   gainScale?: number;
+  fmSynthPatch?: LocalDawFmSynthPatch;
 }
 
 export interface LocalDawDrumHit {
@@ -62,6 +63,7 @@ export interface LocalDawBassNote {
   frequency: number;
   durationSeconds?: number;
   gainScale?: number;
+  bassMachinePatch?: LocalDawBassMachinePatch;
 }
 
 export interface LocalDawPianoLiveNote {
@@ -69,6 +71,8 @@ export interface LocalDawPianoLiveNote {
   frequency: number;
   durationSeconds?: number;
   gainScale?: number;
+  fmSynthPatch?: LocalDawFmSynthPatch;
+  bassMachinePatch?: LocalDawBassMachinePatch;
 }
 
 export interface LocalDawGeneratedSoundOptions {
@@ -111,7 +115,7 @@ export interface LocalDawAudioEngineActions {
   stopDrumVoices: () => void;
   playBassNote: (note: LocalDawBassNote) => void;
   adjustBassMachinePatch: (patchDelta: Partial<LocalDawBassMachinePatch>) => void;
-  playBassPatternAudition: (gainScale?: number) => void;
+  playBassPatternAudition: (gainScale?: number, bassMachinePatch?: LocalDawBassMachinePatch) => void;
   stopBassVoices: () => void;
   adjustFilterEffectPatch: (patchDelta: Partial<LocalDawFilterEffectPatch>) => void;
   adjustAutopanEffectPatch: (patchDelta: Partial<LocalDawAutopanEffectPatch>) => void;
@@ -927,7 +931,7 @@ export function useLocalDawAudioEngine() {
     }
 
     try {
-      const patch = getClampedFmSynthPatch(currentState.fmSynthPatch);
+      const patch = getClampedFmSynthPatch(note.fmSynthPatch ?? currentState.fmSynthPatch);
       const noteFrequencyRatio = (note.frequency || FM_SYNTH_C3_FREQUENCY) / FM_SYNTH_C3_FREQUENCY;
       const frequency = clamp(patch.carrierFrequency * noteFrequencyRatio, MIN_FM_FREQUENCY, MAX_FM_FREQUENCY);
       const envelope = getFmEnvelopeTimings(patch.envelopePreset, note.durationSeconds);
@@ -1218,7 +1222,7 @@ export function useLocalDawAudioEngine() {
     }
 
     try {
-      const patch = getClampedBassMachinePatch(currentState.bassMachinePatch);
+      const patch = getClampedBassMachinePatch(note.bassMachinePatch ?? currentState.bassMachinePatch);
       const frequency = clamp(note.frequency, MIN_BASS_FREQUENCY, MAX_BASS_FREQUENCY);
       const durationSeconds = clamp(note.durationSeconds ?? patch.decaySeconds + 0.16, MIN_BASS_DURATION_SECONDS, MAX_BASS_DURATION_SECONDS);
       const now = audioContext.currentTime;
@@ -1301,6 +1305,7 @@ export function useLocalDawAudioEngine() {
         frequency: clamp(note.frequency / 2, MIN_BASS_FREQUENCY, MAX_BASS_FREQUENCY),
         durationSeconds: note.durationSeconds ?? 0.34,
         gainScale: note.gainScale,
+        bassMachinePatch: note.bassMachinePatch,
       });
     } else {
       playFmSynthNote({
@@ -1308,6 +1313,7 @@ export function useLocalDawAudioEngine() {
         frequency: note.frequency,
         durationSeconds: note.durationSeconds ?? 0.38,
         gainScale: note.gainScale,
+        fmSynthPatch: note.fmSynthPatch,
       });
     }
 
@@ -1317,7 +1323,7 @@ export function useLocalDawAudioEngine() {
       lastPianoLiveTarget: resolvedTarget,
     }));
   }, [playBassNote, playFmSynthNote]);
-  const playBassPatternAudition = useCallback((gainScaleInput = 1) => {
+  const playBassPatternAudition = useCallback((gainScaleInput = 1, bassMachinePatch?: LocalDawBassMachinePatch) => {
     const audioContext = audioContextRef.current;
     const masterGain = masterGainRef.current;
     const currentState = stateRef.current;
@@ -1340,10 +1346,10 @@ export function useLocalDawAudioEngine() {
     }));
 
     const riffNotes: LocalDawBassNote[] = [
-      { label: "E1", frequency: 41.2, durationSeconds: 0.22, gainScale },
-      { label: "G1", frequency: 49, durationSeconds: 0.22, gainScale },
-      { label: "A1", frequency: 55, durationSeconds: 0.22, gainScale },
-      { label: "B1", frequency: 61.74, durationSeconds: 0.3, gainScale },
+      { label: "E1", frequency: 41.2, durationSeconds: 0.22, gainScale, bassMachinePatch },
+      { label: "G1", frequency: 49, durationSeconds: 0.22, gainScale, bassMachinePatch },
+      { label: "A1", frequency: 55, durationSeconds: 0.22, gainScale, bassMachinePatch },
+      { label: "B1", frequency: 61.74, durationSeconds: 0.3, gainScale, bassMachinePatch },
     ];
 
     riffNotes.forEach((note, index) => {

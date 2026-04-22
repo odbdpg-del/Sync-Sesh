@@ -19,6 +19,8 @@ import type {
   SessionUser,
   SharedDawClipPublishPayload,
   SharedDawClipsState,
+  SharedDawLiveSoundEvent,
+  SharedDawLiveSoundPayload,
   SharedDawTransport,
   SharedDawTrackId,
   SyncStatus,
@@ -58,6 +60,7 @@ interface ThreeDModeShellProps {
   jukeboxActions?: JukeboxActions;
   sharedDawTransport: SharedDawTransport;
   sharedDawClips: SharedDawClipsState;
+  sharedDawLiveSound: SharedDawLiveSoundEvent | null;
   syncStatus: SyncStatus;
   canControlSharedDawTransport: boolean;
   canAdminSharedDawClips: boolean;
@@ -66,6 +69,7 @@ interface ThreeDModeShellProps {
   onStopSharedDawTransport: () => void;
   onPublishSharedDawClip: (clip: SharedDawClipPublishPayload) => void;
   onClearSharedDawClip: (trackId: SharedDawTrackId, sceneIndex: number) => void;
+  onBroadcastDawLiveSound: (sound: SharedDawLiveSoundPayload) => void;
   onExit: () => void;
 }
 
@@ -1689,17 +1693,20 @@ function hasMeaningfulPoseChange(previousPose: LocalPlayerPose | null, nextPose:
 }
 
 function FreeRoamPresenceReporter({
+  currentAreaIdRef,
   enabled,
   levelId,
   localPlayerPoseRef,
   onUpdateFreeRoamPresence,
 }: {
+  currentAreaIdRef: MutableRefObject<string | null>;
   enabled: boolean;
   levelId: string;
   localPlayerPoseRef: MutableRefObject<LocalPlayerPose | null>;
   onUpdateFreeRoamPresence: (presence: FreeRoamPresenceUpdate) => void;
 }) {
   const lastSentAtMsRef = useRef(0);
+  const lastSentAreaIdRef = useRef<string | null>(null);
   const lastSentLevelIdRef = useRef<string | null>(null);
   const lastSentPoseRef = useRef<LocalPlayerPose | null>(null);
 
@@ -1709,18 +1716,21 @@ function FreeRoamPresenceReporter({
     }
 
     const nowMs = clock.getElapsedTime() * 1000;
+    const currentAreaId = currentAreaIdRef.current;
+    const shouldSendForArea = lastSentAreaIdRef.current !== currentAreaId;
     const shouldSendForLevel = lastSentLevelIdRef.current !== levelId;
     const shouldSendForPose = hasMeaningfulPoseChange(lastSentPoseRef.current, localPlayerPoseRef.current);
 
-    if (!shouldSendForLevel && !shouldSendForPose) {
+    if (!shouldSendForArea && !shouldSendForLevel && !shouldSendForPose) {
       return;
     }
 
-    if (!shouldSendForLevel && nowMs - lastSentAtMsRef.current < FREE_ROAM_PRESENCE_INTERVAL_MS) {
+    if (!shouldSendForArea && !shouldSendForLevel && nowMs - lastSentAtMsRef.current < FREE_ROAM_PRESENCE_INTERVAL_MS) {
       return;
     }
 
     lastSentAtMsRef.current = nowMs;
+    lastSentAreaIdRef.current = currentAreaId;
     lastSentLevelIdRef.current = levelId;
     lastSentPoseRef.current = {
       position: [...localPlayerPoseRef.current.position],
@@ -1728,6 +1738,7 @@ function FreeRoamPresenceReporter({
     };
     onUpdateFreeRoamPresence({
       levelId,
+      areaId: currentAreaId,
       position: localPlayerPoseRef.current.position,
       yaw: localPlayerPoseRef.current.yaw,
     });
@@ -1972,6 +1983,57 @@ function resolveLocalStation(
   };
 }
 
+function playSharedDawLiveSound(sound: SharedDawLiveSoundEvent, localDawAudioActions: LocalDawAudioEngineActions) {
+  const gainScale = sound.gainScale ?? 1;
+
+  if (sound.kind === "drum" && sound.drumKind) {
+    localDawAudioActions.playDrumVoice({
+      kind: sound.drumKind,
+      label: sound.label,
+      gainScale,
+    }, { allowSound: true });
+    return;
+  }
+
+  if (sound.kind === "bass-pattern") {
+    localDawAudioActions.playBassPatternAudition(gainScale, sound.bassMachinePatch);
+    return;
+  }
+
+  if (sound.kind === "bass" && typeof sound.frequency === "number") {
+    localDawAudioActions.playBassNote({
+      label: sound.label,
+      frequency: sound.frequency,
+      durationSeconds: sound.durationSeconds,
+      gainScale,
+      bassMachinePatch: sound.bassMachinePatch,
+    });
+    return;
+  }
+
+  if (sound.kind === "piano" && typeof sound.frequency === "number") {
+    localDawAudioActions.playPianoLiveNote({
+      label: sound.label,
+      frequency: sound.frequency,
+      durationSeconds: sound.durationSeconds,
+      gainScale,
+      bassMachinePatch: sound.bassMachinePatch,
+      fmSynthPatch: sound.fmSynthPatch,
+    }, sound.pianoTarget ?? "fm-synth", { allowSound: true });
+    return;
+  }
+
+  if (sound.kind === "fm-synth" && typeof sound.frequency === "number") {
+    localDawAudioActions.playFmSynthNote({
+      label: sound.label,
+      frequency: sound.frequency,
+      durationSeconds: sound.durationSeconds,
+      gainScale,
+      fmSynthPatch: sound.fmSynthPatch,
+    });
+  }
+}
+
 export function ThreeDModeShell({
   countdownDisplay,
   users,
@@ -1987,6 +2049,7 @@ export function ThreeDModeShell({
   jukeboxActions,
   sharedDawTransport,
   sharedDawClips,
+  sharedDawLiveSound,
   syncStatus,
   canControlSharedDawTransport,
   canAdminSharedDawClips,
@@ -1995,6 +2058,7 @@ export function ThreeDModeShell({
   onStopSharedDawTransport,
   onPublishSharedDawClip,
   onClearSharedDawClip,
+  onBroadcastDawLiveSound,
   onExit,
 }: ThreeDModeShellProps) {
   const [currentLevelId, setCurrentLevelId] = useState(getRequestedLevelId);
@@ -2012,6 +2076,7 @@ export function ThreeDModeShell({
   const localPlayerPoseRef = useRef<LocalPlayerPose | null>(null);
   const currentAreaIdRef = useRef<string | null>(null);
   const areaFeedbackKeyRef = useRef(0);
+  const lastPlayedSharedDawLiveSoundIdRef = useRef<string | null>(null);
   const { state: localDawState, actions: localDawActions } = useLocalDawState();
   const { state: localDawAudioState, actions: localDawAudioActions } = useLocalDawAudioEngine();
   const stationAssignments = useMemo(() => getUserStationAssignments(users, levelConfig), [levelConfig, users]);
@@ -2073,6 +2138,36 @@ export function ThreeDModeShell({
   useEffect(() => {
     localDawActions.applySharedClipsSnapshot(sharedDawClips);
   }, [localDawActions, sharedDawClips, sharedDawClips.revision]);
+
+  useEffect(() => {
+    if (!sharedDawLiveSound || sharedDawLiveSound.id === lastPlayedSharedDawLiveSoundIdRef.current) {
+      return;
+    }
+
+    lastPlayedSharedDawLiveSoundIdRef.current = sharedDawLiveSound.id;
+
+    if (
+      sharedDawLiveSound.triggeredByUserId === localUserId ||
+      sharedDawLiveSound.areaId !== "recording-studio" ||
+      currentAreaIdRef.current !== "recording-studio"
+    ) {
+      return;
+    }
+
+    const triggeredAtMs = Date.parse(sharedDawLiveSound.triggeredAt);
+    const serverAlignedNowMs = Date.now() + (syncStatus.serverTimeOffsetMs ?? 0);
+
+    if (!Number.isFinite(triggeredAtMs) || serverAlignedNowMs - triggeredAtMs > 5000) {
+      return;
+    }
+
+    playSharedDawLiveSound(sharedDawLiveSound, localDawAudioActions);
+  }, [
+    localDawAudioActions,
+    localUserId,
+    sharedDawLiveSound,
+    syncStatus.serverTimeOffsetMs,
+  ]);
 
   const handleReturnToDashboard = useCallback(() => {
     setRevealState("returning");
@@ -2218,6 +2313,7 @@ export function ThreeDModeShell({
                 prefersReducedMotion={prefersReducedMotion}
               />
               <FreeRoamPresenceReporter
+                currentAreaIdRef={currentAreaIdRef}
                 enabled={status === "ready" && revealState === "complete"}
                 levelId={levelConfig.id}
                 localPlayerPoseRef={localPlayerPoseRef}
@@ -2260,6 +2356,7 @@ export function ThreeDModeShell({
                 localUserIdForSharedDawClips={localUserId}
                 onPublishSharedDawClip={onPublishSharedDawClip}
                 onClearSharedDawClip={onClearSharedDawClip}
+                onBroadcastDawLiveSound={onBroadcastDawLiveSound}
               />
               {isTopDownViewActive && topDownMarkerPosition ? <LocalPositionMarker position={topDownMarkerPosition} /> : null}
             </Canvas>

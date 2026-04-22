@@ -49,6 +49,7 @@ import type {
   FreeRoamPresenceState,
   SharedDawClipPublishPayload,
   SharedDawClipsState,
+  SharedDawLiveSoundPayload,
   SharedDawTrackId,
   SharedDawTransport,
   SessionUser,
@@ -302,6 +303,8 @@ const STUDIO_ROLE_PROXIMITY_RADIUS = 2.15;
 const STUDIO_PIANO_POSITION: Vec3 = [-17.2, 0, -1.35];
 const STUDIO_DRUM_KIT_POSITION: Vec3 = [-14.35, 0, 1.42];
 const STUDIO_DISPLAY_MAX_MASTER_VOLUME = 0.5;
+const FM_SYNTH_UI_GAIN_MAX = 0.16;
+const FM_SYNTH_UI_GAIN_STEP = 0.04;
 const STUDIO_ROLE_SPECS: StudioRoleSpec[] = [
   {
     id: "daw",
@@ -1508,11 +1511,13 @@ function StudioFmSynthControls({
   localDawAudioActions,
   localDawAudioState,
   localDawState,
+  onBroadcastDawLiveSound,
   phaseVisuals,
 }: {
   localDawAudioActions?: LocalDawAudioEngineActions;
   localDawAudioState?: LocalDawAudioEngineState;
   localDawState?: LocalDawState;
+  onBroadcastDawLiveSound?: (sound: SharedDawLiveSoundPayload) => void;
   phaseVisuals: PhaseVisuals;
 }) {
   const patch = localDawAudioState?.fmSynthPatch;
@@ -1559,7 +1564,7 @@ function StudioFmSynthControls({
     }
 
     localDawAudioActions?.adjustFmSynthPatch({
-      gain: patch.gain >= 0.16 ? 0.04 : patch.gain + 0.02,
+      gain: patch.gain >= FM_SYNTH_UI_GAIN_MAX ? FM_SYNTH_UI_GAIN_STEP : patch.gain + FM_SYNTH_UI_GAIN_STEP,
     });
   }, [localDawAudioActions, patch]);
   const controls = useMemo<StudioFmSynthControlSpec[]>(() => {
@@ -1580,6 +1585,16 @@ function StudioFmSynthControls({
           ...note,
           gainScale,
         });
+        if (gainScale > 0) {
+          onBroadcastDawLiveSound?.({
+            areaId: "recording-studio",
+            kind: "fm-synth",
+            label: note.label,
+            frequency: note.frequency,
+            gainScale,
+            fmSynthPatch: patch,
+          });
+        }
       },
     }));
     const patchControls: StudioFmSynthControlSpec[] = [
@@ -1622,7 +1637,7 @@ function StudioFmSynthControls({
       {
         id: "gain",
         label: "Gain",
-        caption: `${Math.round(patch.gain * 100)}% Gain`,
+        caption: `${Math.min(100, Math.round((patch.gain / FM_SYNTH_UI_GAIN_MAX) * 100))}% Gain`,
         position: [0.7, 0.998, -0.43],
         size: [0.24, 0.032, 0.12],
         accentColor: phaseVisuals.timerAccent,
@@ -1640,6 +1655,7 @@ function StudioFmSynthControls({
     localDawAudioActions,
     localDawAudioState?.lastFmSynthNoteLabel,
     gainScale,
+    onBroadcastDawLiveSound,
     patch,
     phaseVisuals.gridPrimary,
     phaseVisuals.gridSecondary,
@@ -1706,11 +1722,13 @@ function StudioDrumMachineControls({
   localDawAudioActions,
   localDawAudioState,
   localDawState,
+  onBroadcastDawLiveSound,
   phaseVisuals,
 }: {
   localDawAudioActions?: LocalDawAudioEngineActions;
   localDawAudioState?: LocalDawAudioEngineState;
   localDawState?: LocalDawState;
+  onBroadcastDawLiveSound?: (sound: SharedDawLiveSoundPayload) => void;
   phaseVisuals: PhaseVisuals;
 }) {
   const gainScale = getTrackGainScale(localDawState, "drums");
@@ -1732,6 +1750,15 @@ function StudioDrumMachineControls({
           ...hit,
           gainScale,
         }, { allowSound });
+        if (allowSound && gainScale > 0) {
+          onBroadcastDawLiveSound?.({
+            areaId: "recording-studio",
+            kind: "drum",
+            label: hit.label,
+            drumKind: hit.kind,
+            gainScale,
+          });
+        }
       },
     };
   }), [
@@ -1739,6 +1766,7 @@ function StudioDrumMachineControls({
     localDawAudioActions,
     localDawAudioState?.lastDrumHitLabel,
     localDawState,
+    onBroadcastDawLiveSound,
     phaseVisuals.gridPrimary,
     phaseVisuals.gridSecondary,
   ]);
@@ -2398,12 +2426,14 @@ function StudioDrumKitPiece({
   gainScale,
   isActive,
   localDawAudioActions,
+  onBroadcastDawLiveSound,
   piece,
 }: {
   allowSound: boolean;
   gainScale: number;
   isActive: boolean;
   localDawAudioActions?: LocalDawAudioEngineActions;
+  onBroadcastDawLiveSound?: (sound: SharedDawLiveSoundPayload) => void;
   piece: StudioDrumKitPieceSpec;
 }) {
   const triggerRef = useRef<React.ElementRef<"mesh">>(null);
@@ -2423,8 +2453,17 @@ function StudioDrumKitPiece({
         ...piece.hit,
         gainScale,
       }, { allowSound });
+      if (allowSound && gainScale > 0) {
+        onBroadcastDawLiveSound?.({
+          areaId: "recording-studio",
+          kind: "drum",
+          label: piece.hit.label,
+          drumKind: piece.hit.kind,
+          gainScale,
+        });
+      }
     },
-  }), [allowSound, gainScale, localDawAudioActions, piece.hit, piece.id, piece.label]));
+  }), [allowSound, gainScale, localDawAudioActions, onBroadcastDawLiveSound, piece.hit, piece.id, piece.label]));
 
   return (
     <group position={piece.position}>
@@ -2455,11 +2494,13 @@ function StudioDrumKit({
   localDawAudioActions,
   localDawAudioState,
   localDawState,
+  onBroadcastDawLiveSound,
   phaseVisuals,
 }: {
   localDawAudioActions?: LocalDawAudioEngineActions;
   localDawAudioState?: LocalDawAudioEngineState;
   localDawState?: LocalDawState;
+  onBroadcastDawLiveSound?: (sound: SharedDawLiveSoundPayload) => void;
   phaseVisuals: PhaseVisuals;
 }) {
   const gainScale = getTrackGainScale(localDawState, "drums");
@@ -2532,6 +2573,7 @@ function StudioDrumKit({
           gainScale={gainScale}
           isActive={localDawAudioState?.lastDrumHitLabel === piece.hit.label}
           localDawAudioActions={localDawAudioActions}
+          onBroadcastDawLiveSound={onBroadcastDawLiveSound}
           piece={piece}
         />
       ))}
@@ -2599,11 +2641,13 @@ function StudioBassMachineControls({
   localDawAudioActions,
   localDawAudioState,
   localDawState,
+  onBroadcastDawLiveSound,
   phaseVisuals,
 }: {
   localDawAudioActions?: LocalDawAudioEngineActions;
   localDawAudioState?: LocalDawAudioEngineState;
   localDawState?: LocalDawState;
+  onBroadcastDawLiveSound?: (sound: SharedDawLiveSoundPayload) => void;
   phaseVisuals: PhaseVisuals;
 }) {
   const patch = localDawAudioState?.bassMachinePatch;
@@ -2671,6 +2715,16 @@ function StudioBassMachineControls({
           ...note,
           gainScale,
         });
+        if (gainScale > 0) {
+          onBroadcastDawLiveSound?.({
+            areaId: "recording-studio",
+            kind: "bass",
+            label: note.label,
+            frequency: note.frequency,
+            gainScale,
+            bassMachinePatch: patch,
+          });
+        }
       },
     }));
     const patchControls: StudioBassControlSpec[] = [
@@ -2729,6 +2783,15 @@ function StudioBassMachineControls({
         isActive: localDawAudioState?.isBassPatternAuditioning,
         onActivate: () => {
           localDawAudioActions?.playBassPatternAudition(gainScale);
+          if (gainScale > 0) {
+            onBroadcastDawLiveSound?.({
+              areaId: "recording-studio",
+              kind: "bass-pattern",
+              label: "Bass Riff",
+              gainScale,
+              bassMachinePatch: patch,
+            });
+          }
         },
       },
     ];
@@ -2744,6 +2807,7 @@ function StudioBassMachineControls({
     localDawAudioActions,
     localDawAudioState?.isBassPatternAuditioning,
     localDawAudioState?.lastBassNoteLabel,
+    onBroadcastDawLiveSound,
     patch,
     phaseVisuals.gridPrimary,
     phaseVisuals.gridSecondary,
@@ -4907,6 +4971,7 @@ function StudioPianoShell({
   localDawAudioActions,
   localDawAudioState,
   localDawState,
+  onBroadcastDawLiveSound,
   position,
 }: {
   accentColor: string;
@@ -4914,6 +4979,7 @@ function StudioPianoShell({
   localDawAudioActions?: LocalDawAudioEngineActions;
   localDawAudioState?: LocalDawAudioEngineState;
   localDawState?: LocalDawState;
+  onBroadcastDawLiveSound?: (sound: SharedDawLiveSoundPayload) => void;
   position: Vec3;
 }) {
   const whiteKeySpacing = 0.172;
@@ -4992,7 +5058,9 @@ function StudioPianoShell({
           isBlack={false}
           localDawActions={localDawActions}
           localDawAudioActions={localDawAudioActions}
+          localDawAudioState={localDawAudioState}
           note={note}
+          onBroadcastDawLiveSound={onBroadcastDawLiveSound}
           position={[-1.12 + index * whiteKeySpacing, 0.83, 0.26]}
           size={[0.13, 0.024, 0.31]}
           target={liveTarget}
@@ -5008,7 +5076,9 @@ function StudioPianoShell({
           isBlack
           localDawActions={localDawActions}
           localDawAudioActions={localDawAudioActions}
+          localDawAudioState={localDawAudioState}
           note={note}
+          onBroadcastDawLiveSound={onBroadcastDawLiveSound}
           position={[-1.12 + ((note.whiteKeyIndex ?? 0) + 0.5) * whiteKeySpacing, 0.852, 0.19]}
           size={[0.088, 0.03, 0.18]}
           target={liveTarget}
@@ -5074,7 +5144,9 @@ function StudioPianoKey({
   isBlack,
   localDawActions,
   localDawAudioActions,
+  localDawAudioState,
   note,
+  onBroadcastDawLiveSound,
   position,
   size,
   target,
@@ -5086,7 +5158,9 @@ function StudioPianoKey({
   isBlack: boolean;
   localDawActions?: LocalDawActions;
   localDawAudioActions?: LocalDawAudioEngineActions;
+  localDawAudioState?: LocalDawAudioEngineState;
   note: LocalDawPianoLiveNote;
+  onBroadcastDawLiveSound?: (sound: SharedDawLiveSoundPayload) => void;
   position: Vec3;
   size: Vec3;
   target: LocalDawPianoLiveTarget;
@@ -5105,8 +5179,31 @@ function StudioPianoKey({
         gainScale,
       }, target, { allowSound });
       localDawActions?.recordPianoNoteEvent(note);
+      if (allowSound && gainScale > 0) {
+        onBroadcastDawLiveSound?.({
+          areaId: "recording-studio",
+          kind: "piano",
+          label: note.label,
+          frequency: note.frequency,
+          durationSeconds: note.durationSeconds,
+          gainScale,
+          pianoTarget: target,
+          bassMachinePatch: target === "bass" ? localDawAudioState?.bassMachinePatch : undefined,
+          fmSynthPatch: target === "fm-synth" ? localDawAudioState?.fmSynthPatch : undefined,
+        });
+      }
     },
-  }), [allowSound, gainScale, localDawActions, localDawAudioActions, note, target]));
+  }), [
+    allowSound,
+    gainScale,
+    localDawActions,
+    localDawAudioActions,
+    localDawAudioState?.bassMachinePatch,
+    localDawAudioState?.fmSynthPatch,
+    note,
+    onBroadcastDawLiveSound,
+    target,
+  ]));
 
   return (
     <group position={position}>
@@ -5735,6 +5832,7 @@ export function Level1RecordingStudioRoom({
   localUserIdForSharedDawClips,
   onPublishSharedDawClip,
   onClearSharedDawClip,
+  onBroadcastDawLiveSound,
 }: {
   area: LevelAreaConfig;
   opening: LevelOpeningConfig;
@@ -5757,6 +5855,7 @@ export function Level1RecordingStudioRoom({
   localUserIdForSharedDawClips?: string;
   onPublishSharedDawClip?: (clip: SharedDawClipPublishPayload) => void;
   onClearSharedDawClip?: (trackId: SharedDawTrackId, sceneIndex: number) => void;
+  onBroadcastDawLiveSound?: (sound: SharedDawLiveSoundPayload) => void;
 }) {
   const width = area.bounds.max[0] - area.bounds.min[0];
   const depth = area.bounds.max[2] - area.bounds.min[2];
@@ -5924,9 +6023,16 @@ export function Level1RecordingStudioRoom({
         localDawActions={localDawActions}
         localDawAudioState={localDawAudioState}
         localDawAudioActions={localDawAudioActions}
+        onBroadcastDawLiveSound={onBroadcastDawLiveSound}
         position={STUDIO_PIANO_POSITION}
       />
-      <StudioFmSynthControls localDawState={localDawState} localDawAudioState={localDawAudioState} localDawAudioActions={localDawAudioActions} phaseVisuals={phaseVisuals} />
+      <StudioFmSynthControls
+        localDawState={localDawState}
+        localDawAudioState={localDawAudioState}
+        localDawAudioActions={localDawAudioActions}
+        onBroadcastDawLiveSound={onBroadcastDawLiveSound}
+        phaseVisuals={phaseVisuals}
+      />
       <StudioDeskShell
         accentColor="#f8d36a"
         label="Looper"
@@ -5936,11 +6042,18 @@ export function Level1RecordingStudioRoom({
         variant="looper"
       />
       <StudioLooperControls localDawState={localDawState} localDawActions={localDawActions} phaseVisuals={phaseVisuals} />
-      <StudioDrumMachineControls localDawState={localDawState} localDawAudioState={localDawAudioState} localDawAudioActions={localDawAudioActions} phaseVisuals={phaseVisuals} />
+      <StudioDrumMachineControls
+        localDawState={localDawState}
+        localDawAudioState={localDawAudioState}
+        localDawAudioActions={localDawAudioActions}
+        onBroadcastDawLiveSound={onBroadcastDawLiveSound}
+        phaseVisuals={phaseVisuals}
+      />
       <StudioDrumKit
         localDawState={localDawState}
         localDawAudioState={localDawAudioState}
         localDawAudioActions={localDawAudioActions}
+        onBroadcastDawLiveSound={onBroadcastDawLiveSound}
         phaseVisuals={phaseVisuals}
       />
       <StudioDeskShell
@@ -5953,7 +6066,13 @@ export function Level1RecordingStudioRoom({
       />
       <StudioDjControls localDawState={localDawState} localDawActions={localDawActions} phaseVisuals={phaseVisuals} />
       <StudioRackShell accentColor={phaseVisuals.gridPrimary} label="Instrument Rack" position={[-20.1, 0, -8.32]} />
-      <StudioBassMachineControls localDawState={localDawState} localDawAudioState={localDawAudioState} localDawAudioActions={localDawAudioActions} phaseVisuals={phaseVisuals} />
+      <StudioBassMachineControls
+        localDawState={localDawState}
+        localDawAudioState={localDawAudioState}
+        localDawAudioActions={localDawAudioActions}
+        onBroadcastDawLiveSound={onBroadcastDawLiveSound}
+        phaseVisuals={phaseVisuals}
+      />
       <StudioRackShell accentColor={phaseVisuals.timerAccent} label="Effects Rack" position={[-13.8, 0, -8.32]} />
       <StudioFilterEffectControls localDawAudioState={localDawAudioState} localDawAudioActions={localDawAudioActions} phaseVisuals={phaseVisuals} />
       <StudioAutopanEffectControls localDawAudioState={localDawAudioState} localDawAudioActions={localDawAudioActions} phaseVisuals={phaseVisuals} />

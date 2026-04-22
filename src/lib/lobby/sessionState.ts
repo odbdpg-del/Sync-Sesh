@@ -22,6 +22,7 @@ import type {
   SharedDawClipKind,
   SharedDawClipPublishPayload,
   SharedDawControlEvent,
+  SharedDawLiveSoundPayload,
   SharedDawMidiNote,
 } from "../../types/session";
 
@@ -40,6 +41,25 @@ const MAX_SHARED_CLIP_NOTES = 128;
 const MAX_SHARED_CLIP_CONTROL_EVENTS = 64;
 const MAX_SHARED_CLIP_JSON_CHARS = 16000;
 const SHARED_DAW_SCENE_COUNT = 4;
+const MAX_DAW_LIVE_SOUND_LABEL_LENGTH = 16;
+const MIN_FM_FREQUENCY = 55;
+const MAX_FM_FREQUENCY = 1760;
+const MIN_FM_RATIO = 0.25;
+const MAX_FM_RATIO = 8;
+const MIN_FM_INDEX = 0;
+const MAX_FM_INDEX = 2.5;
+const MIN_FM_GAIN = 0;
+const MAX_FM_GAIN = 0.18;
+const MIN_BASS_CUTOFF_FREQUENCY = 120;
+const MAX_BASS_CUTOFF_FREQUENCY = 2400;
+const MIN_BASS_RESONANCE = 0.4;
+const MAX_BASS_RESONANCE = 8;
+const MIN_BASS_ENVELOPE_AMOUNT = 0;
+const MAX_BASS_ENVELOPE_AMOUNT = 1800;
+const MIN_BASS_DECAY_SECONDS = 0.12;
+const MAX_BASS_DECAY_SECONDS = 1.2;
+const MIN_BASS_GAIN = 0;
+const MAX_BASS_GAIN = 0.16;
 
 function createEmptyCountdown(): CountdownTimeline {
   return {};
@@ -107,8 +127,13 @@ function sanitizeFreeRoamPresenceUpdate(presence: FreeRoamPresenceUpdate) {
     return null;
   }
 
+  const areaId = typeof presence.areaId === "string" && /^[a-z0-9-]{1,48}$/i.test(presence.areaId.trim())
+    ? presence.areaId.trim()
+    : null;
+
   return {
     levelId,
+    areaId,
     position: [
       roundTo(clampNumber(presence.position[0], -100, 100), 2),
       roundTo(clampNumber(presence.position[1], 0, 20), 2),
@@ -389,6 +414,141 @@ function isEligibleDawClipActor(snapshot: SessionSnapshot, actor: LocalProfile) 
   return Boolean(actorUser && actorUser.presence !== "spectating");
 }
 
+function isSharedDawLiveSoundKind(kind: string): kind is SharedDawLiveSoundPayload["kind"] {
+  return kind === "fm-synth" || kind === "bass" || kind === "bass-pattern" || kind === "drum" || kind === "piano";
+}
+
+function isSharedDawLiveDrumKind(kind: unknown): kind is NonNullable<SharedDawLiveSoundPayload["drumKind"]> {
+  return kind === "kick" || kind === "snare" || kind === "hat";
+}
+
+function isSharedDawLivePianoTarget(target: unknown): target is NonNullable<SharedDawLiveSoundPayload["pianoTarget"]> {
+  return target === "fm-synth" || target === "bass";
+}
+
+function isSharedDawLiveFmSynthEnvelopePreset(preset: unknown): preset is NonNullable<SharedDawLiveSoundPayload["fmSynthPatch"]>["envelopePreset"] {
+  return preset === "pluck" || preset === "stab" || preset === "pad";
+}
+
+function isSharedDawLiveBassWaveform(waveform: unknown): waveform is NonNullable<SharedDawLiveSoundPayload["bassMachinePatch"]>["waveform"] {
+  return waveform === "sawtooth" || waveform === "square";
+}
+
+function sanitizeSharedDawLiveFmSynthPatch(patch: SharedDawLiveSoundPayload["fmSynthPatch"]) {
+  if (!patch || typeof patch !== "object") {
+    return undefined;
+  }
+
+  return {
+    carrierFrequency: clampNumber(patch.carrierFrequency, MIN_FM_FREQUENCY, MAX_FM_FREQUENCY),
+    modulationRatio: clampNumber(patch.modulationRatio, MIN_FM_RATIO, MAX_FM_RATIO),
+    modulationIndex: clampNumber(patch.modulationIndex, MIN_FM_INDEX, MAX_FM_INDEX),
+    envelopePreset: isSharedDawLiveFmSynthEnvelopePreset(patch.envelopePreset) ? patch.envelopePreset : "pluck",
+    gain: clampNumber(patch.gain, MIN_FM_GAIN, MAX_FM_GAIN),
+  };
+}
+
+function sanitizeSharedDawLiveBassMachinePatch(patch: SharedDawLiveSoundPayload["bassMachinePatch"]) {
+  if (!patch || typeof patch !== "object") {
+    return undefined;
+  }
+
+  return {
+    waveform: isSharedDawLiveBassWaveform(patch.waveform) ? patch.waveform : "sawtooth",
+    cutoffFrequency: clampNumber(patch.cutoffFrequency, MIN_BASS_CUTOFF_FREQUENCY, MAX_BASS_CUTOFF_FREQUENCY),
+    resonance: clampNumber(patch.resonance, MIN_BASS_RESONANCE, MAX_BASS_RESONANCE),
+    envelopeAmount: clampNumber(patch.envelopeAmount, MIN_BASS_ENVELOPE_AMOUNT, MAX_BASS_ENVELOPE_AMOUNT),
+    decaySeconds: clampNumber(patch.decaySeconds, MIN_BASS_DECAY_SECONDS, MAX_BASS_DECAY_SECONDS),
+    gain: clampNumber(patch.gain, MIN_BASS_GAIN, MAX_BASS_GAIN),
+  };
+}
+
+function isActorFreshInArea(snapshot: SessionSnapshot, actor: LocalProfile, areaId: string, nowMs: number) {
+  const actorPresence = snapshot.freeRoamPresence.find((presence) => presence.userId === actor.id);
+
+  if (!actorPresence || actorPresence.areaId !== areaId) {
+    return false;
+  }
+
+  const updatedAtMs = Date.parse(actorPresence.updatedAt);
+  return Number.isFinite(updatedAtMs) && nowMs - updatedAtMs <= FREE_ROAM_PRESENCE_TTL_MS;
+}
+
+function sanitizeSharedDawLiveSoundPayload(sound: SharedDawLiveSoundPayload): SharedDawLiveSoundPayload | null {
+  if (sound.areaId !== "recording-studio" || !isSharedDawLiveSoundKind(sound.kind)) {
+    return null;
+  }
+
+  const label = sanitizeSharedLabel(sound.label, MAX_DAW_LIVE_SOUND_LABEL_LENGTH);
+  const fmSynthPatch = sanitizeSharedDawLiveFmSynthPatch(sound.fmSynthPatch);
+  const bassMachinePatch = sanitizeSharedDawLiveBassMachinePatch(sound.bassMachinePatch);
+
+  if (!label) {
+    return null;
+  }
+
+  const gainScale = sound.gainScale === undefined ? undefined : clampNumber(sound.gainScale, 0, 1);
+  const durationSeconds = sound.durationSeconds === undefined ? undefined : clampNumber(sound.durationSeconds, 0.05, 2);
+
+  if (sound.kind === "drum") {
+    if (!isSharedDawLiveDrumKind(sound.drumKind)) {
+      return null;
+    }
+
+    return {
+      areaId: sound.areaId,
+      kind: "drum",
+      label,
+      drumKind: sound.drumKind,
+      gainScale,
+    };
+  }
+
+  if (sound.kind === "bass-pattern") {
+    return {
+      areaId: sound.areaId,
+      kind: "bass-pattern",
+      label,
+      gainScale,
+      bassMachinePatch,
+    };
+  }
+
+  if (typeof sound.frequency !== "number" || !Number.isFinite(sound.frequency)) {
+    return null;
+  }
+
+  const frequency = clampNumber(sound.frequency, 20, 20_000);
+
+  if (sound.kind === "piano") {
+    return {
+      areaId: sound.areaId,
+      kind: "piano",
+      label,
+      frequency,
+      durationSeconds,
+      gainScale,
+      pianoTarget: isSharedDawLivePianoTarget(sound.pianoTarget) ? sound.pianoTarget : "fm-synth",
+      fmSynthPatch,
+      bassMachinePatch,
+    };
+  }
+
+  const patchFields = sound.kind === "bass"
+    ? { bassMachinePatch }
+    : { fmSynthPatch };
+
+  return {
+    areaId: sound.areaId,
+    kind: sound.kind,
+    label,
+    frequency,
+    durationSeconds,
+    gainScale,
+    ...patchFields,
+  };
+}
+
 function parseTimestamp(value?: string) {
   return value ? Date.parse(value) : undefined;
 }
@@ -576,6 +736,7 @@ export function createSessionSnapshot(overrides?: Partial<SessionSnapshot>): Ses
     freeRoamPresence: [],
     dawTransport: createInitialSharedDawTransport(),
     dawClips: createInitialSharedDawClipsState(),
+    dawLiveSound: null,
   };
 
   return {
@@ -602,6 +763,7 @@ export function createSessionSnapshot(overrides?: Partial<SessionSnapshot>): Ses
       ...overrides?.dawClips,
       clips: overrides?.dawClips?.clips ?? base.dawClips.clips,
     },
+    dawLiveSound: overrides?.dawLiveSound ?? base.dawLiveSound,
     users: overrides?.users ?? base.users,
   };
 }
@@ -633,6 +795,7 @@ export function normalizeSessionSnapshot(snapshot: SessionSnapshot): SessionSnap
     ...snapshot,
     dawTransport: snapshot.dawTransport ?? createInitialSharedDawTransport(),
     dawClips: snapshot.dawClips ?? createInitialSharedDawClipsState(),
+    dawLiveSound: snapshot.dawLiveSound ?? null,
   };
 }
 
@@ -936,6 +1099,7 @@ export function reduceSessionEvent(snapshot: SessionSnapshot, event: SessionEven
         rangeScoreboard: [],
         freeRoamPresence: [],
         dawClips: createInitialSharedDawClipsState(new Date(nowMs).toISOString()),
+        dawLiveSound: null,
         session: {
           ...snapshot.session,
           phase: getBaseLobbyPhase(nextUsers),
@@ -1099,6 +1263,35 @@ export function reduceSessionEvent(snapshot: SessionSnapshot, event: SessionEven
       return {
         ...snapshot,
         freeRoamPresence: nextFreeRoamPresence,
+      };
+    }
+    case "daw_live_sound": {
+      if (!isEligibleDawClipActor(snapshot, actor)) {
+        return snapshot;
+      }
+
+      const sound = sanitizeSharedDawLiveSoundPayload(event.sound);
+
+      if (!sound) {
+        return snapshot;
+      }
+
+      if (!isActorFreshInArea(snapshot, actor, sound.areaId, nowMs)) {
+        return snapshot;
+      }
+
+      const triggeredAt = new Date(nowMs).toISOString();
+      const revision = (snapshot.dawLiveSound?.revision ?? 0) + 1;
+
+      return {
+        ...snapshot,
+        dawLiveSound: {
+          ...sound,
+          id: `${actor.id}-${nowMs}-${revision}`,
+          triggeredAt,
+          triggeredByUserId: actor.id,
+          revision,
+        },
       };
     }
     case "daw_transport_set_tempo": {

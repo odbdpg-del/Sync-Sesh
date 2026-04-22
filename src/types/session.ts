@@ -80,6 +80,7 @@ export interface RangeScoreResult extends RangeScoreSubmission {
 
 export interface FreeRoamPresenceUpdate {
   levelId: string;
+  areaId?: string | null;
   position: readonly [number, number, number];
   yaw: number;
 }
@@ -166,6 +167,49 @@ export interface SharedDawClipsState {
   updatedAt: string;
 }
 
+export type SharedDawLiveSoundKind = "fm-synth" | "bass" | "bass-pattern" | "drum" | "piano";
+export type SharedDawLiveDrumKind = "kick" | "snare" | "hat";
+export type SharedDawLivePianoTarget = "fm-synth" | "bass";
+export type SharedDawLiveFmSynthEnvelopePreset = "pluck" | "stab" | "pad";
+export type SharedDawLiveBassWaveform = "sawtooth" | "square";
+
+export interface SharedDawLiveFmSynthPatch {
+  carrierFrequency: number;
+  modulationRatio: number;
+  modulationIndex: number;
+  envelopePreset: SharedDawLiveFmSynthEnvelopePreset;
+  gain: number;
+}
+
+export interface SharedDawLiveBassMachinePatch {
+  waveform: SharedDawLiveBassWaveform;
+  cutoffFrequency: number;
+  resonance: number;
+  envelopeAmount: number;
+  decaySeconds: number;
+  gain: number;
+}
+
+export interface SharedDawLiveSoundPayload {
+  areaId: "recording-studio";
+  kind: SharedDawLiveSoundKind;
+  label: string;
+  frequency?: number;
+  durationSeconds?: number;
+  gainScale?: number;
+  drumKind?: SharedDawLiveDrumKind;
+  pianoTarget?: SharedDawLivePianoTarget;
+  fmSynthPatch?: SharedDawLiveFmSynthPatch;
+  bassMachinePatch?: SharedDawLiveBassMachinePatch;
+}
+
+export interface SharedDawLiveSoundEvent extends SharedDawLiveSoundPayload {
+  id: string;
+  triggeredAt: string;
+  triggeredByUserId: string;
+  revision: number;
+}
+
 export interface SyncStatus {
   mode: SyncTransportMode;
   connection: SyncConnectionState;
@@ -184,6 +228,7 @@ export interface SessionSnapshot {
   freeRoamPresence: FreeRoamPresenceState[];
   dawTransport: SharedDawTransport;
   dawClips: SharedDawClipsState;
+  dawLiveSound: SharedDawLiveSoundEvent | null;
 }
 
 export interface DabSyncState extends SessionSnapshot {
@@ -240,4 +285,5 @@ export type SessionEvent =
   | { type: "daw_transport_play" }
   | { type: "daw_transport_stop" }
   | { type: "daw_clip_publish"; clip: SharedDawClipPublishPayload }
-  | { type: "daw_clip_clear"; trackId: SharedDawTrackId; sceneIndex: number };
+  | { type: "daw_clip_clear"; trackId: SharedDawTrackId; sceneIndex: number }
+  | { type: "daw_live_sound"; sound: SharedDawLiveSoundPayload };
