@@ -51,16 +51,20 @@
 - Verify decorative workstation, lounge, and kitchen props are not clickable and do not return to the dashboard.
 - Verify movement lanes remain usable around the Control Room.
 
-### Range Opening And Range Challenge
+### Range Separation And Challenge
 
-- Walk through the Control Room range opening without pressing E.
-- Verify the range hallway/opening is not blocked by a door, panel, prop, or collision blocker.
-- Enter the range and verify targets/challenge UI render correctly.
+- Verify the old Control Room east range opening is sealed or physically blocked in Level 1.
+- Verify Level 1 does not render range lanes, targets, HITS display, or local range challenge UI.
+- Locate the Level 1 east-wall RANGE door/panel and verify it is readable in first-person and top-down views.
+- Click once to focus controls and verify this does not activate the RANGE door.
+- Aim at the Level 1 RANGE door and press E; verify the shell switches to `data-level-id="level-2-range"`.
+- Return to Level 1 from the Level 2 BACK door and verify the Level 1 east wall remains a blocked wall with only the door interaction active.
+- Open with `?level=level-2-range`, type `syncsesh`, and verify the standalone range loads.
 - Click once to focus controls and verify this does not immediately fire a target.
-- Aim at targets and primary-click; verify shooting still works.
-- Verify target hit feedback, score/hits/miss/accuracy behavior, and challenge reset/completion still work.
+- Aim at targets and primary-click; verify shooting still works in Level 2.
+- Verify target hit feedback, score/hits/miss/accuracy behavior, and challenge reset/completion still work in Level 2.
 - Press Tab during range use and verify top-down disables shooting and reticle interaction.
-- Exit the range area and verify the Control Room remains reachable.
+- Aim at the Level 2 BACK door and press E; verify returning to Level 1 still works.
 
 ### Presence And Sim Roaming
 
@@ -84,6 +88,66 @@
 - Aim at the jukebox retry control and press E; verify it calls the existing retry behavior.
 - Verify `next`, `playlist-change`, `page-up`, and `page-down` remain visual-only and unregistered.
 - Verify jukebox controls do not interfere with range shooting, local monitor return, movement focus, pointer lock, or normal SoundCloud behavior.
+
+### SoundCloud DJ Booth Enrichment
+
+- Enter the 3D world and verify the SoundCloud DJ booth renders Deck A, Deck B, the seek/cue panels, and the center mixer.
+- Verify BPM labels distinguish accepted metadata, accepted waveform, accepted length, manual trim, and unloaded state.
+- Verify Deck A/B mute, sync, and BPM tool buttons are readable, reachable, and do not overlap existing DJ controls.
+- Verify Deck B's Sync, Play, Mute/Open, and Shuffle buttons mirror Deck A's correct row layout instead of drifting toward the center.
+- Verify a track with no SoundCloud BPM can show `BPM WAVE` after waveform analysis when confidence is high enough.
+- Verify tracks with low-confidence waveform analysis show `BPM --` until the user accepts another BPM method or manually trims BPM.
+- Aim at Deck A/B `META`, `WAVE`, and `LEN` BPM buttons and verify the deck monitor accepts that BPM source or shows useful feedback such as `NO META`, `NO WAVE`, or `NO LENGTH`.
+- Aim at Deck A/B `BPM-` and `BPM+` buttons and verify the deck monitor changes by 0.1 BPM and labels the source as `MANUAL`.
+- Aim at Deck A/B `CLEAR` and verify the deck monitor returns to `BPM --`.
+- Aim at Deck A Mute and press E; verify Deck A goes silent, Deck B stays audible, and Deck A trim is preserved.
+- Aim at Deck A Open and press E; verify Deck A audio returns at the previous trim/crossfader/master level.
+- Repeat mute/open for Deck B.
+- With both decks loaded, aim at Deck A Sync and press E; verify Deck A seeks toward Deck B's beat phase and starts playing.
+- With both decks loaded, aim at Deck B Sync and press E; verify Deck B seeks toward Deck A's beat phase and starts playing.
+- Verify sync blocked states display readable labels such as `NO MASTER`, `LOAD TRACK`, or `NO BPM`.
+- Aim at Deck A platter, hold left click, and verify the platter enters scrub mode and stops auto-spinning.
+- While holding Deck A platter, drag/look right and verify the song seeks forward.
+- While holding Deck A platter, drag/look left and verify the song seeks backward.
+- Verify the floating platter meter appears only while the platter is held, with a clear center target and moving needle.
+- Release Deck A platter and verify platter scrub control stops and normal visual spin resumes.
+- Repeat platter scrub on Deck B.
+- Aim at the SoundCloud crossfader rail, hold left click, and move the mouse/look left; verify the crossfader moves toward Deck A.
+- Continue holding and move the mouse/look right; verify the crossfader moves toward Deck B.
+- Verify the crossfader knob follows the aimed point along the rail instead of feeling like loose incremental nudges.
+- Release left click and verify crossfader movement stops.
+- While holding the crossfader, verify camera look continues and the fader remains controlled until release.
+- While holding the crossfader, verify the center display shows grab feedback such as `XFADE GRAB`.
+- Press Escape while a fader is held and verify pointer lock/fader drag releases cleanly.
+- Aim at Deck A trim, hold left click, and move left/right; verify Deck A trim/output changes continuously.
+- Aim at Deck B trim, hold left click, and move left/right; verify Deck B trim/output changes continuously.
+- Aim at master volume, hold left click, and move left/right; verify master volume changes continuously.
+- Verify each held slider has a thin black backing plate sized to the slider area.
+- Verify the draggable crossfader rail sits in the center slot below the A/Mid/B snap buttons and does not block seek, cue, play, or shuffle controls.
+- Verify the A/Mid/B snap buttons sit side by side in the center upper crossfader bank and no longer overlap the draggable crossfader rail in top-down view.
+- Verify Deck A/B readout screens sit on the far side of their platters instead of in front of the disks.
+- Verify the BPM/deck monitor is larger and readable.
+- Verify the BPM/deck monitor uses a 32:9 ultrawide shape and does not collide with nearby booth controls.
+- Verify the BPM/deck monitor shows separate Deck A and Deck B waveform strips with visible playhead progress.
+- Verify clicking Deck A and Deck B waveform strips on the BPM/deck monitor seeks the matching track to the clicked position.
+- Verify holding and dragging across Deck A and Deck B waveform strips scrubs the matching track until release.
+- Verify the on-monitor SoundCloud waveform `-` and `+` buttons reduce/increase monitor waveform density from `x1` through `x4`.
+- Verify the on-monitor SoundCloud waveform `-` and `+` buttons do not have visible floating 3D button boxes over the screen.
+- Verify the BPM/deck monitor includes a readable right-side `BOOTH CONSOLE` section.
+- Verify Deck A/B Play, Pause, Shuffle, Mute/Open, Sync, BPM buttons, cue buttons, and seek buttons each add a concise console line.
+- Verify waveform resolution button presses add concise `WAVE RES` console lines.
+- Verify crate row loading adds a load request line and the eventual track change line remains readable.
+- Verify progress seek and platter scrub add one committed console line instead of spamming every drag frame.
+- Verify monitor waveform clicks add one `WAVE SEEK` console line with the target time.
+- Verify monitor waveform drags add one committed `WAVE SCRUB` console line on release instead of spamming every drag frame.
+- Verify Deck A/B trim, crossfader, and master fader drags add final value lines on release.
+- Verify widget ready and SoundCloud error lines appear once per transition/message when testable.
+- Verify loaded SoundCloud tracks without accepted BPM show `BPM --` instead of a fake 120 BPM.
+- Verify two small status monitors appear near the DJ OPEN sign area.
+- Verify the center upper crossfader A/Mid/B snap controls still work as fallback.
+- Verify the old Deck A/B Vol - and Vol + controls still work as fallback.
+- Verify held fader controls do not block Play, Shuffle, seek, cue, crate, or station move interactions.
+- Verify the same held fader controls behave safely in first-person, top-down player camera, and top-down freecam.
 
 ### Exit, Fallback, And Stability
 
@@ -221,7 +285,7 @@
 - Press Tab and verify top-down view disables shooting.
 - Press Tab again and verify first-person view returns.
 - Press Escape and verify pointer lock releases without closing the hidden world.
-- Verify no Level 2 selector, door, synced scoreboard, challenge timer, or host controls appear.
+- Verify no Level 2 selector, synced scoreboard, challenge timer, or host controls appear in Level 1.
 - Click Exit and verify normal timer app remains usable.
 
 ## Shooting Range Level Config
@@ -238,7 +302,7 @@
 - Press Escape and verify pointer lock releases without closing the hidden world.
 - Click Exit, re-enter Level 2, and verify local HITS resets.
 - Open with `?level=bad`, type `syncsesh`, and verify the shell falls back to Level 1.
-- Verify no visible level selector, door, host range controls, synced scoreboard, challenge timer, or persistence appears.
+- Verify no visible level selector, host range controls, synced scoreboard, challenge timer, or persistence appears.
 
 ## Range Challenge Mode
 
@@ -256,7 +320,7 @@
 - Press Escape and verify pointer lock releases without closing the hidden world.
 - Click Exit and re-enter Level 2; verify challenge state resets.
 - Open without query params and verify Level 1 has no range challenge UI.
-- Verify no synced scoreboard, host controls, visible level selector, door, or persistence appears.
+- Verify no synced scoreboard, host controls, visible level selector, or persistence appears.
 
 ## Synced Scoreboard
 
@@ -356,7 +420,7 @@
 - Aim at the configured session/status screen and press E; verify it cycles modes using the existing session panel behavior.
 - Verify other hero wall monitors do not become clickable.
 - Verify local station monitor return with E still works.
-- Verify the range opening remains walk-through and range shooting still works.
+- Verify the old east range opening is visually resolved/blocked, and direct Level 2 range loading still works.
 - Verify WASD, pointer lock, Tab top-down, FPV body, hidden unlock, sim roaming, jukebox, and the normal 2D dashboard remain unchanged.
 
 ## RGB Workstation Props
@@ -368,7 +432,7 @@
 - Verify the decorative workstation monitors are not clickable return targets.
 - Verify the hero wall remains readable and unobstructed.
 - Verify balcony/stairs remain readable.
-- Verify the range opening remains walk-through and range shooting still works.
+- Verify the old east range opening is visually resolved/blocked, and direct Level 2 range loading still works.
 - Verify movement lanes remain usable and no new collision blockers were added.
 - Verify sim roaming markers remain visible and are not obviously hidden inside decorative props.
 
@@ -382,7 +446,7 @@
 - Verify the hero wall remains readable and unobstructed.
 - Verify RGB workstation props remain visible.
 - Verify balcony/stairs remain readable.
-- Verify the range opening remains walk-through and range shooting still works.
+- Verify the old east range opening is visually resolved/blocked, and direct Level 2 range loading still works.
 - Verify movement lanes remain usable and no new collision blockers were added.
 - Verify sim roaming markers remain visible and are not obviously hidden inside the lounge.
 
@@ -398,15 +462,15 @@
 - Verify the hero wall remains readable and unobstructed.
 - Verify RGB workstation props and lounge props remain visible.
 - Verify balcony/stairs remain readable.
-- Verify the range opening remains walk-through and range shooting still works.
+- Verify the old east range opening is visually resolved/blocked, and direct Level 2 range loading still works.
 - Verify movement lanes remain usable and no new collision blockers were added.
 - Verify sim roaming markers remain visible and are not obviously hidden inside kitchen props.
 
 ## Expanded Control Room Readability
 
 - Enter the hidden world with `syncsesh` and walk around the expanded Control Room in first-person.
-- Verify the east wall and range opening visually span the expanded Control Room depth.
-- Verify the range opening remains visible and walk-through.
+- Verify the east wall is visually closed except for the readable RANGE door treatment.
+- Verify the old range opening is not walk-through in Level 1.
 - Verify the hero wall remains readable and unobstructed.
 - Verify RGB workstations, lounge, and kitchen island are visually distinct.
 - Press Tab and verify top-down framing still gives a useful overview of Level 1.

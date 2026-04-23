@@ -8,6 +8,608 @@ Entries must be in reverse chronological order. New entries go at the top, above
 
 Use a level-two heading for every entry so the editor can fold each change.
 
+## [2027] - 2026-04-22 20:27 - `DJ-branch / Vision 22 SoundCloud Booth Console`
+
+- Summary: Completed Vision 22 by adding a local SoundCloud booth console event model, bounded event queue, direct/passive DJ booth logging, and a live `BOOTH CONSOLE` section in the shared in-world deck monitor.
+- Areas touched: `src/3d/soundCloudBooth.ts`, `src/screens/MainScreen.tsx`, `src/3d/Level1RecordingStudioRoom.tsx`, `docs/3d/3dvision22-soundcloud-booth-console.md`, `docs/3d/manual-test-checklist.md`.
+- Follow-up: Changed the shared SoundCloud deck monitor to a 32:9 ultrawide face with a `1792 x 504` console texture, then moved the console into a dedicated right-side rail.
+- Follow-up: Swapped the SoundCloud draggable crossfader rail with the A/Mid/B preset buttons so the presets sit side by side in the center upper bank and the drag rail sits in the center slot.
+- Follow-up: Added Deck A and Deck B waveform strips with playhead progress to the SoundCloud deck monitor.
+- Follow-up: Added clickable monitor waveform hit targets so Deck A/B can seek by clicking directly on their waveform strips.
+- Follow-up: Extended monitor waveform hit targets to support hold-drag scrubbing with a committed release log.
+- Follow-up: Added on-monitor SoundCloud waveform resolution `-` / `+` buttons that change monitor waveform density from `x1` to `x4`.
+- Follow-up: Replaced the visible 3D waveform resolution button boxes with invisible hit targets over the screen-drawn controls.
+- Follow-up: Mirrored Deck B's main SoundCloud button row so Sync, Play, Mute/Open, and Shuffle match Deck A's intended symmetry.
+- Verification: `npm.cmd run build` passed with the existing Vite large chunk warning.
+
+## [2012] - 2026-04-22 20:12 - `DJ-branch / Restore SoundCloud Booth Purple`
+
+- Summary: Recolored the active SoundCloud DJ tabletop and table body toward the previous pink-purple booth look without bringing back the old placeholder shell.
+- Areas touched: `src/3d/Level1RecordingStudioRoom.tsx`.
+- Verification: `npm.cmd run build` passed with the existing Vite large chunk warning.
+
+## [2009] - 2026-04-22 20:09 - `DJ-branch / Remove SoundCloud DJ Placeholder Shell`
+
+- Summary: Removed the old generic DJ placeholder shell from the active SoundCloud booth render path so the purple box no longer sits over the DJ placeholder/table area.
+- Areas touched: `src/3d/Level1RecordingStudioRoom.tsx`.
+- Verification: `npm.cmd run build` passed with the existing Vite large chunk warning.
+
+## [2004] - 2026-04-22 20:04 - `DJ-branch / Wide Deck Monitor Height`
+
+- Summary: Nudged the consolidated SoundCloud deck monitor upward slightly for better visibility over the booth.
+- Areas touched: `src/3d/Level1RecordingStudioRoom.tsx`.
+- Verification: `npm.cmd run build` passed with the existing Vite large chunk warning.
+
+## [2003] - 2026-04-22 20:03 - `DJ-branch / Wide Deck Monitor Consolidation`
+
+- Summary: Rebuilt the SoundCloud deck monitor as a wide 32:9-style center monitor, moved crossfader/master/A out/B out data onto it, and removed the extra DJ status, mixer, and browser-mix placards from the booth.
+- Areas touched: `src/3d/Level1RecordingStudioRoom.tsx`.
+- Verification: `npm.cmd run build` passed with the existing Vite large chunk warning.
+
+## [1956] - 2026-04-22 19:56 - `DJ-branch / BPM Utility Button Layout`
+
+- Summary: Repositioned the SoundCloud deck utility row so Sync sits left of Play, Mute sits between Play and Shuffle, and each deck's six BPM tool buttons shift left and up as a grouped cluster.
+- Areas touched: `src/3d/Level1RecordingStudioRoom.tsx`.
+- Verification: `npm.cmd run build` passed with the existing Vite large chunk warning.
+
+## [1949] - 2026-04-22 19:49 - `DJ-branch / Vision 21 Trusted BPM Tools`
+
+- Summary: Completed Vision 21 by adding a length-based BPM estimator, per-deck accepted BPM state/actions, trusted sync that uses accepted monitor BPM only, and six new BPM tool buttons per SoundCloud deck.
+- Areas touched: `src/lib/soundcloud/bpmLengthEstimate.ts`, `src/lib/soundcloud/bpmLengthEstimate.test.ts`, `src/hooks/useSoundCloudPlayer.ts`, `src/screens/MainScreen.tsx`, `src/3d/soundCloudBooth.ts`, `src/3d/Level1RecordingStudioRoom.tsx`, `docs/3d/3dvision21-soundcloud-bpm-tools-and-trusted-sync.md`, `docs/3d/manual-test-checklist.md`.
+- Verification: `npx.cmd tsx src/lib/soundcloud/bpmLengthEstimate.test.ts` passed; `npx.cmd tsx src/lib/soundcloud/bpmAnalysis.test.ts` passed; `npm.cmd run build` passed with the existing Vite large chunk warning.
+
+## [1932] - 2026-04-22 19:32 - `DJ-branch / Honest SoundCloud BPM Sync`
+
+- Summary: Removed the fake 120 BPM fallback from SoundCloud deck BPM state, prevented sync from using non-real BPM values, capped waveform BPM analysis samples, and removed stale `SYNC EST` button styling.
+- Areas touched: `src/hooks/useSoundCloudPlayer.ts`, `src/screens/MainScreen.tsx`, `src/3d/Level1RecordingStudioRoom.tsx`.
+- Verification: `npx.cmd tsx src/lib/soundcloud/bpmAnalysis.test.ts` passed; `npm.cmd run build` passed with the existing Vite large chunk warning.
+
+## [1929] - 2026-04-22 19:29 - `DJ-branch / SoundCloud Deck Readout Face`
+
+- Summary: Converted the Deck A/B SoundCloud readouts into upright monitor faces with the time canvas mounted in front of the dark housing so the readout text is visible.
+- Areas touched: `src/3d/Level1RecordingStudioRoom.tsx`.
+- Verification: `npm.cmd run build` passed with the existing Vite large chunk warning.
+
+## [1926] - 2026-04-22 19:26 - `DJ-branch / SoundCloud Deck Monitor Housings`
+
+- Summary: Changed the Deck A/B SoundCloud readout housings from deck-accent glow blocks to the same dark monitor-style material used by the main deck monitor, with a brighter screen plane.
+- Areas touched: `src/3d/Level1RecordingStudioRoom.tsx`.
+- Verification: `npm.cmd run build` passed with the existing Vite large chunk warning.
+
+## [1907] - 2026-04-22 19:07 - `DJ-branch / SoundCloud Deck Time Readouts`
+
+- Summary: Enlarged the Deck A/B SoundCloud readout screens and added current/total track time to each deck monitor.
+- Areas touched: `src/3d/Level1RecordingStudioRoom.tsx`.
+- Verification: `npm.cmd run build` passed with the existing Vite large chunk warning.
+
+## [1826] - 2026-04-22 18:26 - `DJ-branch / Vision 20 Platter Scrub Minigame`
+
+- Summary: Added draggable SoundCloud platter scrub controls that pause visual auto-spin while held, scrub the track with left/right camera movement, and show a floating needle meter over the grabbed platter.
+- Areas touched: `src/3d/Level1RecordingStudioRoom.tsx`, `docs/3d/3dvision20-soundcloud-platter-scrub-minigame.md`, `docs/3d/manual-test-checklist.md`.
+- Verification: `npm.cmd run build` passed with the existing Vite large chunk warning. V20-5 manual booth QA is pending user testing.
+
+## [1813] - 2026-04-22 18:13 - `DJ-branch / Rail Click Snap For SoundCloud Faders`
+
+- Summary: Updated reusable SoundCloud DJ faders so clicking anywhere on a rail immediately snaps the slider value to that position before continuing held-drag control.
+- Areas touched: `src/3d/Level1RecordingStudioRoom.tsx`.
+- Verification: `npm.cmd run build` passed with the existing Vite large chunk warning.
+
+## [1809] - 2026-04-22 18:09 - `DJ-branch / Draggable SoundCloud Progress Seek`
+
+- Summary: Converted each SoundCloud deck song-progress bar into a held-drag seek control with a backing rail, growing fill, and playhead marker that seeks and starts playback at the aimed song position.
+- Areas touched: `src/3d/Level1RecordingStudioRoom.tsx`.
+- Verification: `npm.cmd run build` passed with the existing Vite large chunk warning.
+
+## [1802] - 2026-04-22 18:02 - `DJ-branch / SoundCloud Deck Progress Bar Placement`
+
+- Summary: Moved the SoundCloud deck song-progress bar into the lane between the deck trim fader and the deck volume controls.
+- Areas touched: `src/3d/Level1RecordingStudioRoom.tsx`.
+- Verification: `npm.cmd run build` passed with the existing Vite large chunk warning.
+
+## [1758] - 2026-04-22 17:58 - `DJ-branch / SoundCloud Utility Button Placement`
+
+- Summary: Moved the SoundCloud DJ booth Mute/Open and Sync buttons to the lower/front row directly below each deck's Play and Shuffle buttons.
+- Areas touched: `src/3d/Level1RecordingStudioRoom.tsx`.
+- Verification: `npm.cmd run build` passed with the existing Vite large chunk warning.
+
+## [1752] - 2026-04-22 17:52 - `DJ-branch / Vision 19 SoundCloud BPM Mute Sync`
+
+- Summary: Completed Vision 19 by adding waveform-based BPM analysis, BPM source labels, per-deck mute, per-deck phase-sync seeking, and 3D mute/sync utility buttons for the SoundCloud DJ booth.
+- Areas touched: `src/lib/soundcloud/bpmAnalysis.ts`, `src/lib/soundcloud/bpmAnalysis.test.ts`, `src/hooks/useSoundCloudPlayer.ts`, `src/3d/soundCloudBooth.ts`, `src/screens/MainScreen.tsx`, `src/3d/Level1RecordingStudioRoom.tsx`, `docs/3d/3dvision19-soundcloud-waveform-bpm-and-sync.md`, `docs/3d/manual-test-checklist.md`.
+- Verification: `npx.cmd tsx src/lib/soundcloud/bpmAnalysis.test.ts` passed; `npm.cmd run build` passed with the existing Vite large chunk warning.
+
+## [1731] - 2026-04-22 17:31 - `DJ-branch / SoundCloud BPM Fallback Display`
+
+- Summary: Changed the SoundCloud deck BPM label to show the existing 120 BPM estimated visual fallback for loaded tracks when the SoundCloud widget does not provide `sound.bpm`, instead of leaving the monitor at `BPM --`.
+- Areas touched: `src/3d/Level1RecordingStudioRoom.tsx`, `docs/3d/3dvision18-soundcloud-seek-and-cue-editor.md`, `docs/3d/manual-test-checklist.md`.
+- Verification: `npm.cmd run build` passed with the existing Vite large chunk warning.
+
+## [1728] - 2026-04-22 17:28 - `DJ-branch / Top-Down Booth Cleanup`
+
+- Summary: Cleaned up the SoundCloud DJ booth top-down layout by moving the crossfader off the edit/seek controls, moving A/Mid/B snap buttons one row above it, placing deck readouts behind the platters, enlarging the BPM/deck monitor, and adding a second booth status monitor near the DJ OPEN sign.
+- Areas touched: `src/3d/Level1RecordingStudioRoom.tsx`, `docs/3d/3dvision18-soundcloud-seek-and-cue-editor.md`, `docs/3d/manual-test-checklist.md`.
+- Verification: `npm.cmd run build` passed with the existing Vite large chunk warning.
+
+## [1722] - 2026-04-22 17:22 - `DJ-branch / Slider Backing Plates`
+
+- Summary: Added thin black backing plates under SoundCloud held slider rails so each fader sits on a visible hardware-style rectangle sized to the slider area.
+- Areas touched: `src/3d/Level1RecordingStudioRoom.tsx`, `docs/3d/3dvision18-soundcloud-seek-and-cue-editor.md`, `docs/3d/manual-test-checklist.md`.
+- Verification: `npm.cmd run build` passed with the existing Vite large chunk warning.
+
+## [1720] - 2026-04-22 17:20 - `DJ-branch / Crossfader Front Lane Swap`
+
+- Summary: Swapped the SoundCloud crossfader and master volume slider lanes so the crossfader is closest to the player-facing side of the DJ booth.
+- Areas touched: `src/3d/Level1RecordingStudioRoom.tsx`, `docs/3d/3dvision18-soundcloud-seek-and-cue-editor.md`, `docs/3d/manual-test-checklist.md`.
+- Verification: `npm.cmd run build` passed with the existing Vite large chunk warning.
+
+## [1715] - 2026-04-22 17:15 - `DJ-branch / Player-Facing Fader Layout`
+
+- Summary: Moved the SoundCloud Deck A/B trim faders and master volume slider forward into the user-facing DJ booth lane so the held sliders are easier to reach from the standing position.
+- Areas touched: `src/3d/Level1RecordingStudioRoom.tsx`, `docs/3d/3dvision18-soundcloud-seek-and-cue-editor.md`, `docs/3d/manual-test-checklist.md`.
+- Verification: `npm.cmd run build` passed with the existing Vite large chunk warning.
+
+## [1712] - 2026-04-22 17:12 - `DJ-branch / Fader Rail Hit Mapping`
+
+- Summary: Changed held DJ fader movement to prefer ray hit-point mapping on the grabbed rail so the knob follows the physical track, with movement-delta updates only as fallback when the rail is temporarily missed.
+- Areas touched: `src/3d/interactions.tsx`, `src/3d/Level1RecordingStudioRoom.tsx`, `docs/3d/3dvision18-soundcloud-seek-and-cue-editor.md`, `docs/3d/manual-test-checklist.md`.
+- Verification: `npm.cmd run build` passed with the existing Vite large chunk warning.
+
+## [1709] - 2026-04-22 17:09 - `DJ-branch / Held Fader Camera Follow`
+
+- Summary: Changed held DJ fader behavior so camera look continues while a slider/fader is grabbed, with the active draggable control staying latched until click release.
+- Areas touched: `src/3d/ThreeDModeShell.tsx`, `docs/3d/3dvision18-soundcloud-seek-and-cue-editor.md`, `docs/3d/manual-test-checklist.md`.
+- Verification: `npm.cmd run build` passed with the existing Vite large chunk warning.
+
+## [1703] - 2026-04-22 17:03 - `DJ-branch / V18 Held DJ Faders`
+
+- Summary: Added reusable 3D draggable interactables, suppressed camera look while held controls are active, converted the SoundCloud crossfader into a continuous held drag fader, and added held drag faders for Deck A trim, Deck B trim, and master volume with manual QA/docs updates.
+- Areas touched: `src/3d/interactions.tsx`, `src/3d/ThreeDModeShell.tsx`, `src/3d/Level1RecordingStudioRoom.tsx`, `src/3d/soundCloudBooth.ts`, `src/screens/MainScreen.tsx`, `docs/3d/3dvision18-soundcloud-seek-and-cue-editor.md`, `docs/3d/manual-test-checklist.md`.
+- Verification: `npm.cmd run build` passed with the existing Vite large chunk warning.
+
+## [1658] - 2026-04-22 16:58 - `DJ-branch / Cue Pad Time Readability`
+
+- Summary: Changed SoundCloud cue time labels to hundredths precision and doubled the 3D cue pad timestamp font size so saved cue times are readable from the booth view.
+- Areas touched: `src/hooks/useSoundCloudPlayer.ts`, `src/3d/Level1RecordingStudioRoom.tsx`.
+- Verification: `npm.cmd run build` passed with the existing Vite large chunk warning.
+
+## [1651] - 2026-04-22 16:51 - `DJ-branch / SoundCloud Cue Panel Stack Layout`
+
+- Summary: Moved the 3D SoundCloud cue shelves and cue button hitboxes directly below their matching center seek panels so each deck's seek and cue-edit controls read as one vertical workflow.
+- Areas touched: `src/3d/Level1RecordingStudioRoom.tsx`.
+- Verification: `npm.cmd run build` passed with the existing Vite large chunk warning.
+
+## [1648] - 2026-04-22 16:48 - `DJ-branch / Empty Cue Quick Save`
+
+- Summary: Changed normal SoundCloud cue pad behavior so clicking an empty cue saves the current playhead time into that cue instead of only reporting the slot as empty.
+- Areas touched: `src/hooks/useSoundCloudPlayer.ts`.
+- Verification: `npm.cmd run build` passed with the existing Vite large chunk warning.
+
+## [1647] - 2026-04-22 16:47 - `DJ-branch / V18 SoundCloud Seek And Cue Editor`
+
+- Summary: Added per-deck SoundCloud seek-by/seek-to actions, local cue edit mode with selected-cue nudging, 2D seek/nudge controls, and two 3D center-table seek panels that switch between playhead seek and cue timestamp editing.
+- Areas touched: `src/hooks/useSoundCloudPlayer.ts`, `src/components/SoundCloudPanel.tsx`, `src/styles/global.css`, `src/3d/soundCloudBooth.ts`, `src/screens/MainScreen.tsx`, `src/3d/Level1RecordingStudioRoom.tsx`, `docs/3d/3dvision18-soundcloud-seek-and-cue-editor.md`.
+- Verification: `npm.cmd run build` passed with the existing Vite large chunk warning.
+
+## [1633] - 2026-04-22 16:33 - `DJ-branch / First-Person Look Pitch Range`
+
+- Summary: Expanded the hidden 3D first-person camera pitch clamp to approximately -89 degrees down and +89 degrees up so users can look much farther toward their own body and overhead scene.
+- Areas touched: `src/3d/ThreeDModeShell.tsx`.
+- Verification: `npm.cmd run build` passed with the existing Vite large chunk warning.
+
+## [1631] - 2026-04-22 16:31 - `DJ-branch / First-Person Body Camera Attach Fix`
+
+- Summary: Fixed the first-person body so it attaches to the active Three.js camera when first-person controls become enabled, allowing the local user to see their camera-attached body after focusing the 3D world.
+- Areas touched: `src/3d/ThreeDModeShell.tsx`.
+- Verification: `npm.cmd run build` passed with the existing Vite large chunk warning.
+
+## [1626] - 2026-04-22 16:26 - `DJ-branch / V17-6 Persist Local Avatar Settings`
+
+- Summary: Added versioned localStorage persistence for the local-only avatar appearance state, with lazy load, field-level sanitization, clamped scale, and accent/head color normalization so the preview and world-space bodies restore safely after refresh.
+- Areas touched: `src/3d/ThreeDModeShell.tsx`.
+- Verification: `npm.cmd run build` passed with the existing Vite large chunk warning.
+
+## [1622] - 2026-04-22 16:22 - `DJ-branch / V17-5 Escape Menu Avatar Customization`
+
+- Summary: Added a local-only Avatar tab to the 3D Escape menu with a live primitive avatar preview, body/accent swatches, suit preset segments, nameplate toggle, and scale slider, feeding changes immediately into the local top-down avatar and a minimal first-person body color pass.
+- Areas touched: `src/3d/ThreeDModeShell.tsx`, `src/styles/global.css`.
+- Verification: `npm.cmd run build` passed with the existing Vite large chunk warning.
+
+## [1619] - 2026-04-22 16:19 - `DJ-branch / V17-4 Local Top-Down Player Avatar`
+
+- Summary: Rendered the local user through the shared `PlayerAvatar` in top-down player-cam and top-down free-cam only, driven directly from the current local player pose ref with the local nameplate hidden by default and the existing camera-attached first-person body preserved.
+- Areas touched: `src/3d/ThreeDModeShell.tsx`.
+- Verification: `npm.cmd run build` passed with the existing Vite large chunk warning.
+
+## [1615] - 2026-04-22 16:15 - `DJ-branch / V17-3 Shared Friend And Sim Avatars`
+
+- Summary: Routed real free-roam presence markers and local sim roaming markers through the shared `PlayerAvatar` component, preserving existing caller filtering and sim-roam enablement semantics while adding render-only damping for remote free-roam movement and yaw between presence updates.
+- Areas touched: `src/3d/FreeRoamPresenceMarker.tsx`, `src/3d/SimBotRoamingMarker.tsx`, `src/3d/PlayerAvatar.tsx`.
+- Verification: `npm.cmd run build` passed with the existing Vite large chunk warning.
+
+## [1613] - 2026-04-22 16:13 - `DJ-branch / V17-2 Shared Primitive Player Avatar`
+
+- Summary: Added a reusable primitive `PlayerAvatar` renderer with feet-origin pose props, identity/status modes, deterministic seed-based default appearance, host/ready/sim/local visual cues, and memoized canvas nameplates for later marker replacement phases.
+- Areas touched: `src/3d/PlayerAvatar.tsx`.
+- Verification: `npm.cmd run build` passed with the existing Vite large chunk warning.
+
+## [1608] - 2026-04-22 16:08 - `DJ-branch / V17-1 Avatar Floor Origin`
+
+- Summary: Grounded the existing free-roam and sim roaming markers to a feet/floor avatar origin by converting remote camera-height presence locally at render time and moving sim route waypoints off the old `y = 1.7` group origin.
+- Areas touched: `src/3d/simBotRoaming.ts`, `src/3d/FreeRoamPresenceMarker.tsx`.
+- Verification: `npm.cmd run build` passed with the existing Vite large chunk warning; manual sim/friend floor checks remain recommended.
+
+## [1558] - 2026-04-22 15:58 - `DJ-branch / V16-5 Lazy Hidden 3D Shell`
+
+- Summary: Lazy-loaded the hidden `ThreeDModeShell` and `RenderingStackSpike` paths from `MainScreen` so the normal app shell no longer eagerly imports the full 3D runtime; added a compact Suspense loading overlay for requested hidden-world chunks.
+- Areas touched: `src/screens/MainScreen.tsx`, `docs/3d/3dvision16-world-cleanup-and-level-doors.md`.
+- Verification: `npm.cmd run build` passed; Vite now emits separate async chunks for `ThreeDModeShell`, `RenderingStackSpike`, and `react-three-fiber.esm`, with the main app bundle at 373.69 kB / gzip 113.69 kB. The remaining large-chunk warning is the async React Three Fiber vendor chunk.
+
+## [1555] - 2026-04-22 15:55 - `DJ-branch / V16-4 Level Transition Pointer Lock Reset`
+
+- Summary: Released browser pointer lock at the start of in-world level transitions so moving through the Level 1 range door or Level 2 BACK door resets cleanly into the next reveal without leaving captured mouse state behind.
+- Areas touched: `src/3d/ThreeDModeShell.tsx`, `docs/3d/3dvision16-world-cleanup-and-level-doors.md`.
+- Verification: `npm.cmd run build` passed with the existing Vite large chunk warning.
+
+## [1554] - 2026-04-22 15:54 - `DJ-branch / V16-3 Level 1 Range Door`
+
+- Summary: Added the Level 1 east-wall `RANGE` exit door targeting `level-2-range` through the existing `LevelExitDoor` interaction flow, keeping the sealed east wall collision intact and avoiding any normal-app range selector.
+- Areas touched: `src/3d/levels/level1.ts`, `docs/3d/3dvision16-world-cleanup-and-level-doors.md`, `docs/3d/manual-test-checklist.md`, `changelog.md`.
+- Verification: `npm.cmd run build` passed with the existing Vite large chunk warning.
+
+## [1552] - 2026-04-22 15:52 - `DJ-branch / V16-2 Level 1 Range Extraction`
+
+- Summary: Removed the embedded shooting range from Level 1 so the hidden world hub no longer renders range lanes, targets, or Level 1 range challenge UI; sealed the old east-side range opening with matching collision while preserving the standalone `level-2-range` shooting range path.
+- Areas touched: `src/3d/levels/level1.ts`, `src/3d/Level1RoomShell.tsx`, `docs/3d/3dvision16-world-cleanup-and-level-doors.md`, `docs/3d/manual-test-checklist.md`.
+- Verification: `npm.cmd run build` passed with the existing Vite large chunk warning.
+
+## [1515] - 2026-04-22 15:15 - `DJ-branch / First-Person Space Jump`
+
+- Summary: Added a grounded first-person Space jump in the 3D world now that Space no longer triggers lobby ready-hold. Jump height follows the current floor/platform height and top-down freecam keeps its existing Space-to-rise behavior.
+- Areas touched: `src/3d/ThreeDModeShell.tsx`.
+- Verification: `npm.cmd run build` passed with the existing Vite large chunk warning; live first-person jump feel check remains recommended.
+
+## [1509] - 2026-04-22 15:09 - `DJ-branch / Disable Ready Spacebar In 3D`
+
+- Summary: Disabled the Space-key ready-hold hotkey while the 3D world is open, while keeping the normal 2D hold button behavior intact. If Space was already being held when 3D opens, the ready hold now releases cleanly.
+- Areas touched: `src/hooks/useReadyHold.ts`, `src/components/TimerPanel.tsx`, `src/screens/MainScreen.tsx`.
+- Verification: `npm.cmd run build` passed with the existing Vite large chunk warning; live 3D Space-key movement/freecam check remains recommended.
+
+## [1504] - 2026-04-22 15:04 - `DJ-branch / SoundCloud Booth Tiered Controls`
+
+- Summary: Reworked the 3D SoundCloud DJ booth control tiers so volume controls sit in a clearer middle lane, Play/Shuffle sits farther forward, and hot cue pads sit on a lower shelf instead of blocking deck readouts and labels.
+- Areas touched: `src/3d/Level1RecordingStudioRoom.tsx`.
+- Verification: `npm.cmd run build` passed with the existing Vite large chunk warning; live top-down/first-person overlap checks remain recommended.
+
+## [1459] - 2026-04-22 14:59 - `DJ-branch / SoundCloud Deck Volume Buttons`
+
+- Summary: Added per-deck `Vol -` and `Vol +` controls to the 3D SoundCloud DJ booth, wired to Deck A and Deck B's real SoundCloud trim volume controls.
+- Areas touched: `src/3d/soundCloudBooth.ts`, `src/screens/MainScreen.tsx`, `src/3d/Level1RecordingStudioRoom.tsx`.
+- Verification: `npm.cmd run build` passed with the existing Vite large chunk warning; live booth spacing and per-deck volume checks remain recommended.
+
+## [1455] - 2026-04-22 14:55 - `DJ-branch / V10-8 Crate Hitbox Visibility Fix`
+
+- Summary: Made the 3D SoundCloud crate browser row and scroll hitboxes fully transparent so they remain clickable without drawing teal blocks over the playlist screens.
+- Areas touched: `src/3d/Level1RecordingStudioRoom.tsx`.
+- Verification: `npm.cmd run build` passed with the existing Vite large chunk warning; live DJ crate screen visibility check remains recommended.
+
+## [1451] - 2026-04-22 14:51 - `DJ-branch / V10-8 Deck Crate Browser Screens`
+
+- Summary: Added local SoundCloud crate browser support for the 3D DJ booth: each deck now exposes its loaded track list and direct row-load action, and the booth renders separate Deck A/Deck B playlist screens with clickable up/down scroll controls and clickable song rows.
+- Areas touched: `src/hooks/useSoundCloudPlayer.ts`, `src/3d/Level1RecordingStudioRoom.tsx`, `docs/3d/3dvision10-dj-booth-two-deck-mixer.md`.
+- Verification: `npm.cmd run build` passed with the existing Vite large chunk warning; live first-person/top-down crate readability and row-hit checks remain recommended.
+
+## [1434] - 2026-04-22 14:34 - `DJ-branch / Recording Studio Length Match`
+
+- Summary: Extended the recording studio south edge to match the control room depth, deepened the raised DJ platform into the new space, moved the default DJ booth/platform center south, and bumped the local studio layout storage version so the new default stage placement appears instead of stale saved positions.
+- Areas touched: `src/3d/levels/level1.ts`, `src/3d/Level1RecordingStudioRoom.tsx`.
+- Verification: `npm.cmd run build` passed with the existing Vite large chunk warning; live top-down room-length and DJ platform clearance checks remain recommended.
+
+## [1406] - 2026-04-22 14:06 - `DJ-branch / V15 3D Escape Menu And Studio Controls`
+
+- Summary: Added a hidden-world Escape menu with Visual, Movement, Graphics, and Studio tabs; wired local brightness/contrast/saturation/gamma filters, first-person walk-speed scaling, grab-box visibility, FPS display, and quick studio controls for audio engine, master volume, transport/BPM, instrument test sounds, guitar recording, and grab-box reveal.
+- Areas touched: `src/3d/ThreeDModeShell.tsx`, `src/3d/Level1RoomShell.tsx`, `src/3d/Level1RecordingStudioRoom.tsx`, `src/styles/global.css`, `docs/3d/3dvision15-3d-escape-menu-and-studio-controls.md`.
+- Verification: `npm.cmd run build` passed with the existing Vite large chunk warning; live pointer-lock/menu, visual filter, walk-speed, grab-box, FPS, and studio audio checks remain recommended.
+
+## [1335] - 2026-04-22 13:35 - `DJ-branch / V14 Individual Monitor Move Targets`
+
+- Summary: Split the movable monitor wall into individual movable monitor stations for Studio Status, Transport, Sequence View, Arrangement Timeline, Track List, Device Rack, Mixer View, and Patch Signal; each screen now has its own layout transform, hitbox, persistence entry, reset behavior, and `F` grab target.
+- Areas touched: `src/3d/Level1RecordingStudioRoom.tsx`, `docs/3d/3dvision14-recording-room-layout-editor.md`.
+- Verification: `npm.cmd run build` passed with the existing Vite large chunk warning; live per-monitor grab/place/reset checks remain recommended.
+
+## [1331] - 2026-04-22 13:31 - `DJ-branch / V14 Station Wrapper Visibility Fix`
+
+- Summary: Fixed the movable station wrapper transform order so rotated default stations like the DAW table render in their intended position, and changed layout hitboxes to wireframe-only with near-invisible idle opacity so they no longer cover the station geometry.
+- Areas touched: `src/3d/Level1RecordingStudioRoom.tsx`.
+- Verification: `npm.cmd run build` passed with the existing Vite large chunk warning; live DAW visibility and station targeting checks remain recommended.
+
+## [1325] - 2026-04-22 13:25 - `DJ-branch / V14 Local Studio Layout Editor`
+
+- Summary: Added a local recording-room layout editor with movable station registry, versioned localStorage layout state, station wrappers for DAW, DJ booth, drums, piano, guitar, looper, audio interface, and monitors, `F` grab/place behavior, click placement, `Esc` cancel, `Q/E` rotation, `G` floor lock, `H` height reset, Backspace reset controls, station highlight hitboxes, and an in-world Move Mode status label.
+- Areas touched: `src/3d/interactions.tsx`, `src/3d/Level1RecordingStudioRoom.tsx`, `docs/3d/3dvision14-recording-room-layout-editor.md`.
+- Verification: `npm.cmd run build` passed with the existing Vite large chunk warning; live first-person movement, top-down movement, refresh persistence, reset controls, and patch cable/port follow-up checks remain manual.
+
+## [1300] - 2026-04-22 13:00 - `DJ-branch / Transport Monitor South Move`
+
+- Summary: Moved the recording-room `Transport` monitor 4.6 world units toward global south on the left wall, shifting it from `z -4.62` to `z -0.02`.
+- Areas touched: `src/3d/Level1RecordingStudioRoom.tsx`.
+- Verification: `npm.cmd run build` passed with the existing Vite large chunk warning; live wall-placement check remains recommended.
+
+## [1256] - 2026-04-22 12:56 - `DJ-branch / V13 Left-Wall Monitor Move`
+
+- Summary: Moved the recording-room `Studio Status` and `Track List` monitors from the stage/drum sightline onto the global-left wall behind the DAW/station area while preserving their existing contents.
+- Areas touched: `src/3d/Level1RecordingStudioRoom.tsx`, `docs/3d/3dvision13-recording-room-dj-platform.md`.
+- Verification: `npm.cmd run build` passed with the existing Vite large chunk warning; live first-person and top-down wall placement checks remain recommended.
+
+## [1253] - 2026-04-22 12:53 - `DJ-branch / V13 Centered Stage And Raised Monitors`
+
+- Summary: Centered the recording-room SoundCloud DJ booth and drum kit on the shared stage/room axis, moved the matching role badges to that centerline, and raised the `Studio Status` plus `Track List` monitors so their bottom edges clear the top-of-wall sightline.
+- Areas touched: `src/3d/Level1RecordingStudioRoom.tsx`, `docs/3d/3dvision13-recording-room-dj-platform.md`.
+- Verification: `npm.cmd run build` passed with the existing Vite large chunk warning; live top-down centerline and first-person monitor-height checks remain recommended.
+
+## [1247] - 2026-04-22 12:47 - `DJ-branch / V13 Full-Width Higher DJ Stage`
+
+- Summary: Widened the recording-room DJ platform to span nearly the full room width, raised the stage and SoundCloud DJ booth to roughly four times the prior platform height, and expanded the platform/ramp traversal surfaces plus visual side steps to match the taller stage.
+- Areas touched: `src/3d/levels/level1.ts`, `src/3d/Level1RecordingStudioRoom.tsx`, `docs/3d/3dvision13-recording-room-dj-platform.md`.
+- Verification: `npm.cmd run build` passed with the existing Vite large chunk warning; live top-down and first-person stage-height checks remain recommended.
+
+## [1240] - 2026-04-22 12:40 - `DJ-branch / V13 Recording Room DJ Platform`
+
+- Summary: Expanded the recording room southward, moved the recording-studio south/west/east wall collision bounds, added a raised DJ platform with visible trim and left/right approach steps, registered platform/ramp traversal surfaces, and relocated the SoundCloud DJ booth plus DJ role marker onto the new stage so it no longer overlaps the drum kit cluster.
+- Areas touched: `src/3d/levels/level1.ts`, `src/3d/Level1RecordingStudioRoom.tsx`, `docs/3d/3dvision13-recording-room-dj-platform.md`.
+- Verification: `npm.cmd run build` passed with the existing Vite large chunk warning; live top-down and first-person wall/platform clearance checks remain recommended.
+
+## [1230] - 2026-04-22 12:30 - `DJ-branch / SoundCloud Booth Wall Clearance`
+
+- Summary: Rotated the 3D SoundCloud DJ booth to face back into the room with a 135-degree counterclockwise orientation and nudged the station away from the wall so the table, monitors, and controls are less likely to be cut off.
+- Areas touched: `src/3d/Level1RecordingStudioRoom.tsx`.
+- Verification: `npm.cmd run build` passed with the existing Vite large chunk warning; live top-down and first-person wall-clearance checks remain recommended.
+
+## [1223] - 2026-04-22 12:23 - `DJ-branch / SoundCloud Deck BPM Monitor And Spin`
+
+- Summary: Added optional SoundCloud BPM metadata to the local deck state, made the 3D SoundCloud platters spin while playing using BPM when available with an honest visual fallback, and added a dedicated DJ deck monitor showing Deck A/B BPM, play state, and output levels.
+- Areas touched: `src/env.d.ts`, `src/hooks/useSoundCloudPlayer.ts`, `src/3d/Level1RecordingStudioRoom.tsx`.
+- Verification: `npm.cmd run build` passed with the existing Vite large chunk warning; live visual confirmation in the 3D booth is still recommended.
+
+## [1161] - 2026-04-22 11:54 - `DJ-branch / V12-5 Friend-Readable Cue Feedback`
+
+- Summary: Added compact cue-status copy to the 3D SoundCloud deck readouts so Deck A/B now surface cue state and last action directly, and clarified the 2D cue note so cue state is explicitly local to this browser without implying shared audio or Discord transport.
+- Areas touched: `src/components/SoundCloudPanel.tsx`, `src/3d/Level1RecordingStudioRoom.tsx`, `docs/3d/3dvision12-soundcloud-hot-cues.md`.
+- Verification: `npm.cmd run build` passed with the existing Vite large chunk warning; one-browser, two-browser, Discord expectation, and cue readability checks remain manual.
+
+## [1154] - 2026-04-22 11:54 - `DJ-branch / V12-4 3D Booth Cue Pads`
+
+- Summary: Added local SoundCloud hot cue shelves to the 3D DJ booth for Deck A and Deck B, threading hot cue state/actions through the booth state surface, adding an optional enabled path for blocked 3D controls, and mirroring the readable cue states from the 2D phase without disturbing the V11 deck, mixer, or truth layout.
+- Areas touched: `src/screens/MainScreen.tsx`, `src/3d/soundCloudBooth.ts`, `src/3d/Level1RecordingStudioRoom.tsx`, `docs/3d/3dvision12-soundcloud-hot-cues.md`.
+- Verification: `npm.cmd run build` passed with the existing Vite large chunk warning; top-down readability, first-person clickability, no-overlap, and blocked-state dim/disabled checks remain manual.
+
+## [1147] - 2026-04-22 11:54 - `DJ-branch / V12-3 2D SoundCloud Cue Controls`
+
+- Summary: Added a compact cue strip to each normal 2D SoundCloud deck card with a `SET CUE` toggle, five `C1`-`C5` pads, hook-backed cue state/action wiring, load-track blocking, and responsive cue styling while preserving the existing waveform, transport, mixer, and proxy behavior.
+- Areas touched: `src/components/SoundCloudPanel.tsx`, `src/styles/global.css`, `docs/3d/3dvision12-soundcloud-hot-cues.md`.
+- Verification: `npm.cmd run build` passed with the existing Vite large chunk warning; manual Deck A/B cue save-jump, empty cue no-op, `LOAD TRACK` blocked-state, and responsive layout checks remain pending.
+
+## [1141] - 2026-04-22 11:41 - `DJ-branch / V12-2 Local Hot Cue Controller`
+
+- Summary: Added deck-local hot cue controller state to `useSoundCloudPlayer` with five `C1`-`C5` slots, `SET CUE` mode toggling, save/jump cue actions, real-track-only cue keys, stale-track invalidation, and a separate `hotCueState` / `hotCueActions` surface while preserving the existing jukebox actions and SoundCloud transport behavior.
+- Areas touched: `src/hooks/useSoundCloudPlayer.ts`, `docs/3d/3dvision12-soundcloud-hot-cues.md`.
+- Verification: `npm.cmd run build` passed with the existing Vite large chunk warning; manual Deck A/B cue save-jump, empty cue, and track-change invalidation checks remain pending until cue UI lands.
+
+## [1124] - 2026-04-22 11:24 - `DJ-branch / V11-4 Monitors, Placards, And Final Readability`
+
+- Summary: Added the back-left angled `DJ / OPEN / READY` status monitor, detached the front-center `LOCAL SOUNDCLOUD` placard from the controls, and tuned the final booth label/readout balance for the mockup while preserving all deck and mixer behavior.
+- Areas touched: `docs/3d/3dvision11-dj-booth-mockup-redesign.md`, `src/3d/Level1RecordingStudioRoom.tsx`.
+- Verification: `npm.cmd run build` passed with the existing Vite large chunk warning.
+
+## [1118] - 2026-04-22 11:18 - `DJ-branch / V11-3 Mixer Rails And Center Controls`
+
+- Summary: Rebuilt the 3D SoundCloud booth center into a clearer mixer section with a backed mixer screen, upper fader rail and chunky knob, tidy A/MID/B preset row, readable center `DJ / PLACEHOLDER` panel, and a subtle lower cue shelf while preserving the existing crossfader callbacks and mixer state display.
+- Areas touched: `docs/3d/3dvision11-dj-booth-mockup-redesign.md`, `src/3d/Level1RecordingStudioRoom.tsx`.
+- Verification: `npm.cmd run build` passed with the existing Vite large chunk warning.
+
+## [1112] - 2026-04-22 11:12 - `DJ-branch / V11-2 Deck Stations And Turntables`
+
+- Summary: Reshaped the 3D SoundCloud DJ booth into clearer left/right deck stations with larger square bases, layered platters, center spindle caps, mini slider strips, attached readouts, and grouped Play/Pause + Shuffle pods while preserving existing deck action wiring.
+- Areas touched: `docs/3d/3dvision11-dj-booth-mockup-redesign.md`, `src/3d/Level1RecordingStudioRoom.tsx`.
+- Verification: `npm.cmd run build` passed with the existing Vite large chunk warning.
+
+## [1105] - 2026-04-22 11:05 - `DJ-branch / V11-1 Table Shell And Station Grid`
+
+- Summary: Expanded the 3D SoundCloud DJ booth into a larger supported table shell with a wider tabletop, thicker under-shell mass, visible legs, and faint named station-zone guide bands while preserving all current SoundCloud behavior and action wiring.
+- Areas touched: `docs/3d/3dvision11-dj-booth-mockup-redesign.md`, `src/3d/Level1RecordingStudioRoom.tsx`.
+- Verification: `npm.cmd run build` passed with the existing Vite large chunk warning.
+
+## [1055] - 2026-04-22 10:55 - `DJ-branch / V10 DJ Table Row Layout`
+
+- Summary: Expanded the 3D SoundCloud DJ table into a larger row-based surface so mixer, crossfader, turntables, deck readouts, Play/Shuffle controls, and the local SoundCloud truth placard no longer crowd the same foreground strip, while preserving existing SoundCloud behavior and control wiring.
+- Areas touched: `docs/3d/3dvision10-dj-booth-two-deck-mixer.md`, `src/3d/Level1RecordingStudioRoom.tsx`.
+- Verification: `npm.cmd run build` passed with the existing Vite large chunk warning; live top-down overlap confirmation remains manual.
+
+## [1048] - 2026-04-22 10:48 - `DJ-branch / V10 DJ Top-Down Layout Tuning`
+
+- Summary: Tuned the 3D SoundCloud DJ booth from annotated top-down feedback by flattening the turntable platters, moving the local SoundCloud truth plate and deck Play/Shuffle controls toward the front edge, and moving the crossfader rail plus A/MID/B presets up toward the mixer screen without changing audio or control behavior.
+- Areas touched: `docs/3d/3dvision10-dj-booth-two-deck-mixer.md`, `src/3d/Level1RecordingStudioRoom.tsx`.
+- Verification: `npm.cmd run build` passed with the existing Vite large chunk warning; live top-down visual confirmation remains manual.
+
+## [1042] - 2026-04-22 10:42 - `DJ-branch / V10 DJ Button Spacing`
+
+- Summary: Spread out the 3D SoundCloud DJ booth controls from top-down feedback by widening the table surface, moving Deck A/B farther apart, separating deck Play/Shuffle buttons, and widening the A/MID/B crossfader button lane without changing audio or control behavior.
+- Areas touched: `docs/3d/3dvision10-dj-booth-two-deck-mixer.md`, `src/3d/Level1RecordingStudioRoom.tsx`.
+- Verification: `npm.cmd run build` passed with the existing Vite large chunk warning; live top-down hit-target confirmation remains manual.
+
+## [1036] - 2026-04-22 10:36 - `DJ-branch / V10-6 Friend Testing Truth`
+
+- Summary: Tightened the 2D and 3D SoundCloud DJ truth copy so the final QA pass clearly says the mixer is local to this browser, Discord voice will not carry the decks, and friends need their own app audio while preserving all deck, mixer, sync, and DAW behavior.
+- Areas touched: `docs/3d/3dvision10-dj-booth-two-deck-mixer.md`, `src/components/SoundCloudPanel.tsx`, `src/3d/Level1RecordingStudioRoom.tsx`.
+- Verification: `npm.cmd run build` passed with the existing Vite large chunk warning; live one-browser, two-browser, 3D booth, and Discord expectation checks remain manual.
+
+## [1024] - 2026-04-22 10:24 - `DJ-branch / V10-5 3D SoundCloud DJ Table Layout`
+
+- Summary: Widened and reorganized the recording-studio SoundCloud DJ table so Deck A sits left, Deck B sits right, the mixer/crossfader lane is centered, deck Play/Shuffle controls are separated, and the mix plus `LOCAL SOUNDCLOUD` readouts are larger and clearer while preserving existing SoundCloud action wiring.
+- Areas touched: `docs/3d/3dvision10-dj-booth-two-deck-mixer.md`, `src/3d/Level1RecordingStudioRoom.tsx`.
+- Verification: `npm.cmd run build` passed with the existing Vite large chunk warning; live first-person/top-down readability and click-target checks remain manual.
+
+## [1011] - 2026-04-22 10:11 - `DJ-branch / V10-4 3D SoundCloud DJ Booth Wiring`
+
+- Summary: Added a local SoundCloud booth prop bundle from the 2D deck/mixer state into the 3D recording-studio DJ desk, rendering Deck A/B status, per-deck Play/Pause and Shuffle controls, mixer readouts, discrete A/MID/B crossfader controls, and a local-browser-audio truth label while keeping the control-room jukebox on Deck A.
+- Areas touched: `docs/3d/3dvision10-dj-booth-two-deck-mixer.md`, `src/3d/soundCloudBooth.ts`, `src/screens/MainScreen.tsx`, `src/3d/ThreeDModeShell.tsx`, `src/3d/Level1RoomShell.tsx`, `src/3d/Level1RecordingStudioRoom.tsx`.
+- Verification: `npm.cmd run build` passed with the existing Vite large chunk warning; live first-person/top-down booth controls and SoundCloud audio checks remain manual.
+
+## [1005] - 2026-04-22 10:05 - `DJ-branch / V10-3 SoundCloud DJ Panel Usability`
+
+- Summary: Reworked the local 2D SoundCloud panel into a Deck A / Mixer / Deck B DJ table layout with responsive stacking, clearer deck and mixer headings, a dedicated Open/Artist link row, and one concise local-browser-audio note while preserving existing deck and mixer behavior.
+- Areas touched: `docs/3d/3dvision10-dj-booth-two-deck-mixer.md`, `src/components/SoundCloudPanel.tsx`, `src/styles/global.css`.
+- Verification: `npm.cmd run build` passed with the existing Vite large chunk warning; live desktop/mobile layout and SoundCloud audio checks remain manual.
+
+## [1001] - 2026-04-22 10:01 - `DJ-branch / V10-2 SoundCloud Crossfader Mixer`
+
+- Summary: Added a local 2D SoundCloud mixer with Deck A/B base trims, equal-power crossfader output, master volume scaling, effective widget volume application, and compact A/B output readouts while keeping the 3D jukebox fallback on Deck A.
+- Areas touched: `docs/3d/3dvision10-dj-booth-two-deck-mixer.md`, `src/hooks/useSoundCloudPlayer.ts`, `src/components/SoundCloudPanel.tsx`, `src/screens/MainScreen.tsx`, `src/styles/global.css`.
+- Verification: `npm.cmd run build` passed with the existing Vite large chunk warning; live mixer/audio checks remain manual.
+
+## [0955] - 2026-04-22 09:55 - `DJ-branch / V10-1 Two SoundCloud Decks`
+
+- Summary: Added independent Deck A and Deck B SoundCloud player controllers in the normal 2D app, with per-deck playlist, play/pause, shuffle, waveform/progress, popout, metadata, hidden widget iframe, and volume state while keeping the existing 3D jukebox fallback on Deck A.
+- Areas touched: `docs/3d/3dvision10-dj-booth-two-deck-mixer.md`, `src/hooks/useSoundCloudPlayer.ts`, `src/components/SoundCloudPanel.tsx`, `src/components/AdminPanel.tsx`, `src/screens/MainScreen.tsx`, `src/styles/global.css`.
+- Verification: `npm.cmd run build` passed with the existing Vite large chunk warning; live two-deck SoundCloud playback and hidden-room checks remain manual.
+
+## [0946] - 2026-04-22 09:46 - `DJ-branch / Name Picker Overlay Fix`
+
+- Summary: Moved the right-click Roll name picker into a fixed portal overlay, clamped it to the viewport, and added outside-click, scroll, resize, and Escape dismissal so it no longer clips behind the lobby panel or rules card.
+- Areas touched: `src/components/LobbyPanel.tsx`, `src/styles/global.css`.
+- Verification: `npm.cmd run build` passed with the existing Vite large chunk warning.
+
+## [0932] - 2026-04-22 09:32 - `DJ-branch / Editable Generated Names Data`
+
+- Summary: Moved generated display names into `src/data/generatedNames.txt` so the browser bundle and sync server share the editable app-owned list, while keeping the right-click picker usable when the sync endpoint is offline.
+- Areas touched: `src/data/generatedNames.txt`, `src/lib/session/generatedNames.ts`, `src/lib/session/generatedNamesCore.ts`, `server/sync-server.ts`.
+- Verification: `npm.cmd run build` passed with the existing Vite large chunk warning; parser smoke check loaded 67 names; temporary WebSocket smoke test selected `Blumie Goode` through the server-validated picker path.
+
+## [0927] - 2026-04-22 09:27 - `DJ-branch / Right-Click Name Picker`
+
+- Summary: Added a right-click picker to the lobby Roll button, loading generated names from the sync server when available, filtering out names already used by other joined users, and adding a server-validated `select_display_name` event for explicit name selection.
+- Areas touched: `src/types/session.ts`, `src/lib/lobby/sessionState.ts`, `src/hooks/useDabSyncSession.ts`, `src/components/LobbyPanel.tsx`, `src/screens/MainScreen.tsx`, `src/styles/global.css`, `server/sync-server.ts`.
+- Verification: `npm.cmd run build` passed with the existing Vite large chunk warning; generated-name helper smoke check passed.
+
+## [0917] - 2026-04-22 09:17 - `DJ-branch / Roll Display Name Button`
+
+- Summary: Added a lobby Roll button for the local user, a shared `roll_display_name` session event, client-side profile persistence, and server-side reroll assignment that avoids duplicate generated names in the room.
+- Areas touched: `src/types/session.ts`, `src/lib/session/generatedNames.ts`, `src/lib/lobby/sessionState.ts`, `src/hooks/useDabSyncSession.ts`, `src/components/LobbyPanel.tsx`, `src/screens/MainScreen.tsx`, `src/styles/global.css`, `server/sync-server.ts`.
+- Verification: `npm.cmd run build` passed with the existing Vite large chunk warning; `tsx` generated-name reroll smoke check passed.
+
+## [0911] - 2026-04-22 09:11 - `DJ-branch / Generated Join Names`
+
+- Summary: Added generated profile names from the DJ archive list for new local profiles and server-side WebSocket join assignment, with stable per-user selection, duplicate avoidance inside a room, and fallback names when the list is exhausted.
+- Areas touched: `src/lib/session/generatedNames.ts`, `src/lib/session/localProfile.ts`, `server/sync-server.ts`.
+- Verification: `npm.cmd run build` passed with the existing Vite large chunk warning; `tsx` helper smoke check passed. Standalone server type-check was blocked because the repo does not include `@types/node`.
+
+## [0905] - 2026-04-22 09:05 - `DJ-branch / Recording Room Speaker Facing Fix`
+
+- Summary: Flipped the recording-room sound activity speaker station so the visible speaker rings face into the room instead of hiding behind the cabinet, and reduced the cabinet glow so it no longer reads as a giant green blocking panel.
+- Areas touched: `src/3d/Level1RecordingStudioRoom.tsx`.
+- Verification: `npm.cmd run build` passed with the existing Vite large chunk warning; live visual confirmation in the room is still recommended.
+
+## [0901] - 2026-04-22 09:01 - `DJ-branch / V9-5 Timeline Layout Readability`
+
+- Summary: Completed the Vision 9 layout/readability pass by raising and enlarging the Arrangement Timeline monitor and tightening the arrangement canvas spacing so it reads as the primary in-room song map while preserving the Vision 8 monitor set and controls.
+- Areas touched: `docs/3d/3dvision9-recording-room-arrangement-timeline.md`, `src/3d/Level1RecordingStudioRoom.tsx`.
+- Verification: Worker and manager `npm.cmd run build` passed with the existing Vite large chunk warning; live first-person, guitar-area, top-down, and overlap checks remain manual.
+
+## [0856] - 2026-04-22 08:56 - `DJ-branch / V9-4 Timeline Friend Playback Guidance`
+
+- Summary: Added compact state-aware playback guidance to the Arrangement Timeline, explaining per-browser ENGINE requirements, local browser playback, shared play state, and that Discord voice is not app-audio transport.
+- Areas touched: `docs/3d/3dvision9-recording-room-arrangement-timeline.md`, `src/3d/Level1RecordingStudioRoom.tsx`.
+- Verification: Manager `npm.cmd run build` passed with the existing Vite large chunk warning; live ENGINE on/off and wording checks remain manual.
+
+## [0852] - 2026-04-22 08:52 - `DJ-branch / V9-3 Arrangement Source Labels`
+
+- Summary: Improved the Arrangement Timeline monitor with friend-readable lane and block source labels, including honest guitar-in-FM wording for guitar-recorded FM Synth material and clear empty-lane purposes.
+- Areas touched: `docs/3d/3dvision9-recording-room-arrangement-timeline.md`, `src/3d/Level1RecordingStudioRoom.tsx`.
+- Verification: Manager `npm.cmd run build` passed with the existing Vite large chunk warning; live readability and overlap checks remain manual.
+
+## [0846] - 2026-04-22 08:46 - `DJ-branch / V9-2 Timeline Playhead Transport Truth`
+
+- Summary: Added a visible playhead plus compact local/shared transport truth to the Arrangement Timeline monitor, showing scope, state, and bar/beat without adding new sync events or audio behavior.
+- Areas touched: `docs/3d/3dvision9-recording-room-arrangement-timeline.md`, `src/3d/Level1RecordingStudioRoom.tsx`.
+- Verification: Manager `npm.cmd run build` passed with the existing Vite large chunk warning; live playhead readability checks remain manual.
+
+## [0836] - 2026-04-22 08:36 - `DJ-branch / V9-1 Arrangement Timeline Monitor`
+
+- Summary: Started Vision 9 by adding a read-only in-room Arrangement Timeline monitor with an approximate 8-bar map, source lanes, clip/note blocks, note-density markers, and honest `GTR IN FM` labels for guitar-recorded FM Synth material.
+- Areas touched: `docs/3d/3dvision9-recording-room-arrangement-timeline.md`, `src/3d/Level1RecordingStudioRoom.tsx`.
+- Verification: Manager `npm.cmd run build` passed with the existing Vite large chunk warning; live readability and overlap checks remain manual.
+
+## [0137] - 2026-04-22 01:37 - `DJ-branch / V8-5 Monitor Layout Readability`
+
+- Summary: Completed the Vision 8 layout pass by spreading the in-room monitor set, increasing key screen proportions, and scaling overview canvas textures from monitor size for crisper text without changing monitor content or behavior.
+- Areas touched: `docs/3d/3dvision8-recording-room-monitors.md`, `src/3d/Level1RecordingStudioRoom.tsx`.
+- Verification: Manager `npm.cmd run build` passed with the existing Vite large chunk warning; live first-person/top-down readability and overlap checks still need eyeballing in the room.
+
+## [0134] - 2026-04-22 01:34 - `DJ-branch / V8-4 Patch And Signal Truth Monitor`
+
+- Summary: Completed the Vision 8 patch/signal monitor by turning the Studio Truth screen into a plain-language local patch, guitar/live-state, and friend ENGINE expectation readout without implying raw Discord or microphone audio streaming.
+- Areas touched: `docs/3d/3dvision8-recording-room-monitors.md`, `src/3d/Level1RecordingStudioRoom.tsx`.
+- Verification: Manager `npm.cmd run build` passed with the existing Vite large chunk warning; live readability and friend-wording checks remain queued for the V8 monitor layout pass.
+
+## [0127] - 2026-04-22 01:27 - `DJ-branch / V8-3 Mixer View Monitor`
+
+- Summary: Completed the Vision 8 mixer monitor with a read-only in-room Mixer View showing five track strips, volume/mute/meter state, master and ENGINE status, a conservative silence reason, and the latest live/generated sound.
+- Areas touched: `docs/3d/3dvision8-recording-room-monitors.md`, `src/3d/Level1RecordingStudioRoom.tsx`.
+- Verification: Manager `npm.cmd run build` passed with the existing Vite large chunk warning; live readability and overlap checks remain queued for the V8 monitor layout pass.
+
+## [0122] - 2026-04-22 01:22 - `DJ-branch / V8-2 Sequence View Monitor`
+
+- Summary: Completed the Vision 8 sequence monitor with a read-only 5-by-4 in-room session grid, clip-state colors, selected-cell highlight, note-density ticks, and guitar tags for guitar-recorded FM Synth clips.
+- Areas touched: `docs/3d/3dvision8-recording-room-monitors.md`, `src/3d/Level1RecordingStudioRoom.tsx`.
+- Verification: Manager `npm.cmd run build` passed with the existing Vite large chunk warning; live first-person/top-down readability remains queued for the V8 monitor layout pass.
+
+## [0115] - 2026-04-22 01:15 - `DJ-branch / V8-1 Big Studio Status Monitor`
+
+- Summary: Added the first Vision 8 monitor: a wide in-room Studio Status screen that reports ENGINE/master state, guitar ownership/live/recording state, current studio activity, and one conservative next action.
+- Areas touched: `docs/3d/3dvision8-recording-room-monitors.md`, `src/3d/Level1RecordingStudioRoom.tsx`.
+- Verification: Manager `npm.cmd run build` passed with the existing Vite large chunk warning; live first-person readability remains queued for the V8 monitor layout pass.
+
+## [0055] - 2026-04-22 00:55 - `DJ-branch / Shared Countdown Precision Display`
+
+- Summary: Added a shared admin countdown precision setting so the host can step the live timer display from whole seconds up to five decimal places for every connected user.
+- Areas touched: `src/types/session.ts`, `src/lib/lobby/sessionState.ts`, `src/hooks/useCountdownDisplay.ts`, `src/lib/countdown/engine.ts`, `src/hooks/useDabSyncSession.ts`, `src/screens/MainScreen.tsx`, `src/components/AdminPanel.tsx`, `src/components/TimerPanel.tsx`, `src/styles/global.css`.
+- Verification: `npm.cmd run build` passed with the existing Vite large chunk warning.
+
+## [0048] - 2026-04-22 00:48 - `DJ-branch / Guitar Note Banks`
+
+- Summary: Completed V7-5 by expanding the handheld guitar into three nine-note banks, adding held-guitar `Q`/`E` bank shifts, keeping number row/numpad `1-9` inside the active bank, and showing bank/range feedback in first person and on the guitar stand.
+- Areas touched: `docs/3d/3dvision7-recording-room-guitar.md`, `src/3d/ThreeDModeShell.tsx`, `src/3d/Level1RoomShell.tsx`, `src/3d/Level1RecordingStudioRoom.tsx`.
+- Verification: Manager `npm.cmd run build` passed with the existing Vite large chunk warning.
+
+## [0044] - 2026-04-22 00:44 - `DJ-branch / Guitar Recording And Routing`
+
+- Summary: Completed V7-4 by adding a holder-only guitar REC route, recording `GTR` notes into the local FM Synth scene 1 clip while preserving direct live guitar playback, and showing LIVE versus REC feedback on the stand and first-person guitar.
+- Areas touched: `docs/3d/3dvision7-recording-room-guitar.md`, `src/3d/ThreeDModeShell.tsx`, `src/3d/Level1RoomShell.tsx`, `src/3d/Level1RecordingStudioRoom.tsx`, `src/3d/useLocalDawState.ts`.
+- Verification: Manager `npm.cmd run build` passed with the existing Vite large chunk warning.
+
+## [0038] - 2026-04-22 00:38 - `DJ-branch / Shared Recording Room Guitar Ownership`
+
+- Summary: Completed V7-3 by moving guitar pickup/drop into shared session ownership, showing held-by-you/held-by-friend state on the guitar stand, and releasing the guitar on exit, presence clear, reset, holder removal, or stale free-roam presence.
+- Areas touched: `docs/3d/3dvision7-recording-room-guitar.md`, `src/types/session.ts`, `src/lib/lobby/sessionState.ts`, `src/hooks/useDabSyncSession.ts`, `src/screens/MainScreen.tsx`, `src/lib/sync/mockSyncClient.ts`, `src/3d/ThreeDModeShell.tsx`, `src/3d/Level1RoomShell.tsx`, `src/3d/Level1RecordingStudioRoom.tsx`.
+- Verification: Manager `npm.cmd run build` passed with the existing Vite large chunk warning.
+
+## [0024] - 2026-04-22 00:24 - `DJ-branch / Guitar Room Feedback`
+
+- Summary: Completed V7-2 by adding guitar held/available feedback, selected-note readouts, a `1-9` note strip, and local silent-reason badges for ENGINE off, muted, or volume zero.
+- Areas touched: `docs/3d/3dvision7-recording-room-guitar.md`, `src/3d/ThreeDModeShell.tsx`, `src/3d/Level1RoomShell.tsx`, `src/3d/Level1RecordingStudioRoom.tsx`.
+- Verification: Manager `npm.cmd run build` passed with the existing Vite large chunk warning.
+
+## [0015] - 2026-04-22 00:15 - `DJ-branch / Simple Recording Room Guitar`
+
+- Summary: Added Vision 7 and shipped the first simple handheld guitar pass: visible studio guitar stand, local pickup/drop, first-person carried guitar visual, left-click strum, and number row/numpad `1-9` guitar notes through the existing FM synth/shared live sound path.
+- Areas touched: `docs/3d/3dvision7-recording-room-guitar.md`, `src/3d/ThreeDModeShell.tsx`, `src/3d/Level1RoomShell.tsx`, `src/3d/Level1RecordingStudioRoom.tsx`.
+- Verification: Manager `npm.cmd run build` passed with the existing Vite large chunk warning.
+
+## [2359] - 2026-04-21 23:59 - `DJ-branch / Louder Recording Room Audio Engine`
+
+- Summary: Raised the Recording Studio audio engine master volume ceiling from 0.5 to 1.5, doubled the ENGINE startup volume, and updated in-room master volume controls/meters for the new range.
+- Areas touched: `src/3d/useLocalDawAudioEngine.ts`, `src/3d/Level1RecordingStudioRoom.tsx`.
+- Verification: Manager `npm.cmd run build` passed with the existing Vite large chunk warning.
+
 ## [2352] - 2026-04-21 23:52 - `DJ-branch / Free-Cam Click Interactions`
 
 - Summary: Enabled aimed click interactions while the Tab top-down camera is in free-fly mode, while keeping normal top-down player-cam interactions disabled.

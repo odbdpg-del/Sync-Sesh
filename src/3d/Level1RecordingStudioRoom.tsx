@@ -1,6 +1,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { ReactNode } from "react";
+import { useFrame, useThree } from "@react-three/fiber";
 import type { LevelAreaConfig, LevelOpeningConfig } from "./levels";
 import type { PhaseVisuals } from "./phaseVisuals";
+import type {
+  SoundCloudBoothConsoleEvent,
+  SoundCloudBoothConsoleEventInput,
+  SoundCloudBoothDeck,
+  SoundCloudBoothMixer,
+  SoundCloudBoothState,
+} from "./soundCloudBooth";
 import { useInteractionRegistry, useRegisterInteractable } from "./interactions";
 import { getSharedDawClipSlotId } from "../lib/daw/sharedDaw";
 import {
@@ -53,6 +62,7 @@ import type {
   SharedDawClipPublishPayload,
   SharedDawClipsState,
   SharedDawLiveSoundPayload,
+  SharedStudioGuitarState,
   SharedDawTrackId,
   SharedDawTransport,
   SessionUser,
@@ -61,12 +71,135 @@ import type {
 const WALL_THICKNESS = 0.18;
 
 type Vec3 = [number, number, number];
+type HeldStudioInstrument = "guitar" | null;
+type StudioGuitarAudioReadiness = { label: "AUDIBLE" | "SILENT"; reason: string };
+type StudioGuitarRecordingStatus = {
+  caption: string;
+  isEnabled: boolean;
+  label: string;
+};
 type StudioRoleId = "daw" | "piano-midi" | "drum-kit" | "looper" | "dj" | "instrument-rack" | "effects-rack";
+type StudioLayoutStationId =
+  | "daw"
+  | "dj"
+  | "drums"
+  | "piano"
+  | "audio-interface"
+  | "looper"
+  | "guitar"
+  | "monitor-studio-status"
+  | "monitor-transport"
+  | "monitor-sequence-grid"
+  | "monitor-arrangement-timeline"
+  | "monitor-track-list"
+  | "monitor-device-rack"
+  | "monitor-mixer-view"
+  | "monitor-patch-signal";
 
-type StudioOverviewScreenKind = "text" | "clip-grid";
+interface StudioLayoutTransform {
+  position: Vec3;
+  rotation: Vec3;
+}
+
+type StudioLayoutState = Record<StudioLayoutStationId, StudioLayoutTransform>;
+
+interface StudioLayoutStationSpec {
+  id: StudioLayoutStationId;
+  label: string;
+  defaultTransform: StudioLayoutTransform;
+  hitboxSize: Vec3;
+  hitboxOffset?: Vec3;
+  followDistance: number;
+  floorHeight: number;
+  defaultFloorLock: boolean;
+}
+
+interface StudioLayoutMoveState {
+  stationId: StudioLayoutStationId;
+  startTransform: StudioLayoutTransform;
+  distanceFromCamera: number;
+  floorLock: boolean;
+}
+
+type StudioOverviewScreenKind = "text" | "clip-grid" | "sequence-grid" | "arrangement-grid" | "mixer-grid";
+type StudioOverviewScreenId =
+  | "big-status"
+  | "transport"
+  | "sequence-grid"
+  | "arrangement-timeline"
+  | "track-list"
+  | "device-rack"
+  | "mixer-view"
+  | "studio-truth";
+
+interface StudioMixerStripSpec {
+  accentColor: string;
+  label: string;
+  meterLevel: number;
+  muteLabel: string;
+  volumeLabel: string;
+}
+
+interface StudioMixerMonitorSpec {
+  engineLine: string;
+  lastSoundLine: string;
+  lines: string[];
+  masterMeterLevel: number;
+  masterMuteLabel: string;
+  masterVolumeLabel: string;
+  silenceLine: string;
+  strips: StudioMixerStripSpec[];
+}
+
+interface StudioSequenceGridCellSpec {
+  clip: LocalDawClip;
+  track: LocalDawTrack;
+  noteCount: number;
+  noteDensityMarkers: number;
+  hasGuitarLabel: boolean;
+  isSelected: boolean;
+  isLastPlayback: boolean;
+  lastPlaybackNoteId: string | null;
+  stateLabel: string;
+}
+
+interface StudioSequenceGridSpec {
+  tracks: Array<Pick<LocalDawTrack, "id" | "label" | "color">>;
+  scenes: number[];
+  cells: StudioSequenceGridCellSpec[];
+}
+
+interface StudioSequenceMonitorSpec {
+  lines: string[];
+  sequence: StudioSequenceGridSpec | null;
+}
+
+interface StudioArrangementTimelineBlockSpec {
+  clip: LocalDawClip;
+  track: Pick<LocalDawTrack, "id" | "label" | "color">;
+  laneIndex: number;
+  label: string;
+  noteCount: number;
+  noteDensityMarkers: number;
+  startBar: number;
+  endBar: number;
+  hasGuitarLabel: boolean;
+  sourceLabel: string;
+  stateLabel: string;
+}
+
+interface StudioArrangementTimelineSpec {
+  bars: number[];
+  blocks: StudioArrangementTimelineBlockSpec[];
+  playheadBeat: number;
+  playheadBar: number;
+  playheadIsMoving: boolean;
+  tracks: Array<Pick<LocalDawTrack, "id" | "label" | "color"> & { sourceLabel: string }>;
+  transportScopeLabel: "LOCAL" | "SHARED";
+}
 
 interface StudioOverviewScreenSpec {
-  id: string;
+  id: StudioOverviewScreenId;
   title: string;
   lines: string[];
   accentColor: string;
@@ -74,6 +207,9 @@ interface StudioOverviewScreenSpec {
   rotation: Vec3;
   size: [number, number];
   kind?: StudioOverviewScreenKind;
+  sequence?: StudioSequenceGridSpec | null;
+  arrangement?: StudioArrangementTimelineSpec | null;
+  mixer?: StudioMixerMonitorSpec | null;
 }
 
 type StudioAudioControlId = "mute" | "volume-down" | "volume-up";
@@ -220,9 +356,44 @@ interface StudioDjControlSpec {
   position: Vec3;
   size: Vec3;
   accentColor: string;
+  captionFontSize?: number;
   isActive?: boolean;
+  enabled?: boolean;
   onActivate: () => void;
 }
+
+interface StudioSoundCloudDragFaderProps {
+  accentColor: string;
+  id: string;
+  label: string;
+  position: Vec3;
+  railSize: Vec3;
+  value: number;
+  min: number;
+  max: number;
+  sensitivity: number;
+  onChange?: (value: number) => void;
+  onCommit?: (value: number) => void;
+}
+
+interface StudioSoundCloudProgressSeekBarProps {
+  accentColor: string;
+  deck: SoundCloudBoothDeck;
+  id: string;
+  position: Vec3;
+  onPushConsoleEvent?: (event: SoundCloudBoothConsoleEventInput) => void;
+}
+
+interface StudioSoundCloudMonitorWaveformHitTargetProps {
+  caption: string;
+  deck: SoundCloudBoothDeck;
+  id: string;
+  onPushConsoleEvent?: (event: SoundCloudBoothConsoleEventInput) => void;
+  position: Vec3;
+  size: Vec3;
+}
+
+type StudioSoundCloudPlatterScrubLabel = "GRAB" | "SCRUB BACK" | "ON BEAT" | "PUSHING" | "OVERSPEED";
 
 interface StudioPianoKeySpec extends LocalDawPianoLiveNote {
   whiteKeyIndex?: number;
@@ -304,10 +475,176 @@ const PIANO_BLACK_KEY_SPECS: StudioPianoKeySpec[] = [
 ];
 const STUDIO_ROLE_PROXIMITY_RADIUS = 2.15;
 const STUDIO_PIANO_POSITION: Vec3 = [-17.2, 0, -1.35];
-const STUDIO_DRUM_KIT_POSITION: Vec3 = [-14.35, 0, 1.42];
-const STUDIO_DISPLAY_MAX_MASTER_VOLUME = 0.5;
+const STUDIO_DRUM_KIT_POSITION: Vec3 = [-16.5, 0, 1.42];
+const STUDIO_DJ_PLATFORM_CENTER: Vec3 = [-16.5, 0.68, 6.05];
+const STUDIO_DJ_PLATFORM_SIZE: Vec3 = [11.3, 1.36, 5.4];
+const STUDIO_DJ_PLATFORM_FLOOR_Y = 1.36;
+const STUDIO_DJ_PLATFORM_RAMP_SIZE: Vec3 = [3.3, 0.055, 1.14];
+const STUDIO_DJ_PLATFORM_LEFT_RAMP_POSITION: Vec3 = [-20.2, 0.68, 2.8];
+const STUDIO_DJ_PLATFORM_RIGHT_RAMP_POSITION: Vec3 = [-12.8, 0.68, 2.8];
+const STUDIO_SOUNDCLOUD_DJ_POSITION: Vec3 = [-16.5, STUDIO_DJ_PLATFORM_FLOOR_Y, 6.05];
+const STUDIO_SOUNDCLOUD_DJ_ROTATION: Vec3 = [0, 0, 0];
+const STUDIO_SOUNDCLOUD_DJ_DESK_SIZE: Vec3 = [2.82, 0.52, 1.58];
+const STUDIO_DAW_POSITION: Vec3 = [-21.25, 0, -4.6];
+const STUDIO_DAW_ROTATION: Vec3 = [0, Math.PI / 2, 0];
+const STUDIO_LOOPER_POSITION: Vec3 = [-17.0, 0, -8.1];
+const STUDIO_LOOPER_ROTATION: Vec3 = [0, 0, 0];
+const STUDIO_AUDIO_INTERFACE_POSITION: Vec3 = [-22.07, 0, -2.35];
+const STUDIO_AUDIO_INTERFACE_ROTATION: Vec3 = [0, Math.PI / 2, 0];
+const STUDIO_GUITAR_STAND_POSITION: Vec3 = [-18.92, 0, 1.82];
+const STUDIO_GUITAR_STAND_ROTATION: Vec3 = [0, -0.34, 0];
+const STUDIO_DISPLAY_MAX_MASTER_VOLUME = 1.5;
+const STUDIO_MASTER_VOLUME_STEP = 0.15;
 const FM_SYNTH_UI_GAIN_MAX = 0.16;
 const FM_SYNTH_UI_GAIN_STEP = 0.04;
+const STUDIO_LAYOUT_STORAGE_KEY = "sync-sesh:recording-studio-layout:v14";
+const STUDIO_LAYOUT_STORAGE_VERSION = 3;
+const STUDIO_LAYOUT_STATION_PREFIX = "studio-layout-station-";
+const STUDIO_LAYOUT_STATION_SPECS: Record<StudioLayoutStationId, StudioLayoutStationSpec> = {
+  daw: {
+    id: "daw",
+    label: "DAW Table",
+    defaultTransform: { position: STUDIO_DAW_POSITION, rotation: STUDIO_DAW_ROTATION },
+    hitboxSize: [3.0, 1.5, 2.7],
+    hitboxOffset: [0, 0.75, 0],
+    followDistance: 3.4,
+    floorHeight: 0,
+    defaultFloorLock: false,
+  },
+  "audio-interface": {
+    id: "audio-interface",
+    label: "Audio Interface",
+    defaultTransform: { position: STUDIO_AUDIO_INTERFACE_POSITION, rotation: STUDIO_AUDIO_INTERFACE_ROTATION },
+    hitboxSize: [1.35, 1.2, 1.0],
+    hitboxOffset: [0, 0.6, 0],
+    followDistance: 2.6,
+    floorHeight: 0,
+    defaultFloorLock: false,
+  },
+  piano: {
+    id: "piano",
+    label: "Piano",
+    defaultTransform: { position: STUDIO_PIANO_POSITION, rotation: [0, 0, 0] },
+    hitboxSize: [2.5, 1.0, 1.2],
+    hitboxOffset: [0, 0.52, 0],
+    followDistance: 3.0,
+    floorHeight: 0,
+    defaultFloorLock: false,
+  },
+  guitar: {
+    id: "guitar",
+    label: "Guitar Stand",
+    defaultTransform: { position: STUDIO_GUITAR_STAND_POSITION, rotation: STUDIO_GUITAR_STAND_ROTATION },
+    hitboxSize: [1.2, 1.7, 1.0],
+    hitboxOffset: [0, 0.85, 0],
+    followDistance: 2.5,
+    floorHeight: 0,
+    defaultFloorLock: false,
+  },
+  looper: {
+    id: "looper",
+    label: "Looper",
+    defaultTransform: { position: STUDIO_LOOPER_POSITION, rotation: STUDIO_LOOPER_ROTATION },
+    hitboxSize: [2.5, 1.5, 1.5],
+    hitboxOffset: [0, 0.74, 0],
+    followDistance: 3.0,
+    floorHeight: 0,
+    defaultFloorLock: false,
+  },
+  drums: {
+    id: "drums",
+    label: "Drum Station",
+    defaultTransform: { position: STUDIO_DRUM_KIT_POSITION, rotation: [0, 0, 0] },
+    hitboxSize: [3.1, 2.2, 2.6],
+    hitboxOffset: [0, 1.05, 0],
+    followDistance: 3.2,
+    floorHeight: 0,
+    defaultFloorLock: false,
+  },
+  dj: {
+    id: "dj",
+    label: "DJ Booth",
+    defaultTransform: { position: STUDIO_SOUNDCLOUD_DJ_POSITION, rotation: STUDIO_SOUNDCLOUD_DJ_ROTATION },
+    hitboxSize: [3.2, 1.6, 2.2],
+    hitboxOffset: [0, 0.82, 0],
+    followDistance: 3.4,
+    floorHeight: STUDIO_DJ_PLATFORM_FLOOR_Y,
+    defaultFloorLock: false,
+  },
+  "monitor-studio-status": {
+    id: "monitor-studio-status",
+    label: "Studio Status Monitor",
+    defaultTransform: { position: [-22.18, 3.56, -5.25], rotation: [0, Math.PI / 2, 0] },
+    hitboxSize: [4.3, 1.34, 0.24],
+    followDistance: 3.2,
+    floorHeight: 3.56,
+    defaultFloorLock: false,
+  },
+  "monitor-transport": {
+    id: "monitor-transport",
+    label: "Transport Monitor",
+    defaultTransform: { position: [-22.18, 2.76, -0.02], rotation: [0, Math.PI / 2, 0] },
+    hitboxSize: [2.28, 0.82, 0.24],
+    followDistance: 2.8,
+    floorHeight: 2.76,
+    defaultFloorLock: false,
+  },
+  "monitor-sequence-grid": {
+    id: "monitor-sequence-grid",
+    label: "Sequence View Monitor",
+    defaultTransform: { position: [-22.18, 1.66, -6.86], rotation: [0, Math.PI / 2, 0] },
+    hitboxSize: [2.84, 1.26, 0.24],
+    followDistance: 3.0,
+    floorHeight: 1.66,
+    defaultFloorLock: false,
+  },
+  "monitor-arrangement-timeline": {
+    id: "monitor-arrangement-timeline",
+    label: "Arrangement Timeline Monitor",
+    defaultTransform: { position: [-16.88, 5.04, -8.58], rotation: [0, 0, 0] },
+    hitboxSize: [5.38, 2.16, 0.24],
+    followDistance: 4.0,
+    floorHeight: 5.04,
+    defaultFloorLock: false,
+  },
+  "monitor-track-list": {
+    id: "monitor-track-list",
+    label: "Track List Monitor",
+    defaultTransform: { position: [-22.18, 2.58, -2.86], rotation: [0, Math.PI / 2, 0] },
+    hitboxSize: [2.32, 0.84, 0.24],
+    followDistance: 2.8,
+    floorHeight: 2.58,
+    defaultFloorLock: false,
+  },
+  "monitor-device-rack": {
+    id: "monitor-device-rack",
+    label: "Device Rack Monitor",
+    defaultTransform: { position: [-16.88, 2.24, -8.58], rotation: [0, 0, 0] },
+    hitboxSize: [2.4, 0.84, 0.24],
+    followDistance: 3.0,
+    floorHeight: 2.24,
+    defaultFloorLock: false,
+  },
+  "monitor-mixer-view": {
+    id: "monitor-mixer-view",
+    label: "Mixer View Monitor",
+    defaultTransform: { position: [-16.88, 3.18, -8.58], rotation: [0, 0, 0] },
+    hitboxSize: [3.38, 1.3, 0.24],
+    followDistance: 3.2,
+    floorHeight: 3.18,
+    defaultFloorLock: false,
+  },
+  "monitor-patch-signal": {
+    id: "monitor-patch-signal",
+    label: "Patch Signal Monitor",
+    defaultTransform: { position: [-22.18, 1.44, -2.88], rotation: [0, Math.PI / 2, 0] },
+    hitboxSize: [2.34, 0.96, 0.24],
+    followDistance: 2.8,
+    floorHeight: 1.44,
+    defaultFloorLock: false,
+  },
+};
+const STUDIO_LAYOUT_STATION_IDS = Object.keys(STUDIO_LAYOUT_STATION_SPECS) as StudioLayoutStationId[];
 const STUDIO_ROLE_SPECS: StudioRoleSpec[] = [
   {
     id: "daw",
@@ -330,7 +667,7 @@ const STUDIO_ROLE_SPECS: StudioRoleSpec[] = [
     label: "DRUM KIT",
     accentColor: "#f8d36a",
     anchorPosition: STUDIO_DRUM_KIT_POSITION,
-    badgePosition: [-14.35, 1.42, 2.18],
+    badgePosition: [-16.5, 1.42, 2.18],
     badgeRotation: [0, Math.PI, 0],
   },
   {
@@ -345,9 +682,9 @@ const STUDIO_ROLE_SPECS: StudioRoleSpec[] = [
     id: "dj",
     label: "DJ",
     accentColor: "#f64fff",
-    anchorPosition: [-12.0, 0, -1.2],
-    badgePosition: [-12.55, 1.45, -2.05],
-    badgeRotation: [0, -0.55, 0],
+    anchorPosition: STUDIO_SOUNDCLOUD_DJ_POSITION,
+    badgePosition: [-16.5, 2.8, 4.78],
+    badgeRotation: [0, 0, 0],
   },
   {
     id: "instrument-rack",
@@ -366,6 +703,190 @@ const STUDIO_ROLE_SPECS: StudioRoleSpec[] = [
     badgeRotation: [0, 0, 0],
   },
 ];
+
+function cloneStudioLayoutTransform(transform: StudioLayoutTransform): StudioLayoutTransform {
+  return {
+    position: [...transform.position] as Vec3,
+    rotation: [...transform.rotation] as Vec3,
+  };
+}
+
+function createDefaultStudioLayoutState(): StudioLayoutState {
+  return STUDIO_LAYOUT_STATION_IDS.reduce((state, stationId) => ({
+    ...state,
+    [stationId]: cloneStudioLayoutTransform(STUDIO_LAYOUT_STATION_SPECS[stationId].defaultTransform),
+  }), {} as StudioLayoutState);
+}
+
+function isStudioLayoutStationId(value: string): value is StudioLayoutStationId {
+  return STUDIO_LAYOUT_STATION_IDS.includes(value as StudioLayoutStationId);
+}
+
+function isStudioLayoutInteractiveTarget(target: EventTarget | null) {
+  if (!(target instanceof HTMLElement)) {
+    return false;
+  }
+
+  const tagName = target.tagName.toLowerCase();
+  return tagName === "input" || tagName === "textarea" || tagName === "select" || target.isContentEditable;
+}
+
+function getStationIdFromLayoutHitId(hitId?: string): StudioLayoutStationId | null {
+  if (!hitId?.startsWith(STUDIO_LAYOUT_STATION_PREFIX)) {
+    return null;
+  }
+
+  const stationId = hitId.slice(STUDIO_LAYOUT_STATION_PREFIX.length);
+  return isStudioLayoutStationId(stationId) ? stationId : null;
+}
+
+function getStudioOverviewScreenStationId(screenId: StudioOverviewScreenId): StudioLayoutStationId {
+  switch (screenId) {
+    case "big-status":
+      return "monitor-studio-status";
+    case "transport":
+      return "monitor-transport";
+    case "sequence-grid":
+      return "monitor-sequence-grid";
+    case "arrangement-timeline":
+      return "monitor-arrangement-timeline";
+    case "track-list":
+      return "monitor-track-list";
+    case "device-rack":
+      return "monitor-device-rack";
+    case "mixer-view":
+      return "monitor-mixer-view";
+    case "studio-truth":
+      return "monitor-patch-signal";
+  }
+}
+
+function normalizeStudioLayoutTransform(stationId: StudioLayoutStationId, value: unknown): StudioLayoutTransform {
+  const defaultTransform = STUDIO_LAYOUT_STATION_SPECS[stationId].defaultTransform;
+
+  if (!value || typeof value !== "object") {
+    return cloneStudioLayoutTransform(defaultTransform);
+  }
+
+  const candidate = value as Partial<StudioLayoutTransform>;
+  const position = Array.isArray(candidate.position) && candidate.position.length >= 3
+    ? candidate.position.map((entry, index) => Number.isFinite(Number(entry)) ? Number(entry) : defaultTransform.position[index]) as Vec3
+    : [...defaultTransform.position] as Vec3;
+  const rotation = Array.isArray(candidate.rotation) && candidate.rotation.length >= 3
+    ? candidate.rotation.map((entry, index) => Number.isFinite(Number(entry)) ? Number(entry) : defaultTransform.rotation[index]) as Vec3
+    : [...defaultTransform.rotation] as Vec3;
+
+  return { position, rotation };
+}
+
+function loadStudioLayoutState(): StudioLayoutState {
+  if (typeof window === "undefined") {
+    return createDefaultStudioLayoutState();
+  }
+
+  try {
+    const rawState = window.localStorage.getItem(STUDIO_LAYOUT_STORAGE_KEY);
+
+    if (!rawState) {
+      return createDefaultStudioLayoutState();
+    }
+
+    const parsed = JSON.parse(rawState) as ({
+      stations?: Partial<Record<StudioLayoutStationId, StudioLayoutTransform>>;
+      version?: number;
+    } | Partial<Record<StudioLayoutStationId, StudioLayoutTransform>>) | null;
+    const storedStations: Partial<Record<StudioLayoutStationId, StudioLayoutTransform>> | undefined =
+      parsed && typeof parsed === "object" && "stations" in parsed && parsed.version === STUDIO_LAYOUT_STORAGE_VERSION
+        ? parsed.stations
+        : parsed && typeof parsed === "object"
+          ? parsed as Partial<Record<StudioLayoutStationId, StudioLayoutTransform>>
+          : undefined;
+
+    return STUDIO_LAYOUT_STATION_IDS.reduce((state, stationId) => ({
+      ...state,
+      [stationId]: normalizeStudioLayoutTransform(stationId, storedStations?.[stationId]),
+    }), {} as StudioLayoutState);
+  } catch {
+    return createDefaultStudioLayoutState();
+  }
+}
+
+function saveStudioLayoutState(layoutState: StudioLayoutState) {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  window.localStorage.setItem(STUDIO_LAYOUT_STORAGE_KEY, JSON.stringify({
+    version: STUDIO_LAYOUT_STORAGE_VERSION,
+    stations: layoutState,
+  }));
+}
+
+function areStudioLayoutTransformsEqual(first: StudioLayoutTransform, second: StudioLayoutTransform) {
+  return (
+    first.position.every((value, index) => Math.abs(value - second.position[index]) < 0.001) &&
+    first.rotation.every((value, index) => Math.abs(value - second.rotation[index]) < 0.001)
+  );
+}
+
+function rotateStudioLayoutPoint(point: Vec3, yaw: number): Vec3 {
+  const cos = Math.cos(yaw);
+  const sin = Math.sin(yaw);
+
+  return [
+    point[0] * cos + point[2] * sin,
+    point[1],
+    -point[0] * sin + point[2] * cos,
+  ];
+}
+
+function transformStudioLayoutPoint(point: Vec3, stationId: StudioLayoutStationId, layoutState: StudioLayoutState): Vec3 {
+  const spec = STUDIO_LAYOUT_STATION_SPECS[stationId];
+  const transform = layoutState[stationId] ?? spec.defaultTransform;
+  const relativePoint: Vec3 = [
+    point[0] - spec.defaultTransform.position[0],
+    point[1] - spec.defaultTransform.position[1],
+    point[2] - spec.defaultTransform.position[2],
+  ];
+  const defaultLocal = rotateStudioLayoutPoint(relativePoint, -spec.defaultTransform.rotation[1]);
+  const transformedLocal = rotateStudioLayoutPoint(defaultLocal, transform.rotation[1]);
+
+  return [
+    transform.position[0] + transformedLocal[0],
+    transform.position[1] + transformedLocal[1],
+    transform.position[2] + transformedLocal[2],
+  ];
+}
+
+function getLayoutAdjustedStudioRoleSpec(role: StudioRoleSpec, layoutState: StudioLayoutState): StudioRoleSpec {
+  const stationIdByRoleId: Partial<Record<StudioRoleId, StudioLayoutStationId>> = {
+    daw: "daw",
+    "piano-midi": "piano",
+    "drum-kit": "drums",
+    looper: "looper",
+    dj: "dj",
+  };
+  const stationId = stationIdByRoleId[role.id];
+
+  if (!stationId) {
+    return role;
+  }
+
+  const spec = STUDIO_LAYOUT_STATION_SPECS[stationId];
+  const transform = layoutState[stationId] ?? spec.defaultTransform;
+  const rotationDelta = transform.rotation[1] - spec.defaultTransform.rotation[1];
+
+  return {
+    ...role,
+    anchorPosition: transformStudioLayoutPoint(role.anchorPosition, stationId, layoutState),
+    badgePosition: transformStudioLayoutPoint(role.badgePosition, stationId, layoutState),
+    badgeRotation: [
+      role.badgeRotation[0],
+      role.badgeRotation[1] + rotationDelta,
+      role.badgeRotation[2],
+    ],
+  };
+}
 
 function getNextFmEnvelopePreset(preset: LocalDawFmSynthEnvelopePreset): LocalDawFmSynthEnvelopePreset {
   if (preset === "pluck") {
@@ -1017,7 +1538,7 @@ function getMasterMeterLevel(localDawState: LocalDawState, localDawAudioState: L
     Math.max(peak, getTrackMeterLevel(localDawState, localDawAudioState, track))
   ), 0);
 
-  return Math.max(0.04, Math.min(1, trackPeak * (localDawAudioState.masterVolume / 0.5)));
+  return Math.max(0.04, Math.min(1, trackPeak * (localDawAudioState.masterVolume / STUDIO_DISPLAY_MAX_MASTER_VOLUME)));
 }
 
 function StudioMixerButton({
@@ -1211,7 +1732,7 @@ function StudioMixerControls({
       size: [0.13, 0.028, 0.065],
       accentColor: phaseVisuals.gridSecondary,
       onActivate: () => {
-        localDawAudioActions?.setMasterVolume(masterVolume - 0.05);
+        localDawAudioActions?.setMasterVolume(masterVolume - STUDIO_MASTER_VOLUME_STEP);
       },
     },
     {
@@ -1222,7 +1743,7 @@ function StudioMixerControls({
       size: [0.13, 0.028, 0.065],
       accentColor: phaseVisuals.gridSecondary,
       onActivate: () => {
-        localDawAudioActions?.setMasterVolume(masterVolume + 0.05);
+        localDawAudioActions?.setMasterVolume(masterVolume + STUDIO_MASTER_VOLUME_STEP);
       },
     },
   ], [
@@ -1262,7 +1783,7 @@ function StudioMixerControls({
           meterLevel={masterMeterLevel}
           muted={masterMuted}
           trackColor="#e9fbff"
-          volume={masterVolume / 0.5}
+          volume={masterVolume / STUDIO_DISPLAY_MAX_MASTER_VOLUME}
           x={1.18}
         />
       ) : null}
@@ -1273,17 +1794,22 @@ function StudioMixerControls({
 function createStudioTransportControlCanvas({
   accentColor,
   caption,
+  captionFontSize = 22,
+  enabled,
   isActive,
   label,
 }: {
   accentColor: string;
   caption: string;
+  captionFontSize?: number;
+  enabled?: boolean;
   isActive?: boolean;
   label: string;
 }) {
   const canvas = document.createElement("canvas");
   canvas.width = 384;
   canvas.height = 192;
+  const isEnabled = enabled ?? true;
 
   const context = canvas.getContext("2d");
 
@@ -1294,20 +1820,20 @@ function createStudioTransportControlCanvas({
   context.fillStyle = "#050914";
   context.fillRect(0, 0, canvas.width, canvas.height);
   context.strokeStyle = accentColor;
-  context.globalAlpha = isActive ? 0.62 : 0.38;
+  context.globalAlpha = isEnabled ? (isActive ? 0.62 : 0.38) : 0.18;
   context.lineWidth = 8;
   context.strokeRect(18, 18, canvas.width - 36, canvas.height - 36);
   context.globalAlpha = 1;
 
   context.fillStyle = accentColor;
-  context.globalAlpha = isActive ? 0.86 : 0.68;
+  context.globalAlpha = isEnabled ? (isActive ? 0.86 : 0.68) : 0.32;
   context.font = "700 46px monospace";
   context.textAlign = "center";
   context.textBaseline = "middle";
   context.fillText(label.toUpperCase(), canvas.width / 2, 78);
-  context.fillStyle = "#a9bdc9";
-  context.globalAlpha = 0.48;
-  context.font = "700 22px monospace";
+  context.fillStyle = isEnabled ? "#a9bdc9" : "#6f86a3";
+  context.globalAlpha = isEnabled ? (captionFontSize > 22 ? 0.72 : 0.48) : 0.24;
+  context.font = `700 ${captionFontSize}px monospace`;
   context.fillText(caption.toUpperCase(), canvas.width / 2, 124);
   context.globalAlpha = 1;
 
@@ -3815,6 +4341,7 @@ function StudioLooperControls({
 
 function StudioDjControl({ control }: { control: StudioDjControlSpec }) {
   const controlRef = useRef<React.ElementRef<"mesh">>(null);
+  const isEnabled = control.enabled ?? true;
   const labelCanvas = useMemo(() => createStudioTransportControlCanvas(control), [control]);
 
   useRegisterInteractable(useMemo(() => ({
@@ -3822,31 +4349,335 @@ function StudioDjControl({ control }: { control: StudioDjControlSpec }) {
     label: control.caption,
     objectRef: controlRef,
     modes: ["clickable" as const],
-    enabled: true,
+    enabled: isEnabled,
     onActivate: control.onActivate,
-  }), [control.caption, control.id, control.onActivate]));
+  }), [control.caption, control.id, control.onActivate, isEnabled]));
 
   return (
     <group position={control.position}>
       <mesh position={[0, -0.012, 0]}>
         <boxGeometry args={[control.size[0] + 0.035, 0.014, control.size[2] + 0.032]} />
-        <meshBasicMaterial args={[{ color: control.accentColor, transparent: true, opacity: control.isActive ? 0.2 : 0.08, toneMapped: false }]} />
+        <meshBasicMaterial args={[{ color: control.accentColor, transparent: true, opacity: isEnabled ? control.isActive ? 0.2 : 0.08 : 0.03, toneMapped: false }]} />
       </mesh>
       <mesh ref={controlRef}>
         <boxGeometry args={control.size} />
         <meshStandardMaterial args={[{
-          color: control.isActive ? "#22172f" : "#0b1525",
+          color: isEnabled ? control.isActive ? "#22172f" : "#0b1525" : "#101722",
           emissive: control.accentColor,
-          emissiveIntensity: control.isActive ? 0.2 : 0.08,
+          emissiveIntensity: isEnabled ? control.isActive ? 0.2 : 0.08 : 0.03,
           roughness: 0.72,
           metalness: 0.04,
         }]} />
       </mesh>
       <mesh position={[0, control.size[1] / 2 + 0.005, 0]} rotation={[-Math.PI / 2, 0, 0]}>
         <planeGeometry args={[control.size[0] * 0.82, control.size[2] * 0.7]} />
-        <meshBasicMaterial args={[{ transparent: true, opacity: 0.6, toneMapped: false }]}>
-          <canvasTexture key={`studio-dj-control-${control.id}-${control.label}-${control.caption}-${control.isActive ? "active" : "idle"}`} attach="map" args={[labelCanvas]} />
+        <meshBasicMaterial args={[{ transparent: true, opacity: isEnabled ? 0.6 : 0.28, toneMapped: false }]}>
+          <canvasTexture key={`studio-dj-control-${control.id}-${control.label}-${control.caption}-${control.captionFontSize ?? 22}-${control.isActive ? "active" : "idle"}-${isEnabled ? "enabled" : "disabled"}`} attach="map" args={[labelCanvas]} />
         </meshBasicMaterial>
+      </mesh>
+    </group>
+  );
+}
+
+function StudioSoundCloudInvisibleButton({ control }: { control: StudioDjControlSpec }) {
+  const controlRef = useRef<React.ElementRef<"mesh">>(null);
+  const isEnabled = control.enabled ?? true;
+
+  useRegisterInteractable(useMemo(() => ({
+    id: `studio-dj-${control.id}`,
+    label: control.caption,
+    objectRef: controlRef,
+    modes: ["clickable" as const],
+    enabled: isEnabled,
+    onActivate: control.onActivate,
+  }), [control.caption, control.id, control.onActivate, isEnabled]));
+
+  return (
+    <mesh ref={controlRef} position={control.position}>
+      <boxGeometry args={control.size} />
+      <meshBasicMaterial args={[{ color: "#ffffff", transparent: true, opacity: 0, depthWrite: false, toneMapped: false }]} />
+    </mesh>
+  );
+}
+
+function StudioSoundCloudMonitorWaveformHitTarget({
+  caption,
+  deck,
+  id,
+  onPushConsoleEvent,
+  position,
+  size,
+}: StudioSoundCloudMonitorWaveformHitTargetProps) {
+  const targetRef = useRef<React.ElementRef<"mesh">>(null);
+  const seekStartPositionRef = useRef(deck.display.playbackPosition);
+  const seekTargetPositionRef = useRef(deck.display.playbackPosition);
+  const enabled = deck.display.isWidgetReady && deck.display.playbackDuration > 0;
+
+  useEffect(() => {
+    seekTargetPositionRef.current = deck.display.playbackPosition;
+  }, [deck.display.playbackPosition]);
+
+  const seekFromPoint = useCallback((point: [number, number, number], shouldLog = true) => {
+    if (!targetRef.current || deck.display.playbackDuration <= 0) {
+      return;
+    }
+
+    const worldMatrixElements = (targetRef.current as unknown as { matrixWorld?: { elements?: ArrayLike<number> } }).matrixWorld?.elements;
+    const worldX = Number(worldMatrixElements?.[12] ?? position[0]);
+    const localX = point[0] - worldX;
+    const ratio = clampNumber((localX / size[0]) + 0.5, 0, 1);
+    const targetPosition = ratio * deck.display.playbackDuration;
+
+    seekTargetPositionRef.current = targetPosition;
+    if (shouldLog) {
+      pushSoundCloudBoothConsoleEvent(onPushConsoleEvent, {
+        kind: "seek",
+        deckId: deck.id,
+        label: "WAVE SEEK",
+        detail: formatSoundCloudDeckTime(targetPosition),
+      });
+    }
+    deck.seekActions.seekTo(targetPosition, { playAfterSeek: deck.display.isPlaying });
+  }, [
+    deck.display.isPlaying,
+    deck.display.playbackDuration,
+    deck.id,
+    deck.seekActions,
+    onPushConsoleEvent,
+    position,
+    size,
+  ]);
+
+  useRegisterInteractable(useMemo(() => ({
+    id,
+    label: caption,
+    objectRef: targetRef,
+    modes: ["clickable" as const, "draggable" as const],
+    enabled,
+    onActivate: (activation) => {
+      seekStartPositionRef.current = deck.display.playbackPosition;
+      seekFromPoint(activation.point);
+    },
+    onDragStart: (activation) => {
+      seekStartPositionRef.current = deck.display.playbackPosition;
+      seekFromPoint(activation.point, false);
+    },
+    onDragMove: ({ point }) => {
+      if (point) {
+        seekFromPoint(point, false);
+      }
+    },
+    onDragEnd: () => {
+      if (Math.abs(seekTargetPositionRef.current - seekStartPositionRef.current) >= 500) {
+        pushSoundCloudBoothConsoleEvent(onPushConsoleEvent, {
+          kind: "seek",
+          deckId: deck.id,
+          label: "WAVE SCRUB",
+          detail: `${formatSoundCloudDeckTime(seekStartPositionRef.current)} -> ${formatSoundCloudDeckTime(seekTargetPositionRef.current)}`,
+        });
+      }
+    },
+  }), [
+    caption,
+    deck.display.isWidgetReady,
+    deck.display.playbackPosition,
+    deck.display.playbackDuration,
+    deck.id,
+    enabled,
+    id,
+    onPushConsoleEvent,
+    seekFromPoint,
+  ]));
+
+  return (
+    <mesh ref={targetRef} position={position}>
+      <boxGeometry args={size} />
+      <meshBasicMaterial args={[{ color: "#ffffff", transparent: true, opacity: 0, depthWrite: false, toneMapped: false }]} />
+    </mesh>
+  );
+}
+
+function clampNumber(value: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, value));
+}
+
+function StudioSoundCloudDragFader({
+  accentColor,
+  id,
+  label,
+  position,
+  railSize,
+  value,
+  min,
+  max,
+  sensitivity,
+  onChange,
+  onCommit,
+}: StudioSoundCloudDragFaderProps) {
+  const groupRef = useRef<React.ElementRef<"group">>(null);
+  const [isGrabbed, setIsGrabbed] = useState(false);
+  const valueRef = useRef(value);
+  const enabled = Boolean(onChange);
+  const valueRange = max - min;
+  const normalizedValue = valueRange > 0 ? (value - min) / valueRange : 0.5;
+  const knobX = (normalizedValue - 0.5) * railSize[0];
+  const backingPlateSize: Vec3 = [railSize[0] + 0.14, 0.01, railSize[2] + 0.14];
+
+  useEffect(() => {
+    valueRef.current = value;
+  }, [value]);
+
+  const setValueFromRailPoint = useCallback((point: [number, number, number]) => {
+    if (!onChange || !groupRef.current) {
+      return false;
+    }
+
+    const worldMatrixElements = (groupRef.current as unknown as { matrixWorld?: { elements?: ArrayLike<number> } }).matrixWorld?.elements;
+    const worldX = Number(worldMatrixElements?.[12] ?? 0);
+    const localX = point[0] - worldX;
+    const trackRatio = clampNumber((localX / railSize[0]) + 0.5, 0, 1);
+    const nextValue = clampNumber(min + trackRatio * (max - min), min, max);
+
+    valueRef.current = nextValue;
+    onChange(nextValue);
+    return true;
+  }, [max, min, onChange, railSize]);
+
+  useRegisterInteractable(useMemo(() => ({
+    id,
+    label,
+    objectRef: groupRef,
+    modes: ["draggable" as const],
+    enabled,
+    onDragStart: (activation) => {
+      setIsGrabbed(true);
+      setValueFromRailPoint(activation.point);
+    },
+    onDragMove: ({ movementX, point }) => {
+      if (!onChange) {
+        return;
+      }
+
+      let nextValue: number;
+
+      if (point && setValueFromRailPoint(point)) {
+        return;
+      }
+
+      nextValue = valueRef.current + movementX * sensitivity;
+      nextValue = clampNumber(nextValue, min, max);
+      valueRef.current = nextValue;
+      onChange(nextValue);
+    },
+    onDragEnd: () => {
+      setIsGrabbed(false);
+      onCommit?.(valueRef.current);
+    },
+  }), [enabled, id, label, max, min, onChange, onCommit, setValueFromRailPoint, sensitivity]));
+
+  return (
+    <group ref={groupRef} position={position}>
+      <mesh>
+        <boxGeometry args={[railSize[0] + 0.12, railSize[1] + 0.045, railSize[2] + 0.12]} />
+        <meshBasicMaterial args={[{ color: accentColor, transparent: true, opacity: enabled ? (isGrabbed ? 0.16 : 0.055) : 0.025, toneMapped: false }]} />
+      </mesh>
+      <mesh position={[0, 0.004, 0]}>
+        <boxGeometry args={backingPlateSize} />
+        <meshBasicMaterial args={[{ color: "#05070d", transparent: true, opacity: enabled ? 0.86 : 0.48, toneMapped: false }]} />
+      </mesh>
+      <mesh position={[0, 0.016, 0]}>
+        <boxGeometry args={railSize} />
+        <meshBasicMaterial args={[{ color: "#8da1b8", transparent: true, opacity: enabled ? (isGrabbed ? 0.62 : 0.36) : 0.16, toneMapped: false }]} />
+      </mesh>
+      <mesh position={[knobX, 0.043, 0]}>
+        <boxGeometry args={[0.12, 0.048, 0.092]} />
+        <meshBasicMaterial args={[{ color: isGrabbed ? accentColor : "#e9fbff", transparent: true, opacity: enabled ? (isGrabbed ? 0.9 : 0.68) : 0.3, toneMapped: false }]} />
+      </mesh>
+    </group>
+  );
+}
+
+function StudioSoundCloudProgressSeekBar({
+  accentColor,
+  deck,
+  id,
+  onPushConsoleEvent,
+  position,
+}: StudioSoundCloudProgressSeekBarProps) {
+  const groupRef = useRef<React.ElementRef<"group">>(null);
+  const [isGrabbed, setIsGrabbed] = useState(false);
+  const seekStartPositionRef = useRef(deck.display.playbackPosition);
+  const seekTargetPositionRef = useRef(deck.display.playbackPosition);
+  const progress = Math.max(0, Math.min(1, deck.display.progress));
+  const enabled = deck.display.isWidgetReady && deck.display.playbackDuration > 0;
+  const trackWidth = 0.44;
+  const trackDepth = 0.04;
+  const backingPlateSize: Vec3 = [trackWidth + 0.1, 0.01, trackDepth + 0.1];
+
+  const seekToPoint = useCallback((point?: [number, number, number]) => {
+    if (!enabled || !point || !groupRef.current) {
+      return;
+    }
+
+    const worldMatrixElements = (groupRef.current as unknown as { matrixWorld?: { elements?: ArrayLike<number> } }).matrixWorld?.elements;
+    const worldX = Number(worldMatrixElements?.[12] ?? 0);
+    const localX = point[0] - worldX;
+    const nextProgress = clampNumber((localX / trackWidth) + 0.5, 0, 1);
+
+    const nextPosition = deck.display.playbackDuration * nextProgress;
+    seekTargetPositionRef.current = nextPosition;
+    deck.seekActions.seekTo(nextPosition, { playAfterSeek: true });
+  }, [deck.display.playbackDuration, deck.seekActions, enabled, trackWidth]);
+
+  useRegisterInteractable(useMemo(() => ({
+    id,
+    label: `${deck.label} Song Progress Seek`,
+    objectRef: groupRef,
+    modes: ["draggable" as const],
+    enabled,
+    onDragStart: (activation) => {
+      seekStartPositionRef.current = deck.display.playbackPosition;
+      seekTargetPositionRef.current = deck.display.playbackPosition;
+      setIsGrabbed(true);
+      seekToPoint(activation.point);
+    },
+    onDragMove: ({ point }) => {
+      seekToPoint(point);
+    },
+    onDragEnd: () => {
+      setIsGrabbed(false);
+      if (Math.abs(seekTargetPositionRef.current - seekStartPositionRef.current) >= 500) {
+        pushSoundCloudBoothConsoleEvent(onPushConsoleEvent, {
+          kind: "seek",
+          deckId: deck.id,
+          label: "SEEK",
+          detail: `${formatSoundCloudDeckTime(seekStartPositionRef.current)} -> ${formatSoundCloudDeckTime(seekTargetPositionRef.current)}`,
+        });
+      }
+    },
+  }), [deck.display.playbackPosition, deck.id, deck.label, enabled, id, onPushConsoleEvent, seekToPoint]));
+
+  return (
+    <group ref={groupRef} position={position}>
+      <mesh>
+        <boxGeometry args={[trackWidth + 0.12, 0.052, trackDepth + 0.11]} />
+        <meshBasicMaterial args={[{ color: accentColor, transparent: true, opacity: enabled ? (isGrabbed ? 0.16 : 0.05) : 0.025, toneMapped: false }]} />
+      </mesh>
+      <mesh position={[0, 0.004, 0]}>
+        <boxGeometry args={backingPlateSize} />
+        <meshBasicMaterial args={[{ color: "#05070d", transparent: true, opacity: enabled ? 0.84 : 0.45, toneMapped: false }]} />
+      </mesh>
+      <mesh position={[0, 0.016, 0]}>
+        <boxGeometry args={[trackWidth, 0.012, trackDepth]} />
+        <meshBasicMaterial args={[{ color: "#8da1b8", transparent: true, opacity: enabled ? (isGrabbed ? 0.64 : 0.34) : 0.16, toneMapped: false }]} />
+      </mesh>
+      <mesh position={[-trackWidth / 2 + (progress * trackWidth) / 2, 0.034, 0]}>
+        <boxGeometry args={[Math.max(0.03, progress * trackWidth), 0.03, trackDepth + 0.018]} />
+        <meshBasicMaterial args={[{ color: isGrabbed ? "#e9fbff" : accentColor, transparent: true, opacity: enabled ? (isGrabbed ? 0.86 : 0.58) : 0.26, toneMapped: false }]} />
+      </mesh>
+      <mesh position={[-trackWidth / 2 + progress * trackWidth, 0.054, 0]}>
+        <boxGeometry args={[0.028, 0.044, trackDepth + 0.036]} />
+        <meshBasicMaterial args={[{ color: isGrabbed ? accentColor : "#e9fbff", transparent: true, opacity: enabled ? 0.72 : 0.28, toneMapped: false }]} />
       </mesh>
     </group>
   );
@@ -3886,6 +4717,2016 @@ function getDjSourceStatusLabel(source?: LocalDawDjDeckSource) {
     .replace("FM Synth", "FM")
     .replace("Looper", "Loop")
     .replace("Piano", "Pno");
+}
+
+function trimStudioSoundCloudText(value: string, maxLength: number) {
+  if (value.length <= maxLength) {
+    return value;
+  }
+
+  return `${value.slice(0, Math.max(0, maxLength - 3))}...`;
+}
+
+function getSoundCloudDeckAccent(deck: SoundCloudBoothDeck, phaseVisuals: PhaseVisuals) {
+  if (deck.display.errorMessage) {
+    return "#f8d36a";
+  }
+
+  if (deck.display.isPlaying) {
+    return phaseVisuals.gridPrimary;
+  }
+
+  if (deck.display.isWidgetReady) {
+    return "#73ff4c";
+  }
+
+  return "#6f86a3";
+}
+
+function getSoundCloudDeckStatusLabel(deck: SoundCloudBoothDeck) {
+  if (deck.display.errorMessage) {
+    return "ERROR";
+  }
+
+  if (!deck.display.isScriptReady || !deck.display.isWidgetReady) {
+    return "LOADING";
+  }
+
+  return deck.display.isPlaying ? "PLAYING" : "STANDBY";
+}
+
+function getSoundCloudDeckBpmLabel(deck: SoundCloudBoothDeck) {
+  return deck.display.currentTrackAcceptedBpmState.label;
+}
+
+function getSoundCloudDeckVisualBpm(deck: SoundCloudBoothDeck) {
+  return deck.display.currentTrackAcceptedBpmState.bpm ?? deck.display.currentTrackBpmState.bpm ?? STUDIO_SOUNDCLOUD_FALLBACK_VISUAL_BPM;
+}
+
+function getSoundCloudCrossfaderLabel(crossfader: number) {
+  if (Math.abs(crossfader) < 0.05) {
+    return "MID";
+  }
+
+  return crossfader < 0 ? `A ${Math.round(Math.abs(crossfader) * 100)}%` : `B ${Math.round(crossfader * 100)}%`;
+}
+
+function getSoundCloudCueSetCaption(deck: SoundCloudBoothDeck) {
+  if (!deck.hotCueState.activeTrackKey || deck.display.playbackDuration <= 0 || !deck.display.isWidgetReady) {
+    return "LOAD TRACK";
+  }
+
+  return deck.hotCueState.lastCueActionLabel ?? (deck.hotCueState.isSettingCue ? "SET CUE ON" : "CUE READY");
+}
+
+function getSoundCloudCueEditCaption(deck: SoundCloudBoothDeck) {
+  if (!deck.hotCueState.activeTrackKey || deck.display.playbackDuration <= 0 || !deck.display.isWidgetReady) {
+    return "LOAD TRACK";
+  }
+
+  return deck.hotCueState.lastCueEditActionLabel ?? (deck.hotCueState.isEditingCue ? "SELECT CUE" : "EDIT CUE");
+}
+
+function getSoundCloudCuePadCaption(deck: SoundCloudBoothDeck, cue: SoundCloudBoothDeck["hotCueState"]["cues"][number]) {
+  if (!deck.hotCueState.activeTrackKey || deck.display.playbackDuration <= 0 || !deck.display.isWidgetReady) {
+    return "LOAD TRACK";
+  }
+
+  return cue.label.replace(`${cue.id} `, "");
+}
+
+function formatSoundCloudSeekStepLabel(seconds: number) {
+  const absoluteSeconds = Math.abs(seconds);
+
+  if (absoluteSeconds < 1) {
+    return absoluteSeconds.toFixed(2).replace(/^0/, "");
+  }
+
+  return absoluteSeconds.toString();
+}
+
+function getSoundCloudSeekCaption(deck: SoundCloudBoothDeck, deltaSeconds: number) {
+  if (!deck.hotCueState.activeTrackKey || deck.display.playbackDuration <= 0 || !deck.display.isWidgetReady) {
+    return "LOAD TRACK";
+  }
+
+  const direction = deltaSeconds < 0 ? "BACK" : "FWD";
+  const target = deck.hotCueState.isEditingCue ? deck.hotCueState.selectedCueId ?? "SELECT CUE" : "TRACK";
+
+  return `${target} ${direction} ${formatSoundCloudSeekStepLabel(deltaSeconds)}S`;
+}
+
+function formatSoundCloudDeckTime(ms: number) {
+  if (!Number.isFinite(ms) || ms <= 0) {
+    return "0:00";
+  }
+
+  const totalSeconds = Math.floor(ms / 1000);
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+
+  return `${minutes}:${seconds.toString().padStart(2, "0")}`;
+}
+
+function getSoundCloudDeckTimeLabel(deck: SoundCloudBoothDeck) {
+  if (!deck.display.isWidgetReady || deck.display.playbackDuration <= 0) {
+    return "TIME --:-- / --:--";
+  }
+
+  return `TIME ${formatSoundCloudDeckTime(deck.display.playbackPosition)} / ${formatSoundCloudDeckTime(deck.display.playbackDuration)}`;
+}
+
+function formatSoundCloudBoothConsoleTimestamp(timestamp: number) {
+  const date = new Date(timestamp);
+
+  return [
+    date.getHours().toString().padStart(2, "0"),
+    date.getMinutes().toString().padStart(2, "0"),
+    date.getSeconds().toString().padStart(2, "0"),
+  ].join(":");
+}
+
+function getSoundCloudBoothConsoleEventColor(event: SoundCloudBoothConsoleEvent) {
+  if (event.kind === "error") {
+    return "#ff5a6b";
+  }
+
+  if (event.kind === "seek") {
+    return "#73ff4c";
+  }
+
+  if (event.kind === "cue" || event.kind === "bpm") {
+    return "#f8d36a";
+  }
+
+  if (event.kind === "sync" || event.kind === "mixer") {
+    return "#f64fff";
+  }
+
+  return "#57f3ff";
+}
+
+function formatSoundCloudBoothConsoleLine(event: SoundCloudBoothConsoleEvent) {
+  const deckPrefix = event.deckId ? `${event.deckId} ` : "";
+  const detail = event.detail ? ` ${event.detail}` : "";
+
+  return `${deckPrefix}${event.label}${detail}`;
+}
+
+function pushSoundCloudBoothConsoleEvent(
+  pushEvent: SoundCloudBoothState["onPushConsoleEvent"] | undefined,
+  event: SoundCloudBoothConsoleEventInput,
+) {
+  pushEvent?.(event);
+}
+
+interface StudioSoundCloudReadoutCanvasSpec {
+  accentColor: string;
+  isActive?: boolean;
+  lineA: string;
+  lineB: string;
+  lineC?: string;
+  title: string;
+}
+
+const STUDIO_SOUNDCLOUD_TABLE_SURFACE_SIZE: Vec3 = [3.1, 0.022, 1.78];
+const STUDIO_SOUNDCLOUD_TABLE_EDGE_HEIGHT = 0.34;
+const STUDIO_SOUNDCLOUD_TABLE_EDGE_THICKNESS = 0.08;
+const STUDIO_SOUNDCLOUD_TABLE_LEG_SIZE: Vec3 = [0.16, 0.44, 0.16];
+const STUDIO_SOUNDCLOUD_TABLE_LEG_INSET_X = 1.28;
+const STUDIO_SOUNDCLOUD_TABLE_LEG_INSET_Z = 0.75;
+const STUDIO_SOUNDCLOUD_STATION_GRID = {
+  leftX: -1.02,
+  centerX: 0,
+  rightX: 1.02,
+  backZ: -0.72,
+  midZ: -0.12,
+  frontZ: 0.66,
+} as const;
+const STUDIO_SOUNDCLOUD_DECK_STATION_BASE_SIZE: Vec3 = [0.9, 0.06, 0.9];
+const STUDIO_SOUNDCLOUD_DECK_STATION_BASE_Y = 0.585;
+const STUDIO_SOUNDCLOUD_DECK_PLATTER_BASE_RADIUS = 0.31;
+const STUDIO_SOUNDCLOUD_DECK_PLATTER_MID_RADIUS = 0.245;
+const STUDIO_SOUNDCLOUD_DECK_PLATTER_TOP_RADIUS = 0.105;
+const STUDIO_SOUNDCLOUD_DECK_PLATTER_Y = 0.69;
+const STUDIO_SOUNDCLOUD_PLATTER_SCRUB_SEEK_MS_PER_PIXEL = 180;
+const STUDIO_SOUNDCLOUD_PLATTER_SCRUB_ROTATION_PER_PIXEL = 0.018;
+const STUDIO_SOUNDCLOUD_PLATTER_SCRUB_NEEDLE_TARGET_SPEED = 8;
+const STUDIO_SOUNDCLOUD_FALLBACK_VISUAL_BPM = 120;
+const STUDIO_SOUNDCLOUD_DECK_PROGRESS_BAR_Z = 0.40;
+const STUDIO_SOUNDCLOUD_DECK_SLIDER_BAR_SIZE: Vec3 = [0.3, 0.01, 0.028];
+const STUDIO_SOUNDCLOUD_DECK_SLIDER_TICK_COUNT = 5;
+const STUDIO_SOUNDCLOUD_DECK_SLIDER_Y = 0.725;
+const STUDIO_SOUNDCLOUD_DECK_READOUT_POSITION: Vec3 = [0, 0.855, -0.34];
+const STUDIO_SOUNDCLOUD_DECK_READOUT_BACKING_SIZE: Vec3 = [0.66, 0.24, 0.052];
+const STUDIO_SOUNDCLOUD_DECK_READOUT_SIZE: [number, number] = [0.64, 0.24];
+const STUDIO_SOUNDCLOUD_DECK_BUTTON_POD_SIZE: Vec3 = [0.54, 0.016, 0.2];
+const STUDIO_SOUNDCLOUD_DECK_BUTTON_POD_Y = 0.686;
+const STUDIO_SOUNDCLOUD_DECK_OFFSET_X = 0.94;
+const STUDIO_SOUNDCLOUD_DECK_Z = 0.04;
+const STUDIO_SOUNDCLOUD_DECK_BUTTON_Z = 0.78;
+const STUDIO_SOUNDCLOUD_DECK_VOLUME_BUTTON_OFFSET_X = 0.28;
+const STUDIO_SOUNDCLOUD_DECK_VOLUME_BUTTON_Z = 0.35;
+const STUDIO_SOUNDCLOUD_DECK_VOLUME_STEP = 10;
+const STUDIO_SOUNDCLOUD_DECK_TRIM_FADER_Z = 0.54;
+const STUDIO_SOUNDCLOUD_DECK_TRIM_FADER_SIZE: Vec3 = [0.38, 0.014, 0.034];
+const STUDIO_SOUNDCLOUD_DECK_UTILITY_BUTTON_SIZE: Vec3 = [0.16, 0.032, 0.08];
+const STUDIO_SOUNDCLOUD_DECK_BPM_BUTTON_Z = 1.14;
+const STUDIO_SOUNDCLOUD_DECK_BPM_BUTTON_ROW_OFFSET_Z = 0.09;
+const STUDIO_SOUNDCLOUD_DECK_BPM_BUTTON_SIZE: Vec3 = [0.15, 0.03, 0.064];
+const STUDIO_SOUNDCLOUD_VOLUME_DRAG_SENSITIVITY = 0.35;
+const STUDIO_SOUNDCLOUD_SEEK_STEPS = [0.01, 0.1, 1, 10, 30] as const;
+const STUDIO_SOUNDCLOUD_SEEK_PANEL_Y = 0.688;
+const STUDIO_SOUNDCLOUD_SEEK_CONTROL_Y = 0.724;
+const STUDIO_SOUNDCLOUD_SEEK_PANEL_SIZE: Vec3 = [0.64, 0.016, 0.3];
+const STUDIO_SOUNDCLOUD_SEEK_PANEL_CENTER_Z = 0.73;
+const STUDIO_SOUNDCLOUD_SEEK_PANEL_OFFSET_X = 0.36;
+const STUDIO_SOUNDCLOUD_SEEK_BUTTON_SIZE: Vec3 = [0.09, 0.03, 0.062];
+const STUDIO_SOUNDCLOUD_SEEK_EDIT_BUTTON_SIZE: Vec3 = [0.18, 0.032, 0.07];
+const STUDIO_SOUNDCLOUD_CUE_SHELF_CENTER_Z = 1.03;
+const STUDIO_SOUNDCLOUD_CUE_SHELF_Y = 0.606;
+const STUDIO_SOUNDCLOUD_CUE_CONTROL_Y = 0.638;
+const STUDIO_SOUNDCLOUD_CUE_SHELF_SIZE: Vec3 = [0.64, 0.04, 0.31];
+const STUDIO_SOUNDCLOUD_CUE_SHELF_ROW_Z_OFFSET = 0.05;
+const STUDIO_SOUNDCLOUD_CUE_BUTTON_SIZE: Vec3 = [0.15, 0.032, 0.09];
+const STUDIO_SOUNDCLOUD_CUE_SET_BUTTON_SIZE: Vec3 = [0.18, 0.032, 0.09];
+const STUDIO_SOUNDCLOUD_DECK_MONITOR_POSITION: Vec3 = [0, 1.1, -0.98];
+const STUDIO_SOUNDCLOUD_DECK_MONITOR_ROTATION: Vec3 = [0, 0, 0];
+const STUDIO_SOUNDCLOUD_DECK_MONITOR_BACKING_SIZE: Vec3 = [3.58, 1.04, 0.08];
+const STUDIO_SOUNDCLOUD_DECK_MONITOR_PLANE_SIZE: [number, number] = [3.2, 0.9];
+const STUDIO_SOUNDCLOUD_MONITOR_WAVE_BUTTON_Y = 0.365;
+const STUDIO_SOUNDCLOUD_MONITOR_WAVE_BUTTON_Z = 0.058;
+const STUDIO_SOUNDCLOUD_MONITOR_WAVE_BUTTON_DOWN_X = 0.239;
+const STUDIO_SOUNDCLOUD_MONITOR_WAVE_BUTTON_UP_X = 0.409;
+const STUDIO_SOUNDCLOUD_MONITOR_WAVE_BUTTON_SIZE: Vec3 = [0.13, 0.075, 0.026];
+const STUDIO_SOUNDCLOUD_MONITOR_WAVEFORM_X = -0.506;
+const STUDIO_SOUNDCLOUD_MONITOR_WAVEFORM_WIDTH = 1.982;
+const STUDIO_SOUNDCLOUD_MONITOR_WAVEFORM_A_Y = 0.069;
+const STUDIO_SOUNDCLOUD_MONITOR_WAVEFORM_B_Y = -0.056;
+const STUDIO_SOUNDCLOUD_MONITOR_WAVEFORM_HIT_SIZE: Vec3 = [STUDIO_SOUNDCLOUD_MONITOR_WAVEFORM_WIDTH, 0.082, 0.026];
+const STUDIO_SOUNDCLOUD_CONSOLE_VISIBLE_EVENT_COUNT = 9;
+const STUDIO_SOUNDCLOUD_WAVEFORM_RESOLUTION_MIN = 1;
+const STUDIO_SOUNDCLOUD_WAVEFORM_RESOLUTION_MAX = 4;
+const STUDIO_SOUNDCLOUD_CROSSFADER_RAIL_POSITION: Vec3 = [0, 0.726, 0.26];
+const STUDIO_SOUNDCLOUD_UPPER_FADER_RAIL_SIZE: Vec3 = [0.86, 0.018, 0.045];
+const STUDIO_SOUNDCLOUD_CROSSFADER_DRAG_SENSITIVITY = 0.006;
+const STUDIO_SOUNDCLOUD_UPPER_FADER_TICK_COUNT = 7;
+const STUDIO_SOUNDCLOUD_CROSSFADER_BUTTON_OFFSET_X = 0.24;
+const STUDIO_SOUNDCLOUD_CROSSFADER_BUTTON_Y = 0.765;
+const STUDIO_SOUNDCLOUD_CROSSFADER_BUTTON_Z = 0.42;
+const STUDIO_SOUNDCLOUD_CROSSFADER_BUTTON_SIZE: Vec3 = [0.22, 0.034, 0.095];
+const STUDIO_SOUNDCLOUD_CROSSFADER_MID_BUTTON_SIZE: Vec3 = [0.24, 0.034, 0.095];
+const STUDIO_SOUNDCLOUD_LOWER_RAIL_POSITION: Vec3 = [0, 0.704, -0.52];
+const STUDIO_SOUNDCLOUD_LOWER_RAIL_SIZE: Vec3 = [0.88, 0.014, 0.03];
+const STUDIO_SOUNDCLOUD_CRATE_VISIBLE_ROWS = 5;
+const STUDIO_SOUNDCLOUD_CRATE_SCREEN_SIZE: Vec3 = [1.62, 0.055, 0.72];
+const STUDIO_SOUNDCLOUD_CRATE_PLANE_SIZE: [number, number] = [1.46, 0.56];
+const STUDIO_SOUNDCLOUD_CRATE_SCREEN_Z = 1.72;
+const STUDIO_SOUNDCLOUD_CRATE_SCREEN_X = 1.88;
+const STUDIO_SOUNDCLOUD_CRATE_SCREEN_Y = 0.742;
+const STUDIO_SOUNDCLOUD_CRATE_ROW_HIT_SIZE: Vec3 = [1.28, 0.035, 0.066];
+const STUDIO_SOUNDCLOUD_CRATE_SCROLL_HIT_SIZE: Vec3 = [0.28, 0.035, 0.078];
+
+function createStudioSoundCloudReadoutCanvas({
+  accentColor,
+  isActive,
+  lineA,
+  lineB,
+  lineC,
+  title,
+}: StudioSoundCloudReadoutCanvasSpec) {
+  const canvas = document.createElement("canvas");
+  canvas.width = 640;
+  canvas.height = 240;
+
+  const context = canvas.getContext("2d");
+
+  if (!context) {
+    return canvas;
+  }
+
+  context.fillStyle = "#050914";
+  context.fillRect(0, 0, canvas.width, canvas.height);
+  context.strokeStyle = accentColor;
+  context.globalAlpha = isActive ? 0.72 : 0.48;
+  context.lineWidth = 10;
+  context.strokeRect(20, 20, canvas.width - 40, canvas.height - 40);
+  context.globalAlpha = 1;
+
+  context.textAlign = "center";
+  context.textBaseline = "middle";
+  context.fillStyle = accentColor;
+  context.globalAlpha = isActive ? 0.9 : 0.72;
+  context.font = "800 44px monospace";
+  context.fillText(title.toUpperCase(), canvas.width / 2, 70);
+
+  if (lineC) {
+    context.fillStyle = "#e9fbff";
+    context.globalAlpha = 0.76;
+    context.font = "700 27px monospace";
+    context.fillText(lineA.toUpperCase(), canvas.width / 2, 116);
+
+    context.fillStyle = "#a9bdc9";
+    context.globalAlpha = 0.66;
+    context.font = "700 22px monospace";
+    context.fillText(lineB.toUpperCase(), canvas.width / 2, 162);
+
+    context.fillStyle = accentColor;
+    context.globalAlpha = 0.82;
+    context.font = "800 24px monospace";
+    context.fillText(lineC.toUpperCase(), canvas.width / 2, 202);
+  } else {
+    context.fillStyle = "#e9fbff";
+    context.globalAlpha = 0.76;
+    context.font = "700 30px monospace";
+    context.fillText(lineA.toUpperCase(), canvas.width / 2, 128);
+
+    context.fillStyle = "#a9bdc9";
+    context.globalAlpha = 0.62;
+    context.font = "700 24px monospace";
+    context.fillText(lineB.toUpperCase(), canvas.width / 2, 178);
+  }
+  context.globalAlpha = 1;
+
+  return canvas;
+}
+
+function StudioSoundCloudSpinningPlatter({
+  accentColor,
+  deck,
+  onPushConsoleEvent,
+}: {
+  accentColor: string;
+  deck: SoundCloudBoothDeck;
+  onPushConsoleEvent?: (event: SoundCloudBoothConsoleEventInput) => void;
+}) {
+  const scrubTargetRef = useRef<React.ElementRef<"group">>(null);
+  const platterSpinRef = useRef<React.ElementRef<"group">>(null);
+  const [isGrabbed, setIsGrabbed] = useState(false);
+  const [needlePosition, setNeedlePosition] = useState(0);
+  const [scrubLabel, setScrubLabel] = useState<StudioSoundCloudPlatterScrubLabel>("GRAB");
+  const scrubStartPositionRef = useRef(deck.display.playbackPosition);
+  const scrubPositionRef = useRef(deck.display.playbackPosition);
+  const wasPlayingOnGrabRef = useRef(deck.display.isPlaying);
+  const visualBpm = getSoundCloudDeckVisualBpm(deck);
+  const canScrub = deck.display.isWidgetReady && deck.display.playbackDuration > 0;
+
+  useEffect(() => {
+    if (!isGrabbed) {
+      scrubPositionRef.current = deck.display.playbackPosition;
+    }
+  }, [deck.display.playbackPosition, isGrabbed]);
+
+  useEffect(() => {
+    if (!isGrabbed) {
+      wasPlayingOnGrabRef.current = deck.display.isPlaying;
+    }
+  }, [deck.display.isPlaying, isGrabbed]);
+
+  useFrame((_, delta) => {
+    if (isGrabbed) {
+      setNeedlePosition((current) => {
+        const nextNeedle = current * Math.pow(0.08, delta);
+        return Math.abs(nextNeedle) < 0.01 ? 0 : nextNeedle;
+      });
+      return;
+    }
+
+    if (!platterSpinRef.current || !deck.display.isPlaying) {
+      return;
+    }
+
+    platterSpinRef.current.rotation.y += (visualBpm / 60) * Math.PI * 2 * delta;
+  });
+
+  const updateScrubLabel = useCallback((needle: number) => {
+    if (needle < -0.65) {
+      setScrubLabel("SCRUB BACK");
+      return;
+    }
+
+    if (needle > 0.78) {
+      setScrubLabel("OVERSPEED");
+      return;
+    }
+
+    if (needle > 0.24) {
+      setScrubLabel("PUSHING");
+      return;
+    }
+
+    setScrubLabel("ON BEAT");
+  }, []);
+
+  const scrubByMovement = useCallback((movementX: number) => {
+    if (!canScrub) {
+      return;
+    }
+
+    const effectiveMovementX = Math.abs(movementX) < 0.25 ? 0 : clampNumber(movementX, -24, 24);
+    const nextNeedle = clampNumber(effectiveMovementX / STUDIO_SOUNDCLOUD_PLATTER_SCRUB_NEEDLE_TARGET_SPEED, -1, 1);
+    const nextPosition = clampNumber(
+      scrubPositionRef.current + effectiveMovementX * STUDIO_SOUNDCLOUD_PLATTER_SCRUB_SEEK_MS_PER_PIXEL,
+      0,
+      deck.display.playbackDuration,
+    );
+
+    if (platterSpinRef.current) {
+      platterSpinRef.current.rotation.y += effectiveMovementX * STUDIO_SOUNDCLOUD_PLATTER_SCRUB_ROTATION_PER_PIXEL;
+    }
+
+    scrubPositionRef.current = nextPosition;
+    setNeedlePosition((current) => current * 0.55 + nextNeedle * 0.45);
+    updateScrubLabel(nextNeedle);
+    deck.seekActions.seekTo(nextPosition, { playAfterSeek: wasPlayingOnGrabRef.current });
+  }, [canScrub, deck.display.playbackDuration, deck.seekActions, updateScrubLabel]);
+
+  useRegisterInteractable(useMemo(() => ({
+    id: `studio-dj-soundcloud-deck-${deck.id.toLowerCase()}-platter-scrub`,
+    label: `${deck.label} Platter Scrub`,
+    objectRef: scrubTargetRef,
+    modes: ["draggable" as const],
+    enabled: canScrub,
+    onDragStart: () => {
+      wasPlayingOnGrabRef.current = deck.display.isPlaying;
+      scrubStartPositionRef.current = deck.display.playbackPosition;
+      scrubPositionRef.current = deck.display.playbackPosition;
+      setNeedlePosition(0);
+      setScrubLabel("GRAB");
+      setIsGrabbed(true);
+    },
+    onDragMove: ({ movementX }) => {
+      scrubByMovement(movementX);
+    },
+    onDragEnd: () => {
+      setNeedlePosition(0);
+      setScrubLabel("GRAB");
+      setIsGrabbed(false);
+      if (Math.abs(scrubPositionRef.current - scrubStartPositionRef.current) >= 500) {
+        pushSoundCloudBoothConsoleEvent(onPushConsoleEvent, {
+          kind: "seek",
+          deckId: deck.id,
+          label: "SCRUB",
+          detail: `${formatSoundCloudDeckTime(scrubStartPositionRef.current)} -> ${formatSoundCloudDeckTime(scrubPositionRef.current)}`,
+        });
+      }
+    },
+  }), [
+    canScrub,
+    deck.display.isPlaying,
+    deck.display.playbackPosition,
+    deck.id,
+    deck.label,
+    onPushConsoleEvent,
+    scrubByMovement,
+  ]));
+
+  const meterNeedleColor = needlePosition < -0.24 ? "#f8d36a" : needlePosition > 0.24 ? "#f64fff" : accentColor;
+  const meterNeedleX = needlePosition * 0.23;
+
+  return (
+    <group ref={scrubTargetRef}>
+      <group ref={platterSpinRef}>
+        <mesh position={[0, STUDIO_SOUNDCLOUD_DECK_PLATTER_Y - 0.016, 0]}>
+          <cylinderGeometry args={[STUDIO_SOUNDCLOUD_DECK_PLATTER_BASE_RADIUS, STUDIO_SOUNDCLOUD_DECK_PLATTER_BASE_RADIUS, 0.026, 40]} />
+          <meshStandardMaterial args={[{ color: "#10192b", emissive: accentColor, emissiveIntensity: isGrabbed ? 0.28 : deck.display.isPlaying ? 0.18 : 0.07, roughness: 0.54, metalness: 0.1 }]} />
+        </mesh>
+        <mesh position={[0, STUDIO_SOUNDCLOUD_DECK_PLATTER_Y, 0]}>
+          <cylinderGeometry args={[STUDIO_SOUNDCLOUD_DECK_PLATTER_MID_RADIUS, STUDIO_SOUNDCLOUD_DECK_PLATTER_MID_RADIUS, 0.014, 40]} />
+          <meshStandardMaterial args={[{ color: "#18243b", emissive: accentColor, emissiveIntensity: isGrabbed ? 0.34 : deck.display.isPlaying ? 0.22 : 0.08, roughness: 0.48, metalness: 0.12 }]} />
+        </mesh>
+        <mesh position={[0, STUDIO_SOUNDCLOUD_DECK_PLATTER_Y + 0.018, 0]}>
+          <cylinderGeometry args={[STUDIO_SOUNDCLOUD_DECK_PLATTER_TOP_RADIUS, STUDIO_SOUNDCLOUD_DECK_PLATTER_TOP_RADIUS, 0.016, 32]} />
+          <meshBasicMaterial args={[{ color: isGrabbed ? "#e9fbff" : accentColor, transparent: true, opacity: deck.display.isWidgetReady ? (isGrabbed ? 0.82 : 0.62) : 0.24, toneMapped: false }]} />
+        </mesh>
+        <mesh position={[0, STUDIO_SOUNDCLOUD_DECK_PLATTER_Y + 0.042, -0.22]}>
+          <boxGeometry args={[0.035, 0.018, 0.16]} />
+          <meshBasicMaterial args={[{ color: "#e9fbff", transparent: true, opacity: isGrabbed ? 0.9 : deck.display.isPlaying ? 0.74 : 0.32, toneMapped: false }]} />
+        </mesh>
+        <mesh position={[0.18, STUDIO_SOUNDCLOUD_DECK_PLATTER_Y + 0.045, 0]}>
+          <boxGeometry args={[0.12, 0.014, 0.026]} />
+          <meshBasicMaterial args={[{ color: accentColor, transparent: true, opacity: isGrabbed ? 0.84 : deck.display.isPlaying ? 0.66 : 0.28, toneMapped: false }]} />
+        </mesh>
+      </group>
+      <mesh position={[0, STUDIO_SOUNDCLOUD_DECK_PLATTER_Y + 0.02, 0]}>
+        <cylinderGeometry args={[STUDIO_SOUNDCLOUD_DECK_PLATTER_BASE_RADIUS + 0.035, STUDIO_SOUNDCLOUD_DECK_PLATTER_BASE_RADIUS + 0.035, 0.06, 40]} />
+        <meshBasicMaterial args={[{ color: accentColor, depthWrite: false, transparent: true, opacity: canScrub ? (isGrabbed ? 0.1 : 0.0) : 0.0, toneMapped: false }]} />
+      </mesh>
+      {isGrabbed ? (
+        <group position={[0, STUDIO_SOUNDCLOUD_DECK_PLATTER_Y + 0.16, -0.02]}>
+          <mesh>
+            <boxGeometry args={[0.62, 0.012, 0.12]} />
+            <meshBasicMaterial args={[{ color: "#05070d", transparent: true, opacity: 0.88, toneMapped: false }]} />
+          </mesh>
+          <mesh position={[0, 0.014, 0]}>
+            <boxGeometry args={[0.52, 0.012, 0.035]} />
+            <meshBasicMaterial args={[{ color: "#8da1b8", transparent: true, opacity: 0.34, toneMapped: false }]} />
+          </mesh>
+          <mesh position={[0, 0.032, 0]}>
+            <boxGeometry args={[0.07, 0.04, 0.068]} />
+            <meshBasicMaterial args={[{ color: accentColor, transparent: true, opacity: 0.36, toneMapped: false }]} />
+          </mesh>
+          <mesh position={[meterNeedleX, 0.056, 0]}>
+            <boxGeometry args={[0.035, 0.06, 0.085]} />
+            <meshBasicMaterial args={[{ color: meterNeedleColor, transparent: true, opacity: 0.9, toneMapped: false }]} />
+          </mesh>
+          <mesh position={[0, 0.082, -0.072]}>
+            <boxGeometry args={[0.28, 0.016, 0.03]} />
+            <meshBasicMaterial args={[{ color: meterNeedleColor, transparent: true, opacity: scrubLabel === "ON BEAT" ? 0.7 : 0.46, toneMapped: false }]} />
+          </mesh>
+        </group>
+      ) : null}
+    </group>
+  );
+}
+
+function StudioSoundCloudDeckPanel({
+  deck,
+  onPushConsoleEvent,
+  phaseVisuals,
+  position,
+}: {
+  deck: SoundCloudBoothDeck;
+  onPushConsoleEvent?: (event: SoundCloudBoothConsoleEventInput) => void;
+  phaseVisuals: PhaseVisuals;
+  position: Vec3;
+}) {
+  const accentColor = getSoundCloudDeckAccent(deck, phaseVisuals);
+  const title = trimStudioSoundCloudText(deck.display.currentTrackTitle || "No Track Loaded", 20);
+  const artist = trimStudioSoundCloudText(deck.display.currentTrackArtist || "SoundCloud", 18);
+  const status = getSoundCloudDeckStatusLabel(deck);
+  const timeLabel = getSoundCloudDeckTimeLabel(deck);
+  const bpmLabel = getSoundCloudDeckBpmLabel(deck);
+  const readoutCanvas = useMemo(() => createStudioSoundCloudReadoutCanvas({
+    accentColor,
+    isActive: deck.display.isPlaying,
+    lineA: `${bpmLabel} / ${deck.display.lastBpmActionLabel ?? status}`,
+    lineB: `${title} / ${artist}`,
+    lineC: timeLabel,
+    title: `${deck.label} SOUNDCLOUD`,
+  }), [
+    accentColor,
+    artist,
+    deck.display.isPlaying,
+    deck.display.isWidgetReady,
+    deck.display.currentTrackAcceptedBpmState.label,
+    deck.display.lastBpmActionLabel,
+    deck.display.playbackDuration,
+    deck.display.playbackPosition,
+    deck.label,
+    deck.outputPercent,
+    deck.trimPercent,
+    status,
+    timeLabel,
+    title,
+  ]);
+
+  return (
+    <group position={position}>
+      <mesh position={[0, STUDIO_SOUNDCLOUD_DECK_STATION_BASE_Y, 0]}>
+        <boxGeometry args={STUDIO_SOUNDCLOUD_DECK_STATION_BASE_SIZE} />
+        <meshStandardMaterial args={[{ color: "#14102a", emissive: "#371466", emissiveIntensity: deck.display.isPlaying ? 0.12 : 0.05, roughness: 0.8, metalness: 0.04 }]} />
+      </mesh>
+      <StudioSoundCloudSpinningPlatter accentColor={accentColor} deck={deck} onPushConsoleEvent={onPushConsoleEvent} />
+      <StudioSoundCloudProgressSeekBar
+        accentColor={accentColor}
+        deck={deck}
+        id={`studio-dj-soundcloud-deck-${deck.id.toLowerCase()}-progress-seek`}
+        onPushConsoleEvent={onPushConsoleEvent}
+        position={[0, STUDIO_SOUNDCLOUD_DECK_PLATTER_Y + 0.036, STUDIO_SOUNDCLOUD_DECK_PROGRESS_BAR_Z]}
+      />
+      <mesh position={[0, STUDIO_SOUNDCLOUD_DECK_SLIDER_Y, 0.22]}>
+        <boxGeometry args={STUDIO_SOUNDCLOUD_DECK_SLIDER_BAR_SIZE} />
+        <meshBasicMaterial args={[{ color: "#6f86a3", transparent: true, opacity: 0.34, toneMapped: false }]} />
+      </mesh>
+      {Array.from({ length: STUDIO_SOUNDCLOUD_DECK_SLIDER_TICK_COUNT }, (_, index) => {
+        const x = -0.12 + index * 0.06;
+
+        return (
+          <mesh key={`${deck.id}-slider-tick-${index}`} position={[x, STUDIO_SOUNDCLOUD_DECK_SLIDER_Y + 0.014, 0.22]}>
+            <boxGeometry args={[0.012, 0.03, 0.01]} />
+            <meshBasicMaterial args={[{ color: index === 2 ? accentColor : "#a9bdc9", transparent: true, opacity: index === 2 ? 0.58 : 0.26, toneMapped: false }]} />
+          </mesh>
+        );
+      })}
+      <mesh position={[0, STUDIO_SOUNDCLOUD_DECK_SLIDER_Y + 0.016, 0.22]}>
+        <boxGeometry args={[0.028, 0.034, 0.016]} />
+        <meshBasicMaterial args={[{ color: accentColor, transparent: true, opacity: 0.7, toneMapped: false }]} />
+      </mesh>
+      <mesh position={[0, STUDIO_SOUNDCLOUD_DECK_BUTTON_POD_Y, STUDIO_SOUNDCLOUD_DECK_BUTTON_Z]}>
+        <boxGeometry args={STUDIO_SOUNDCLOUD_DECK_BUTTON_POD_SIZE} />
+        <meshStandardMaterial args={[{ color: "#10192b", emissive: accentColor, emissiveIntensity: 0.06, roughness: 0.76, metalness: 0.04 }]} />
+      </mesh>
+      <group position={STUDIO_SOUNDCLOUD_DECK_READOUT_POSITION}>
+        <mesh>
+          <boxGeometry args={STUDIO_SOUNDCLOUD_DECK_READOUT_BACKING_SIZE} />
+          <meshStandardMaterial args={[{ color: "#0a101c", emissive: "#17304d", emissiveIntensity: 0.16, roughness: 0.72, metalness: 0.05 }]} />
+        </mesh>
+        <mesh position={[0, 0.012, 0.032]}>
+          <planeGeometry args={STUDIO_SOUNDCLOUD_DECK_READOUT_SIZE} />
+          <meshBasicMaterial args={[{ transparent: true, opacity: 0.82, toneMapped: false }]}>
+            <canvasTexture key={`studio-soundcloud-deck-${deck.id}-${status}-${Math.round(deck.outputPercent)}-${Math.round(deck.trimPercent)}-${Math.round(deck.display.playbackPosition)}-${Math.round(deck.display.playbackDuration)}-${title}-${artist}`} attach="map" args={[readoutCanvas]} />
+          </meshBasicMaterial>
+        </mesh>
+      </group>
+    </group>
+  );
+}
+
+function createStudioSoundCloudDeckMonitorCanvas({
+  accentColor,
+  consoleEvents,
+  deckA,
+  deckB,
+  mixer,
+  waveformResolution,
+}: {
+  accentColor: string;
+  consoleEvents: SoundCloudBoothConsoleEvent[];
+  deckA: SoundCloudBoothDeck;
+  deckB: SoundCloudBoothDeck;
+  mixer: SoundCloudBoothMixer;
+  waveformResolution: number;
+}) {
+  const canvas = document.createElement("canvas");
+  canvas.width = 1792;
+  canvas.height = 504;
+
+  const context = canvas.getContext("2d");
+
+  if (!context) {
+    return canvas;
+  }
+
+  const consolePanelX = 1242;
+  const consolePanelWidth = canvas.width - consolePanelX - 58;
+  const drawDeckWaveform = (deck: SoundCloudBoothDeck, x: number, y: number, width: number, height: number) => {
+    const bars = deck.display.waveformBars;
+    const resolution = Math.round(clampNumber(waveformResolution, STUDIO_SOUNDCLOUD_WAVEFORM_RESOLUTION_MIN, STUDIO_SOUNDCLOUD_WAVEFORM_RESOLUTION_MAX));
+    const sourceBarCount = Math.max(1, bars.length);
+    const barCount = sourceBarCount * resolution;
+    const progress = clampNumber(deck.display.progress, 0, 1);
+    const accent = deck.id === "A" ? "#73ff4c" : "#62d8ff";
+    const activeWidth = width * progress;
+
+    context.fillStyle = "#05070d";
+    context.globalAlpha = 0.72;
+    context.fillRect(x, y, width, height);
+
+    context.strokeStyle = accent;
+    context.globalAlpha = deck.display.isWidgetReady ? 0.32 : 0.16;
+    context.lineWidth = 2;
+    context.strokeRect(x, y, width, height);
+
+    context.fillStyle = "#8da1b8";
+    context.globalAlpha = 0.2;
+    context.fillRect(x + 8, y + height / 2, width - 16, 2);
+
+    Array.from({ length: barCount }, (_, index) => {
+      const sourcePosition = barCount <= 1 ? 0 : (index / (barCount - 1)) * Math.max(0, sourceBarCount - 1);
+      const leftIndex = Math.floor(sourcePosition);
+      const rightIndex = Math.min(sourceBarCount - 1, leftIndex + 1);
+      const blend = sourcePosition - leftIndex;
+      const leftBar = bars[leftIndex] ?? 50;
+      const rightBar = bars[rightIndex] ?? leftBar;
+      const bar = leftBar + (rightBar - leftBar) * blend;
+      const ratio = clampNumber(bar / 100, 0.08, 1);
+      const barWidth = Math.max(2, (width - 24) / barCount - 2);
+      const barX = x + 12 + index * ((width - 24) / barCount);
+      const barHeight = Math.max(6, ratio * (height - 18));
+      const barY = y + (height - barHeight) / 2;
+      const isPlayed = barX - x <= activeWidth;
+
+      context.fillStyle = isPlayed ? accent : "#a9bdc9";
+      context.globalAlpha = deck.display.isWidgetReady ? (isPlayed ? 0.78 : 0.32) : 0.16;
+      context.fillRect(barX, barY, barWidth, barHeight);
+    });
+
+    context.fillStyle = "#e9fbff";
+    context.globalAlpha = deck.display.isWidgetReady ? 0.86 : 0.26;
+    context.fillRect(x + activeWidth - 2, y + 4, 4, height - 8);
+
+    context.fillStyle = accent;
+    context.globalAlpha = 0.78;
+    context.font = "900 15px monospace";
+    context.textAlign = "left";
+    context.fillText(`${deck.id} WAVE`, x + 12, y - 11);
+    context.textAlign = "right";
+    context.fillStyle = "#a9bdc9";
+    context.globalAlpha = 0.56;
+    context.font = "800 14px monospace";
+    context.fillText(`${getSoundCloudDeckTimeLabel(deck).replace("TIME ", "")}  RES x${resolution}`, x + width - 10, y - 11);
+  };
+  const drawDeckLine = (deck: SoundCloudBoothDeck, y: number) => {
+    const status = getSoundCloudDeckStatusLabel(deck);
+    const output = `${Math.round(deck.outputPercent)}%`;
+    const timeLabel = getSoundCloudDeckTimeLabel(deck).replace("TIME ", "");
+    const title = trimStudioSoundCloudText(deck.display.currentTrackTitle || "NO TRACK", 34).toUpperCase();
+
+    context.fillStyle = deck.display.isPlaying ? "#73ff4c" : "#a9bdc9";
+    context.globalAlpha = deck.display.isWidgetReady ? 0.88 : 0.52;
+    context.font = "800 34px monospace";
+    context.textAlign = "left";
+    context.fillText(`${deck.id} ${getSoundCloudDeckBpmLabel(deck)}`, 58, y);
+
+    context.fillStyle = "#e9fbff";
+    context.globalAlpha = 0.72;
+    context.font = "700 24px monospace";
+    context.fillText(`${status} OUT ${output}`, 450, y);
+
+    context.fillStyle = "#a9bdc9";
+    context.globalAlpha = 0.62;
+    context.font = "700 22px monospace";
+    context.fillText(`${timeLabel}  ${title}`, 720, y);
+  };
+  const crossfaderLabel = getSoundCloudCrossfaderLabel(mixer.crossfader);
+
+  context.fillStyle = "#050914";
+  context.fillRect(0, 0, canvas.width, canvas.height);
+  context.strokeStyle = accentColor;
+  context.globalAlpha = 0.6;
+  context.lineWidth = 10;
+  context.strokeRect(22, 22, canvas.width - 44, canvas.height - 44);
+
+  context.textAlign = "center";
+  context.textBaseline = "middle";
+  context.fillStyle = accentColor;
+  context.globalAlpha = 0.88;
+  context.font = "800 42px monospace";
+  context.fillText("SOUNDCLOUD DECK MONITOR", 625, 50);
+
+  drawDeckLine(deckA, 104);
+  drawDeckLine(deckB, 150);
+  drawDeckWaveform(deckA, 58, 194, 1110, 42);
+  drawDeckWaveform(deckB, 58, 264, 1110, 42);
+
+  context.fillStyle = "#e9fbff";
+  context.globalAlpha = 0.78;
+  context.font = "800 30px monospace";
+  context.textAlign = "left";
+  context.fillText(`XFADE ${crossfaderLabel}`, 58, 363);
+  context.fillText(`MASTER ${mixer.masterVolume}%`, 402, 363);
+
+  context.fillStyle = accentColor;
+  context.globalAlpha = 0.82;
+  context.fillText(`A OUT ${Math.round(mixer.deckAOutputPercent)}%`, 705, 363);
+  context.fillText(`B OUT ${Math.round(mixer.deckBOutputPercent)}%`, 965, 363);
+
+  context.fillStyle = "#a9bdc9";
+  context.globalAlpha = 0.54;
+  context.font = "700 22px monospace";
+  context.textAlign = "center";
+  context.fillText("BPM ACCEPTED FROM META / WAVE / LENGTH / MANUAL", 625, 420);
+
+  context.textAlign = "right";
+  context.fillStyle = "#a9bdc9";
+  context.globalAlpha = 0.62;
+  context.font = "800 17px monospace";
+  context.fillText(`WAVE RES x${Math.round(clampNumber(waveformResolution, STUDIO_SOUNDCLOUD_WAVEFORM_RESOLUTION_MIN, STUDIO_SOUNDCLOUD_WAVEFORM_RESOLUTION_MAX))}`, 965, 50);
+
+  [
+    { label: "-", x: 994, enabled: waveformResolution > STUDIO_SOUNDCLOUD_WAVEFORM_RESOLUTION_MIN },
+    { label: "+", x: 1089, enabled: waveformResolution < STUDIO_SOUNDCLOUD_WAVEFORM_RESOLUTION_MAX },
+  ].forEach((button) => {
+    context.fillStyle = button.enabled ? accentColor : "#273246";
+    context.globalAlpha = button.enabled ? 0.18 : 0.1;
+    context.fillRect(button.x, 27, 72, 42);
+    context.strokeStyle = button.enabled ? accentColor : "#6f86a3";
+    context.globalAlpha = button.enabled ? 0.58 : 0.24;
+    context.lineWidth = 3;
+    context.strokeRect(button.x, 27, 72, 42);
+    context.fillStyle = button.enabled ? "#e9fbff" : "#8da1b8";
+    context.globalAlpha = button.enabled ? 0.86 : 0.34;
+    context.font = "900 30px monospace";
+    context.textAlign = "center";
+    context.fillText(button.label, button.x + 36, 49);
+  });
+
+  context.strokeStyle = accentColor;
+  context.globalAlpha = 0.36;
+  context.lineWidth = 4;
+  context.beginPath();
+  context.moveTo(consolePanelX - 28, 56);
+  context.lineTo(consolePanelX - 28, canvas.height - 52);
+  context.stroke();
+
+  context.fillStyle = accentColor;
+  context.globalAlpha = 0.1;
+  context.fillRect(consolePanelX, 58, consolePanelWidth, canvas.height - 116);
+  context.strokeStyle = accentColor;
+  context.globalAlpha = 0.32;
+  context.lineWidth = 3;
+  context.strokeRect(consolePanelX, 58, consolePanelWidth, canvas.height - 116);
+
+  context.textAlign = "left";
+  context.fillStyle = accentColor;
+  context.globalAlpha = 0.86;
+  context.font = "900 27px monospace";
+  context.fillText("BOOTH CONSOLE", consolePanelX + 28, 102);
+
+  context.fillStyle = "#a9bdc9";
+  context.globalAlpha = 0.6;
+  context.font = "800 18px monospace";
+  context.fillText(`LIVE  ${consoleEvents.length.toString().padStart(2, "0")} EVENTS`, consolePanelX + 30, 136);
+
+  const visibleEvents = consoleEvents.slice(0, STUDIO_SOUNDCLOUD_CONSOLE_VISIBLE_EVENT_COUNT);
+
+  if (visibleEvents.length === 0) {
+    context.fillStyle = "#a9bdc9";
+    context.globalAlpha = 0.58;
+    context.font = "700 21px monospace";
+    context.fillText("> waiting for deck events", consolePanelX + 30, 206);
+  } else {
+    visibleEvents.forEach((event, index) => {
+      const y = 184 + index * 31;
+      const color = getSoundCloudBoothConsoleEventColor(event);
+      const timestamp = formatSoundCloudBoothConsoleTimestamp(event.timestamp);
+      const line = formatSoundCloudBoothConsoleLine(event).toUpperCase();
+
+      context.fillStyle = color;
+      context.globalAlpha = Math.max(0.34, 0.86 - index * 0.06);
+      context.font = "900 15px monospace";
+      context.textAlign = "left";
+      context.fillText(timestamp, consolePanelX + 30, y);
+      context.fillRect(consolePanelX + 118, y - 8, 10, 10);
+
+      context.fillStyle = "#dcecff";
+      context.globalAlpha = Math.max(0.3, 0.78 - index * 0.055);
+      context.font = "800 17px monospace";
+      context.fillText(fitCanvasText(context, line, consolePanelWidth - 162), consolePanelX + 144, y);
+    });
+  }
+  context.globalAlpha = 1;
+
+  return canvas;
+}
+
+function StudioSoundCloudDeckMonitor({
+  consoleEvents = [],
+  deckA,
+  deckB,
+  mixer,
+  onDecreaseWaveformResolution,
+  onIncreaseWaveformResolution,
+  onPushConsoleEvent,
+  phaseVisuals,
+  waveformResolution,
+}: {
+  consoleEvents?: SoundCloudBoothConsoleEvent[];
+  deckA: SoundCloudBoothDeck;
+  deckB: SoundCloudBoothDeck;
+  mixer: SoundCloudBoothMixer;
+  onDecreaseWaveformResolution?: () => void;
+  onIncreaseWaveformResolution?: () => void;
+  onPushConsoleEvent?: (event: SoundCloudBoothConsoleEventInput) => void;
+  phaseVisuals: PhaseVisuals;
+  waveformResolution: number;
+}) {
+  const labelCanvas = useMemo(() => createStudioSoundCloudDeckMonitorCanvas({
+    accentColor: phaseVisuals.gridPrimary,
+    consoleEvents,
+    deckA,
+    deckB,
+    mixer,
+    waveformResolution,
+  }), [
+    consoleEvents,
+    deckA.display.currentTrackAcceptedBpmState.label,
+    deckA.display.currentTrackBpm,
+    deckA.display.currentTrackBpmState.label,
+    deckA.display.currentTrackTitle,
+    deckA.display.playbackDuration,
+    deckA.display.playbackPosition,
+    deckA.display.progress,
+    deckA.display.waveformBars,
+    deckA.display.isPlaying,
+    deckA.display.isWidgetReady,
+    deckA.outputPercent,
+    deckA.display.errorMessage,
+    deckB.display.currentTrackAcceptedBpmState.label,
+    deckB.display.currentTrackBpm,
+    deckB.display.currentTrackBpmState.label,
+    deckB.display.currentTrackTitle,
+    deckB.display.playbackDuration,
+    deckB.display.playbackPosition,
+    deckB.display.progress,
+    deckB.display.waveformBars,
+    deckB.display.isPlaying,
+    deckB.display.isWidgetReady,
+    deckB.outputPercent,
+    deckB.display.errorMessage,
+    mixer.crossfader,
+    mixer.deckAOutputPercent,
+    mixer.deckBOutputPercent,
+    mixer.masterVolume,
+    phaseVisuals.gridPrimary,
+    waveformResolution,
+  ]);
+  const waveformResolutionControls = useMemo<StudioDjControlSpec[]>(() => [
+    {
+      id: "soundcloud-monitor-waveform-resolution-down",
+      label: "-",
+      caption: "SoundCloud Monitor Waveform Resolution Down",
+      position: [STUDIO_SOUNDCLOUD_MONITOR_WAVE_BUTTON_DOWN_X, STUDIO_SOUNDCLOUD_MONITOR_WAVE_BUTTON_Y, STUDIO_SOUNDCLOUD_MONITOR_WAVE_BUTTON_Z],
+      size: STUDIO_SOUNDCLOUD_MONITOR_WAVE_BUTTON_SIZE,
+      accentColor: phaseVisuals.gridSecondary,
+      enabled: waveformResolution > STUDIO_SOUNDCLOUD_WAVEFORM_RESOLUTION_MIN,
+      onActivate: () => onDecreaseWaveformResolution?.(),
+    },
+    {
+      id: "soundcloud-monitor-waveform-resolution-up",
+      label: "+",
+      caption: "SoundCloud Monitor Waveform Resolution Up",
+      position: [STUDIO_SOUNDCLOUD_MONITOR_WAVE_BUTTON_UP_X, STUDIO_SOUNDCLOUD_MONITOR_WAVE_BUTTON_Y, STUDIO_SOUNDCLOUD_MONITOR_WAVE_BUTTON_Z],
+      size: STUDIO_SOUNDCLOUD_MONITOR_WAVE_BUTTON_SIZE,
+      accentColor: phaseVisuals.gridPrimary,
+      enabled: waveformResolution < STUDIO_SOUNDCLOUD_WAVEFORM_RESOLUTION_MAX,
+      onActivate: () => onIncreaseWaveformResolution?.(),
+    },
+  ], [
+    onDecreaseWaveformResolution,
+    onIncreaseWaveformResolution,
+    phaseVisuals.gridPrimary,
+    phaseVisuals.gridSecondary,
+    waveformResolution,
+  ]);
+
+  return (
+    <group position={STUDIO_SOUNDCLOUD_DECK_MONITOR_POSITION} rotation={STUDIO_SOUNDCLOUD_DECK_MONITOR_ROTATION}>
+      <mesh>
+        <boxGeometry args={STUDIO_SOUNDCLOUD_DECK_MONITOR_BACKING_SIZE} />
+        <meshStandardMaterial args={[{ color: "#0a101c", emissive: "#17304d", emissiveIntensity: 0.18, roughness: 0.72, metalness: 0.05 }]} />
+      </mesh>
+      <mesh position={[0, 0.012, 0.045]}>
+        <planeGeometry args={STUDIO_SOUNDCLOUD_DECK_MONITOR_PLANE_SIZE} />
+          <meshBasicMaterial args={[{ transparent: true, opacity: 0.82, toneMapped: false }]}>
+          <canvasTexture key={`studio-soundcloud-deck-monitor-${deckA.display.currentTrackAcceptedBpmState.label}-${deckA.display.isPlaying}-${Math.round(deckA.outputPercent)}-${Math.round(deckA.display.progress * 1000)}-${deckA.display.waveformBars.length}-${deckA.display.waveformBars[0] ?? 0}-${deckB.display.currentTrackAcceptedBpmState.label}-${deckB.display.isPlaying}-${Math.round(deckB.outputPercent)}-${Math.round(deckB.display.progress * 1000)}-${deckB.display.waveformBars.length}-${deckB.display.waveformBars[0] ?? 0}-${waveformResolution}-${mixer.crossfader}-${mixer.masterVolume}-${consoleEvents.map((event) => event.id).join("|")}`} attach="map" args={[labelCanvas]} />
+        </meshBasicMaterial>
+      </mesh>
+      {waveformResolutionControls.map((control) => (
+        <StudioSoundCloudInvisibleButton key={control.id} control={control} />
+      ))}
+      <StudioSoundCloudMonitorWaveformHitTarget
+        caption="Deck A Monitor Waveform Seek"
+        deck={deckA}
+        id="studio-dj-soundcloud-monitor-waveform-a-seek"
+        onPushConsoleEvent={onPushConsoleEvent}
+        position={[STUDIO_SOUNDCLOUD_MONITOR_WAVEFORM_X, STUDIO_SOUNDCLOUD_MONITOR_WAVEFORM_A_Y, STUDIO_SOUNDCLOUD_MONITOR_WAVE_BUTTON_Z]}
+        size={STUDIO_SOUNDCLOUD_MONITOR_WAVEFORM_HIT_SIZE}
+      />
+      <StudioSoundCloudMonitorWaveformHitTarget
+        caption="Deck B Monitor Waveform Seek"
+        deck={deckB}
+        id="studio-dj-soundcloud-monitor-waveform-b-seek"
+        onPushConsoleEvent={onPushConsoleEvent}
+        position={[STUDIO_SOUNDCLOUD_MONITOR_WAVEFORM_X, STUDIO_SOUNDCLOUD_MONITOR_WAVEFORM_B_Y, STUDIO_SOUNDCLOUD_MONITOR_WAVE_BUTTON_Z]}
+        size={STUDIO_SOUNDCLOUD_MONITOR_WAVEFORM_HIT_SIZE}
+      />
+    </group>
+  );
+}
+
+function formatSoundCloudCrateDuration(durationMs: number | null) {
+  if (!durationMs || durationMs <= 0 || !Number.isFinite(durationMs)) {
+    return "--:--";
+  }
+
+  const totalSeconds = Math.floor(durationMs / 1000);
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+
+  return `${minutes}:${seconds.toString().padStart(2, "0")}`;
+}
+
+function createStudioSoundCloudCrateCanvas({
+  accentColor,
+  deck,
+  scrollOffset,
+}: {
+  accentColor: string;
+  deck: SoundCloudBoothDeck;
+  scrollOffset: number;
+}) {
+  const canvas = document.createElement("canvas");
+  canvas.width = 1024;
+  canvas.height = 512;
+
+  const context = canvas.getContext("2d");
+
+  if (!context) {
+    return canvas;
+  }
+
+  const tracks = deck.display.trackList;
+  const maxOffset = Math.max(0, tracks.length - STUDIO_SOUNDCLOUD_CRATE_VISIBLE_ROWS);
+  const effectiveOffset = Math.max(0, Math.min(scrollOffset, maxOffset));
+  const visibleTracks = tracks.slice(effectiveOffset, effectiveOffset + STUDIO_SOUNDCLOUD_CRATE_VISIBLE_ROWS);
+  const status = getSoundCloudDeckStatusLabel(deck);
+  const loadedIndex = deck.display.currentTrackIndex;
+
+  context.fillStyle = "#050914";
+  context.fillRect(0, 0, canvas.width, canvas.height);
+  context.strokeStyle = accentColor;
+  context.globalAlpha = 0.64;
+  context.lineWidth = 10;
+  context.strokeRect(22, 22, canvas.width - 44, canvas.height - 44);
+  context.globalAlpha = 1;
+
+  context.textAlign = "left";
+  context.textBaseline = "middle";
+  context.fillStyle = accentColor;
+  context.font = "900 38px monospace";
+  context.fillText(`${deck.label.toUpperCase()} CRATE`, 48, 58);
+
+  context.fillStyle = "#a9bdc9";
+  context.globalAlpha = 0.86;
+  context.font = "700 20px monospace";
+  context.fillText(`${status} | ${deck.display.playlistLabel.toUpperCase()}`, 50, 100);
+  context.textAlign = "right";
+  context.fillText(`${tracks.length} SONGS`, canvas.width - 50, 100);
+
+  const rowTop = 142;
+  const rowHeight = 56;
+
+  context.textAlign = "left";
+  visibleTracks.forEach((track, rowIndex) => {
+    const y = rowTop + rowIndex * rowHeight;
+    const isLoaded = track.index === loadedIndex;
+    context.fillStyle = isLoaded ? accentColor : "rgba(99, 122, 148, 0.28)";
+    context.globalAlpha = isLoaded ? 0.26 : 0.42;
+    context.fillRect(48, y - 20, canvas.width - 170, 44);
+    context.globalAlpha = 1;
+    context.fillStyle = isLoaded ? "#e9fbff" : "#c9d5df";
+    context.font = isLoaded ? "900 24px monospace" : "800 23px monospace";
+    context.fillText(`${track.index + 1}`.padStart(2, "0"), 70, y + 2);
+    context.fillText(fitCanvasText(context, track.title.toUpperCase(), 520), 126, y - 4);
+    context.fillStyle = isLoaded ? accentColor : "#8ea1b4";
+    context.font = "700 16px monospace";
+    context.fillText(fitCanvasText(context, track.artist.toUpperCase(), 500), 126, y + 20);
+    context.textAlign = "right";
+    context.fillStyle = "#a9bdc9";
+    context.font = "700 18px monospace";
+    context.fillText(formatSoundCloudCrateDuration(track.durationMs), canvas.width - 152, y + 2);
+    context.textAlign = "left";
+  });
+
+  if (visibleTracks.length === 0) {
+    context.fillStyle = "#a9bdc9";
+    context.globalAlpha = 0.7;
+    context.font = "800 26px monospace";
+    context.textAlign = "center";
+    context.fillText(deck.display.isWidgetReady ? "NO TRACKS LOADED" : "LOADING PLAYLIST", canvas.width / 2, 270);
+    context.textAlign = "left";
+    context.globalAlpha = 1;
+  }
+
+  const controlX = canvas.width - 112;
+  [
+    { label: "UP", y: 158, active: effectiveOffset > 0 },
+    { label: "DOWN", y: 374, active: effectiveOffset < maxOffset },
+  ].forEach((control) => {
+    context.fillStyle = control.active ? accentColor : "#314256";
+    context.globalAlpha = control.active ? 0.32 : 0.22;
+    context.fillRect(controlX - 54, control.y - 25, 92, 44);
+    context.globalAlpha = control.active ? 0.92 : 0.52;
+    context.fillStyle = "#e9fbff";
+    context.font = "900 20px monospace";
+    context.textAlign = "center";
+    context.fillText(control.label, controlX - 8, control.y - 2);
+  });
+
+  context.textAlign = "center";
+  context.fillStyle = "#a9bdc9";
+  context.globalAlpha = 0.66;
+  context.font = "700 18px monospace";
+  context.fillText("CLICK ROW TO LOAD | CLICK UP/DOWN TO SCROLL", canvas.width / 2, 470);
+  context.globalAlpha = 1;
+
+  return canvas;
+}
+
+function StudioSoundCloudCrateHitTarget({
+  accentColor,
+  caption,
+  enabled = true,
+  id,
+  position,
+  size,
+  onActivate,
+}: {
+  accentColor: string;
+  caption: string;
+  enabled?: boolean;
+  id: string;
+  position: Vec3;
+  size: Vec3;
+  onActivate: () => void;
+}) {
+  const targetRef = useRef<React.ElementRef<"mesh">>(null);
+
+  useRegisterInteractable(useMemo(() => ({
+    id,
+    label: caption,
+    objectRef: targetRef,
+    modes: ["clickable" as const],
+    enabled,
+    onActivate,
+  }), [caption, enabled, id, onActivate]));
+
+  return (
+    <mesh ref={targetRef} position={position}>
+      <boxGeometry args={size} />
+      <meshBasicMaterial args={[{ color: accentColor, depthWrite: false, transparent: true, opacity: 0, toneMapped: false }]} />
+    </mesh>
+  );
+}
+
+function StudioSoundCloudCrateBrowser({
+  deck,
+  onPushConsoleEvent,
+  phaseVisuals,
+  position,
+  scrollOffset,
+  onSetScrollOffset,
+}: {
+  deck: SoundCloudBoothDeck;
+  onPushConsoleEvent?: (event: SoundCloudBoothConsoleEventInput) => void;
+  phaseVisuals: PhaseVisuals;
+  position: Vec3;
+  scrollOffset: number;
+  onSetScrollOffset: (deckId: SoundCloudBoothDeck["id"], offset: number) => void;
+}) {
+  const accentColor = getSoundCloudDeckAccent(deck, phaseVisuals);
+  const maxOffset = Math.max(0, deck.display.trackList.length - STUDIO_SOUNDCLOUD_CRATE_VISIBLE_ROWS);
+  const effectiveOffset = Math.max(0, Math.min(scrollOffset, maxOffset));
+  const visibleTracks = deck.display.trackList.slice(effectiveOffset, effectiveOffset + STUDIO_SOUNDCLOUD_CRATE_VISIBLE_ROWS);
+  const labelCanvas = useMemo(() => createStudioSoundCloudCrateCanvas({
+    accentColor,
+    deck,
+    scrollOffset: effectiveOffset,
+  }), [
+    accentColor,
+    deck.display.currentTrackIndex,
+    deck.display.isPlaying,
+    deck.display.isWidgetReady,
+    deck.display.playlistLabel,
+    deck.display.trackList,
+    deck.display.trackCount,
+    deck.display.errorMessage,
+    effectiveOffset,
+  ]);
+
+  return (
+    <group position={position}>
+      <mesh position={[0, 0, 0]}>
+        <boxGeometry args={STUDIO_SOUNDCLOUD_CRATE_SCREEN_SIZE} />
+        <meshStandardMaterial args={[{ color: "#07101d", emissive: accentColor, emissiveIntensity: 0.1, roughness: 0.76, metalness: 0.05 }]} />
+      </mesh>
+      <mesh position={[0, STUDIO_SOUNDCLOUD_CRATE_SCREEN_SIZE[1] / 2 + 0.006, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+        <planeGeometry args={STUDIO_SOUNDCLOUD_CRATE_PLANE_SIZE} />
+        <meshBasicMaterial args={[{ transparent: true, opacity: 0.84, toneMapped: false }]} >
+          <canvasTexture key={`studio-soundcloud-crate-${deck.id}-${deck.display.playlistId}-${effectiveOffset}-${deck.display.currentTrackIndex ?? "none"}-${deck.display.trackCount}-${deck.display.isPlaying}-${deck.display.isWidgetReady}`} attach="map" args={[labelCanvas]} />
+        </meshBasicMaterial>
+      </mesh>
+      <StudioSoundCloudCrateHitTarget
+        accentColor={accentColor}
+        caption={`${deck.label} Crate Scroll Up`}
+        enabled={effectiveOffset > 0}
+        id={`studio-soundcloud-crate-${deck.id.toLowerCase()}-up`}
+        position={[0.63, STUDIO_SOUNDCLOUD_CRATE_SCREEN_SIZE[1] / 2 + 0.028, -0.2]}
+        size={STUDIO_SOUNDCLOUD_CRATE_SCROLL_HIT_SIZE}
+        onActivate={() => onSetScrollOffset(deck.id, Math.max(0, effectiveOffset - 1))}
+      />
+      <StudioSoundCloudCrateHitTarget
+        accentColor={accentColor}
+        caption={`${deck.label} Crate Scroll Down`}
+        enabled={effectiveOffset < maxOffset}
+        id={`studio-soundcloud-crate-${deck.id.toLowerCase()}-down`}
+        position={[0.63, STUDIO_SOUNDCLOUD_CRATE_SCREEN_SIZE[1] / 2 + 0.028, 0.2]}
+        size={STUDIO_SOUNDCLOUD_CRATE_SCROLL_HIT_SIZE}
+        onActivate={() => onSetScrollOffset(deck.id, Math.min(maxOffset, effectiveOffset + 1))}
+      />
+      {visibleTracks.map((track, rowIndex) => (
+        <StudioSoundCloudCrateHitTarget
+          key={`${deck.id}-${track.index}`}
+          accentColor={accentColor}
+          caption={`${deck.label} Load ${track.title}`}
+          enabled={deck.display.isWidgetReady}
+          id={`studio-soundcloud-crate-${deck.id.toLowerCase()}-row-${track.index}`}
+          position={[-0.08, STUDIO_SOUNDCLOUD_CRATE_SCREEN_SIZE[1] / 2 + 0.03, -0.188 + rowIndex * 0.077]}
+          size={STUDIO_SOUNDCLOUD_CRATE_ROW_HIT_SIZE}
+          onActivate={() => {
+            pushSoundCloudBoothConsoleEvent(onPushConsoleEvent, {
+              kind: "deck",
+              deckId: deck.id,
+              label: "LOAD REQUEST",
+              detail: trimStudioSoundCloudText(track.title, 30),
+            });
+            deck.actions.loadTrackByIndex(track.index);
+          }}
+        />
+      ))}
+    </group>
+  );
+}
+
+function StudioSoundCloudDjControls({
+  phaseVisuals,
+  soundCloudBooth,
+}: {
+  phaseVisuals: PhaseVisuals;
+  soundCloudBooth: SoundCloudBoothState;
+}) {
+  const [deckA, deckB] = soundCloudBooth.decks;
+  const { activeDragId } = useInteractionRegistry();
+  const isCrossfaderGrabbed = activeDragId === "studio-dj-soundcloud-crossfader-drag";
+  const isMasterGrabbed = activeDragId === "studio-dj-soundcloud-master-drag";
+  const pushConsoleEvent = soundCloudBooth.onPushConsoleEvent;
+  const [crateScrollOffsets, setCrateScrollOffsets] = useState<Record<SoundCloudBoothDeck["id"], number>>({ A: 0, B: 0 });
+  const [waveformResolution, setWaveformResolution] = useState(1);
+  const handleSetCrateScrollOffset = useCallback((deckId: SoundCloudBoothDeck["id"], offset: number) => {
+    setCrateScrollOffsets((current) => ({
+      ...current,
+      [deckId]: offset,
+    }));
+  }, []);
+  const setSoundCloudWaveformResolution = useCallback((delta: number) => {
+    setWaveformResolution((current) => {
+      const nextResolution = Math.round(clampNumber(
+        current + delta,
+        STUDIO_SOUNDCLOUD_WAVEFORM_RESOLUTION_MIN,
+        STUDIO_SOUNDCLOUD_WAVEFORM_RESOLUTION_MAX,
+      ));
+
+      if (nextResolution !== current) {
+        pushSoundCloudBoothConsoleEvent(pushConsoleEvent, {
+          kind: "system",
+          label: "WAVE RES",
+          detail: `x${nextResolution}`,
+        });
+      }
+
+      return nextResolution;
+    });
+  }, [pushConsoleEvent]);
+  const deckControls = useMemo<StudioDjControlSpec[]>(() => (
+    soundCloudBooth.decks.flatMap((deck, deckIndex) => {
+      const deckOffsetX = deckIndex === 0 ? -STUDIO_SOUNDCLOUD_DECK_OFFSET_X : STUDIO_SOUNDCLOUD_DECK_OFFSET_X;
+      const accentColor = getSoundCloudDeckAccent(deck, phaseVisuals);
+      const isBpmToolEnabled = deck.display.isWidgetReady && Boolean(deck.display.currentTrackUrl) && deck.display.playbackDuration > 0;
+      const deckButtonMirror = deckIndex === 0 ? 1 : -1;
+      const syncButtonX = -0.4;
+      const playButtonX = -0.2;
+      const muteButtonX = 0;
+      const shuffleButtonX = 0.2;
+      const bpmToolCenterX = -0.18;
+      const bpmToolZ = STUDIO_SOUNDCLOUD_DECK_BPM_BUTTON_Z - STUDIO_SOUNDCLOUD_DECK_BPM_BUTTON_ROW_OFFSET_Z;
+      const bpmXOffsets = [-0.18, 0, 0.18] as const;
+
+      return [
+        {
+          id: `soundcloud-deck-${deck.id.toLowerCase()}-play`,
+          label: deck.display.isPlaying ? "Pause" : "Play",
+          caption: `${deck.label} SoundCloud ${deck.display.isPlaying ? "Pause" : "Play"}`,
+          position: [deckOffsetX + playButtonX * deckButtonMirror, 0.724, STUDIO_SOUNDCLOUD_DECK_BUTTON_Z] as Vec3,
+          size: [0.19, 0.034, 0.095] as Vec3,
+          accentColor,
+          isActive: deck.display.isPlaying,
+          onActivate: () => {
+            pushSoundCloudBoothConsoleEvent(pushConsoleEvent, {
+              kind: "deck",
+              deckId: deck.id,
+              label: deck.display.isPlaying ? "PAUSE" : "PLAY",
+              detail: trimStudioSoundCloudText(deck.display.currentTrackTitle || "No Track", 30),
+            });
+            deck.actions.togglePlayback();
+          },
+        },
+        {
+          id: `soundcloud-deck-${deck.id.toLowerCase()}-shuffle`,
+          label: "Shuf",
+          caption: `${deck.label} SoundCloud Shuffle`,
+          position: [deckOffsetX + shuffleButtonX * deckButtonMirror, 0.724, STUDIO_SOUNDCLOUD_DECK_BUTTON_Z] as Vec3,
+          size: [0.19, 0.034, 0.095] as Vec3,
+          accentColor,
+          isActive: false,
+          onActivate: () => {
+            pushSoundCloudBoothConsoleEvent(pushConsoleEvent, {
+              kind: "deck",
+              deckId: deck.id,
+              label: "SHUFFLE",
+              detail: deck.display.playlistLabel,
+            });
+            deck.actions.shufflePlay();
+          },
+        },
+        {
+          id: `soundcloud-deck-${deck.id.toLowerCase()}-mute`,
+          label: deck.isMuted ? "Open" : "Mute",
+          caption: deck.isMuted ? `${deck.label} Unmute` : `${deck.label} Mute`,
+          position: [deckOffsetX + muteButtonX * deckButtonMirror, 0.724, STUDIO_SOUNDCLOUD_DECK_BUTTON_Z] as Vec3,
+          size: STUDIO_SOUNDCLOUD_DECK_UTILITY_BUTTON_SIZE,
+          accentColor: deck.isMuted ? "#f8d36a" : accentColor,
+          enabled: Boolean(deck.onToggleMute),
+          isActive: Boolean(deck.isMuted),
+          onActivate: () => {
+            pushSoundCloudBoothConsoleEvent(pushConsoleEvent, {
+              kind: "mixer",
+              deckId: deck.id,
+              label: "MUTE",
+              detail: deck.isMuted ? "OFF" : "ON",
+            });
+            deck.onToggleMute?.();
+          },
+        },
+        {
+          id: `soundcloud-deck-${deck.id.toLowerCase()}-sync`,
+          label: deck.syncLabel ?? "SYNC",
+          caption: `${deck.label} ${deck.syncLabel ?? "SYNC"}`,
+          position: [deckOffsetX + syncButtonX * deckButtonMirror, 0.724, STUDIO_SOUNDCLOUD_DECK_BUTTON_Z] as Vec3,
+          size: STUDIO_SOUNDCLOUD_DECK_UTILITY_BUTTON_SIZE,
+          accentColor: deck.syncLabel === "SYNC LOW" ? "#f8d36a" : phaseVisuals.gridPrimary,
+          enabled: Boolean(deck.onSyncToOtherDeck),
+          isActive: deck.syncLabel === "SYNCED" || deck.syncLabel === "SYNC LOW",
+          onActivate: () => {
+            const resultLabel = deck.onSyncToOtherDeck?.();
+            pushSoundCloudBoothConsoleEvent(pushConsoleEvent, {
+              kind: "sync",
+              deckId: deck.id,
+              label: "SYNC",
+              detail: resultLabel || deck.syncLabel || "REQUESTED",
+            });
+          },
+        },
+        {
+          id: `soundcloud-deck-${deck.id.toLowerCase()}-bpm-meta`,
+          label: "Meta",
+          caption: `${deck.label} Accept Metadata BPM`,
+          position: [deckOffsetX + bpmToolCenterX + bpmXOffsets[0], 0.724, bpmToolZ] as Vec3,
+          size: STUDIO_SOUNDCLOUD_DECK_BPM_BUTTON_SIZE,
+          accentColor,
+          enabled: isBpmToolEnabled,
+          isActive: deck.display.currentTrackAcceptedBpmState.source === "meta",
+          onActivate: () => {
+            pushSoundCloudBoothConsoleEvent(pushConsoleEvent, {
+              kind: "bpm",
+              deckId: deck.id,
+              label: "BPM META",
+              detail: deck.display.currentTrackBpm ? deck.display.currentTrackBpm.toFixed(1) : "NO META",
+            });
+            deck.bpmActions.acceptMetadataBpm();
+          },
+        },
+        {
+          id: `soundcloud-deck-${deck.id.toLowerCase()}-bpm-wave`,
+          label: "Wave",
+          caption: `${deck.label} Accept Waveform BPM`,
+          position: [deckOffsetX + bpmToolCenterX + bpmXOffsets[1], 0.724, bpmToolZ] as Vec3,
+          size: STUDIO_SOUNDCLOUD_DECK_BPM_BUTTON_SIZE,
+          accentColor,
+          enabled: isBpmToolEnabled,
+          isActive: deck.display.currentTrackAcceptedBpmState.source === "wave",
+          onActivate: () => {
+            pushSoundCloudBoothConsoleEvent(pushConsoleEvent, {
+              kind: "bpm",
+              deckId: deck.id,
+              label: "BPM WAVE",
+              detail: deck.display.currentTrackBpmState.bpm ? deck.display.currentTrackBpmState.bpm.toFixed(1) : "NO WAVE",
+            });
+            deck.bpmActions.acceptWaveformBpm();
+          },
+        },
+        {
+          id: `soundcloud-deck-${deck.id.toLowerCase()}-bpm-length`,
+          label: "Len",
+          caption: `${deck.label} Accept Length BPM`,
+          position: [deckOffsetX + bpmToolCenterX + bpmXOffsets[2], 0.724, bpmToolZ] as Vec3,
+          size: STUDIO_SOUNDCLOUD_DECK_BPM_BUTTON_SIZE,
+          accentColor,
+          enabled: isBpmToolEnabled,
+          isActive: deck.display.currentTrackAcceptedBpmState.source === "length",
+          onActivate: () => {
+            pushSoundCloudBoothConsoleEvent(pushConsoleEvent, {
+              kind: "bpm",
+              deckId: deck.id,
+              label: "BPM LENGTH",
+              detail: "ACCEPT",
+            });
+            deck.bpmActions.acceptLengthBpm();
+          },
+        },
+        {
+          id: `soundcloud-deck-${deck.id.toLowerCase()}-bpm-down`,
+          label: "BPM-",
+          caption: `${deck.label} BPM Down 0.1`,
+          position: [deckOffsetX + bpmToolCenterX + bpmXOffsets[0], 0.724, bpmToolZ + STUDIO_SOUNDCLOUD_DECK_BPM_BUTTON_ROW_OFFSET_Z] as Vec3,
+          size: STUDIO_SOUNDCLOUD_DECK_BPM_BUTTON_SIZE,
+          accentColor: phaseVisuals.timerAccent,
+          enabled: isBpmToolEnabled,
+          isActive: deck.display.currentTrackAcceptedBpmState.source === "manual",
+          onActivate: () => {
+            pushSoundCloudBoothConsoleEvent(pushConsoleEvent, {
+              kind: "bpm",
+              deckId: deck.id,
+              label: "BPM MANUAL",
+              detail: "-0.1",
+            });
+            deck.bpmActions.adjustAcceptedBpm(-0.1);
+          },
+        },
+        {
+          id: `soundcloud-deck-${deck.id.toLowerCase()}-bpm-up`,
+          label: "BPM+",
+          caption: `${deck.label} BPM Up 0.1`,
+          position: [deckOffsetX + bpmToolCenterX + bpmXOffsets[1], 0.724, bpmToolZ + STUDIO_SOUNDCLOUD_DECK_BPM_BUTTON_ROW_OFFSET_Z] as Vec3,
+          size: STUDIO_SOUNDCLOUD_DECK_BPM_BUTTON_SIZE,
+          accentColor: phaseVisuals.timerAccent,
+          enabled: isBpmToolEnabled,
+          isActive: deck.display.currentTrackAcceptedBpmState.source === "manual",
+          onActivate: () => {
+            pushSoundCloudBoothConsoleEvent(pushConsoleEvent, {
+              kind: "bpm",
+              deckId: deck.id,
+              label: "BPM MANUAL",
+              detail: "+0.1",
+            });
+            deck.bpmActions.adjustAcceptedBpm(0.1);
+          },
+        },
+        {
+          id: `soundcloud-deck-${deck.id.toLowerCase()}-bpm-clear`,
+          label: "Clear",
+          caption: `${deck.label} Clear BPM`,
+          position: [deckOffsetX + bpmToolCenterX + bpmXOffsets[2], 0.724, bpmToolZ + STUDIO_SOUNDCLOUD_DECK_BPM_BUTTON_ROW_OFFSET_Z] as Vec3,
+          size: STUDIO_SOUNDCLOUD_DECK_BPM_BUTTON_SIZE,
+          accentColor: "#f8d36a",
+          enabled: isBpmToolEnabled,
+          isActive: deck.display.currentTrackAcceptedBpmState.source === "none",
+          onActivate: () => {
+            pushSoundCloudBoothConsoleEvent(pushConsoleEvent, {
+              kind: "bpm",
+              deckId: deck.id,
+              label: "BPM CLEAR",
+            });
+            deck.bpmActions.clearAcceptedBpm();
+          },
+        },
+        {
+          id: `soundcloud-deck-${deck.id.toLowerCase()}-volume-down`,
+          label: "Vol -",
+          caption: `${deck.label} Volume Down`,
+          position: [deckOffsetX - STUDIO_SOUNDCLOUD_DECK_VOLUME_BUTTON_OFFSET_X, 0.724, STUDIO_SOUNDCLOUD_DECK_VOLUME_BUTTON_Z] as Vec3,
+          size: [0.17, 0.032, 0.085] as Vec3,
+          accentColor,
+          enabled: Boolean(deck.onSetTrimPercent),
+          isActive: deck.trimPercent <= 0,
+          onActivate: () => {
+            const nextValue = clampNumber(deck.trimPercent - STUDIO_SOUNDCLOUD_DECK_VOLUME_STEP, 0, 100);
+            pushSoundCloudBoothConsoleEvent(pushConsoleEvent, {
+              kind: "mixer",
+              deckId: deck.id,
+              label: "TRIM",
+              detail: `${Math.round(nextValue)}%`,
+            });
+            deck.onSetTrimPercent?.(nextValue);
+          },
+        },
+        {
+          id: `soundcloud-deck-${deck.id.toLowerCase()}-volume-up`,
+          label: "Vol +",
+          caption: `${deck.label} Volume Up`,
+          position: [deckOffsetX + STUDIO_SOUNDCLOUD_DECK_VOLUME_BUTTON_OFFSET_X, 0.724, STUDIO_SOUNDCLOUD_DECK_VOLUME_BUTTON_Z] as Vec3,
+          size: [0.17, 0.032, 0.085] as Vec3,
+          accentColor,
+          enabled: Boolean(deck.onSetTrimPercent),
+          isActive: deck.trimPercent >= 100,
+          onActivate: () => {
+            const nextValue = clampNumber(deck.trimPercent + STUDIO_SOUNDCLOUD_DECK_VOLUME_STEP, 0, 100);
+            pushSoundCloudBoothConsoleEvent(pushConsoleEvent, {
+              kind: "mixer",
+              deckId: deck.id,
+              label: "TRIM",
+              detail: `${Math.round(nextValue)}%`,
+            });
+            deck.onSetTrimPercent?.(nextValue);
+          },
+        },
+      ];
+    })
+  ), [phaseVisuals, pushConsoleEvent, soundCloudBooth.decks]);
+  const deckButtonPods = useMemo(() => (
+    soundCloudBooth.decks.map((deck, deckIndex) => {
+      const deckOffsetX = deckIndex === 0 ? -STUDIO_SOUNDCLOUD_DECK_OFFSET_X : STUDIO_SOUNDCLOUD_DECK_OFFSET_X;
+      const accentColor = getSoundCloudDeckAccent(deck, phaseVisuals);
+
+      return {
+        id: `soundcloud-deck-${deck.id.toLowerCase()}-pod`,
+          position: [deckOffsetX, STUDIO_SOUNDCLOUD_DECK_BUTTON_POD_Y, STUDIO_SOUNDCLOUD_DECK_BUTTON_Z] as Vec3,
+        accentColor,
+      };
+    })
+  ), [phaseVisuals, soundCloudBooth.decks]);
+  const cueShelfBases = useMemo(() => (
+    soundCloudBooth.decks.map((deck, deckIndex) => {
+      const accentColor = getSoundCloudDeckAccent(deck, phaseVisuals);
+
+      return {
+        id: `soundcloud-deck-${deck.id.toLowerCase()}-cue-shelf`,
+        position: [deckIndex === 0 ? -STUDIO_SOUNDCLOUD_SEEK_PANEL_OFFSET_X : STUDIO_SOUNDCLOUD_SEEK_PANEL_OFFSET_X, STUDIO_SOUNDCLOUD_CUE_SHELF_Y, STUDIO_SOUNDCLOUD_CUE_SHELF_CENTER_Z] as Vec3,
+        accentColor,
+        enabled: !deck.hotCueState.activeTrackKey || deck.display.playbackDuration <= 0 || !deck.display.isWidgetReady ? false : true,
+        isActive: (deck.hotCueState.isSettingCue || deck.hotCueState.isEditingCue) && Boolean(deck.hotCueState.activeTrackKey) && deck.display.playbackDuration > 0 && deck.display.isWidgetReady,
+      };
+    })
+  ), [phaseVisuals, soundCloudBooth.decks]);
+  const seekPanelBases = useMemo(() => (
+    soundCloudBooth.decks.map((deck, deckIndex) => {
+      const accentColor = getSoundCloudDeckAccent(deck, phaseVisuals);
+
+      return {
+        id: `soundcloud-deck-${deck.id.toLowerCase()}-seek-panel`,
+        position: [deckIndex === 0 ? -STUDIO_SOUNDCLOUD_SEEK_PANEL_OFFSET_X : STUDIO_SOUNDCLOUD_SEEK_PANEL_OFFSET_X, STUDIO_SOUNDCLOUD_SEEK_PANEL_Y, STUDIO_SOUNDCLOUD_SEEK_PANEL_CENTER_Z] as Vec3,
+        accentColor,
+        enabled: Boolean(deck.hotCueState.activeTrackKey) && deck.display.playbackDuration > 0 && deck.display.isWidgetReady,
+        isActive: deck.hotCueState.isEditingCue,
+      };
+    })
+  ), [phaseVisuals, soundCloudBooth.decks]);
+  const cueControls = useMemo<StudioDjControlSpec[]>(() => (
+    soundCloudBooth.decks.flatMap((deck, deckIndex) => {
+      const cuePanelCenterX = deckIndex === 0 ? -STUDIO_SOUNDCLOUD_SEEK_PANEL_OFFSET_X : STUDIO_SOUNDCLOUD_SEEK_PANEL_OFFSET_X;
+      const accentColor = getSoundCloudDeckAccent(deck, phaseVisuals);
+      const isCueBlocked = !deck.hotCueState.activeTrackKey || deck.display.playbackDuration <= 0 || !deck.display.isWidgetReady;
+      const xOffsets = [-0.21, 0, 0.21] as const;
+
+      return [
+        {
+          id: `soundcloud-deck-${deck.id.toLowerCase()}-cue-set`,
+          label: "SET CUE",
+          caption: getSoundCloudCueSetCaption(deck),
+          position: [cuePanelCenterX + xOffsets[0], STUDIO_SOUNDCLOUD_CUE_CONTROL_Y, STUDIO_SOUNDCLOUD_CUE_SHELF_CENTER_Z - STUDIO_SOUNDCLOUD_CUE_SHELF_ROW_Z_OFFSET] as Vec3,
+          size: STUDIO_SOUNDCLOUD_CUE_SET_BUTTON_SIZE,
+          accentColor,
+          enabled: !isCueBlocked,
+          isActive: deck.hotCueState.isSettingCue && !isCueBlocked,
+          onActivate: () => {
+            pushSoundCloudBoothConsoleEvent(pushConsoleEvent, {
+              kind: "cue",
+              deckId: deck.id,
+              label: "CUE SET",
+              detail: deck.hotCueState.isSettingCue ? "OFF" : "ON",
+            });
+            deck.hotCueActions.toggleSetCueMode();
+          },
+        },
+        {
+          id: `soundcloud-deck-${deck.id.toLowerCase()}-cue-c1`,
+          label: "C1",
+          caption: getSoundCloudCuePadCaption(deck, deck.hotCueState.cues[0]),
+          captionFontSize: 44,
+          position: [cuePanelCenterX + xOffsets[1], STUDIO_SOUNDCLOUD_CUE_CONTROL_Y, STUDIO_SOUNDCLOUD_CUE_SHELF_CENTER_Z - STUDIO_SOUNDCLOUD_CUE_SHELF_ROW_Z_OFFSET] as Vec3,
+          size: STUDIO_SOUNDCLOUD_CUE_BUTTON_SIZE,
+          accentColor,
+          enabled: !isCueBlocked,
+          isActive: (deck.hotCueState.isEditingCue ? deck.hotCueState.selectedCueId === deck.hotCueState.cues[0].id : deck.hotCueState.cues[0].isValid) && !isCueBlocked,
+          onActivate: () => {
+            pushSoundCloudBoothConsoleEvent(pushConsoleEvent, {
+              kind: "cue",
+              deckId: deck.id,
+              label: deck.hotCueState.isEditingCue ? "CUE EDIT" : deck.hotCueState.isSettingCue ? "CUE SET" : "CUE TRIGGER",
+              detail: deck.hotCueState.cues[0].id,
+            });
+            deck.hotCueActions.triggerCue(deck.hotCueState.cues[0].id);
+          },
+        },
+        {
+          id: `soundcloud-deck-${deck.id.toLowerCase()}-cue-c2`,
+          label: "C2",
+          caption: getSoundCloudCuePadCaption(deck, deck.hotCueState.cues[1]),
+          captionFontSize: 44,
+          position: [cuePanelCenterX + xOffsets[2], STUDIO_SOUNDCLOUD_CUE_CONTROL_Y, STUDIO_SOUNDCLOUD_CUE_SHELF_CENTER_Z - STUDIO_SOUNDCLOUD_CUE_SHELF_ROW_Z_OFFSET] as Vec3,
+          size: STUDIO_SOUNDCLOUD_CUE_BUTTON_SIZE,
+          accentColor,
+          enabled: !isCueBlocked,
+          isActive: (deck.hotCueState.isEditingCue ? deck.hotCueState.selectedCueId === deck.hotCueState.cues[1].id : deck.hotCueState.cues[1].isValid) && !isCueBlocked,
+          onActivate: () => {
+            pushSoundCloudBoothConsoleEvent(pushConsoleEvent, {
+              kind: "cue",
+              deckId: deck.id,
+              label: deck.hotCueState.isEditingCue ? "CUE EDIT" : deck.hotCueState.isSettingCue ? "CUE SET" : "CUE TRIGGER",
+              detail: deck.hotCueState.cues[1].id,
+            });
+            deck.hotCueActions.triggerCue(deck.hotCueState.cues[1].id);
+          },
+        },
+        {
+          id: `soundcloud-deck-${deck.id.toLowerCase()}-cue-c3`,
+          label: "C3",
+          caption: getSoundCloudCuePadCaption(deck, deck.hotCueState.cues[2]),
+          captionFontSize: 44,
+          position: [cuePanelCenterX + xOffsets[0], STUDIO_SOUNDCLOUD_CUE_CONTROL_Y, STUDIO_SOUNDCLOUD_CUE_SHELF_CENTER_Z + STUDIO_SOUNDCLOUD_CUE_SHELF_ROW_Z_OFFSET] as Vec3,
+          size: STUDIO_SOUNDCLOUD_CUE_BUTTON_SIZE,
+          accentColor,
+          enabled: !isCueBlocked,
+          isActive: (deck.hotCueState.isEditingCue ? deck.hotCueState.selectedCueId === deck.hotCueState.cues[2].id : deck.hotCueState.cues[2].isValid) && !isCueBlocked,
+          onActivate: () => {
+            pushSoundCloudBoothConsoleEvent(pushConsoleEvent, {
+              kind: "cue",
+              deckId: deck.id,
+              label: deck.hotCueState.isEditingCue ? "CUE EDIT" : deck.hotCueState.isSettingCue ? "CUE SET" : "CUE TRIGGER",
+              detail: deck.hotCueState.cues[2].id,
+            });
+            deck.hotCueActions.triggerCue(deck.hotCueState.cues[2].id);
+          },
+        },
+        {
+          id: `soundcloud-deck-${deck.id.toLowerCase()}-cue-c4`,
+          label: "C4",
+          caption: getSoundCloudCuePadCaption(deck, deck.hotCueState.cues[3]),
+          captionFontSize: 44,
+          position: [cuePanelCenterX + xOffsets[1], STUDIO_SOUNDCLOUD_CUE_CONTROL_Y, STUDIO_SOUNDCLOUD_CUE_SHELF_CENTER_Z + STUDIO_SOUNDCLOUD_CUE_SHELF_ROW_Z_OFFSET] as Vec3,
+          size: STUDIO_SOUNDCLOUD_CUE_BUTTON_SIZE,
+          accentColor,
+          enabled: !isCueBlocked,
+          isActive: (deck.hotCueState.isEditingCue ? deck.hotCueState.selectedCueId === deck.hotCueState.cues[3].id : deck.hotCueState.cues[3].isValid) && !isCueBlocked,
+          onActivate: () => {
+            pushSoundCloudBoothConsoleEvent(pushConsoleEvent, {
+              kind: "cue",
+              deckId: deck.id,
+              label: deck.hotCueState.isEditingCue ? "CUE EDIT" : deck.hotCueState.isSettingCue ? "CUE SET" : "CUE TRIGGER",
+              detail: deck.hotCueState.cues[3].id,
+            });
+            deck.hotCueActions.triggerCue(deck.hotCueState.cues[3].id);
+          },
+        },
+        {
+          id: `soundcloud-deck-${deck.id.toLowerCase()}-cue-c5`,
+          label: "C5",
+          caption: getSoundCloudCuePadCaption(deck, deck.hotCueState.cues[4]),
+          captionFontSize: 44,
+          position: [cuePanelCenterX + xOffsets[2], STUDIO_SOUNDCLOUD_CUE_CONTROL_Y, STUDIO_SOUNDCLOUD_CUE_SHELF_CENTER_Z + STUDIO_SOUNDCLOUD_CUE_SHELF_ROW_Z_OFFSET] as Vec3,
+          size: STUDIO_SOUNDCLOUD_CUE_BUTTON_SIZE,
+          accentColor,
+          enabled: !isCueBlocked,
+          isActive: (deck.hotCueState.isEditingCue ? deck.hotCueState.selectedCueId === deck.hotCueState.cues[4].id : deck.hotCueState.cues[4].isValid) && !isCueBlocked,
+          onActivate: () => {
+            pushSoundCloudBoothConsoleEvent(pushConsoleEvent, {
+              kind: "cue",
+              deckId: deck.id,
+              label: deck.hotCueState.isEditingCue ? "CUE EDIT" : deck.hotCueState.isSettingCue ? "CUE SET" : "CUE TRIGGER",
+              detail: deck.hotCueState.cues[4].id,
+            });
+            deck.hotCueActions.triggerCue(deck.hotCueState.cues[4].id);
+          },
+        },
+      ];
+    })
+  ), [phaseVisuals, pushConsoleEvent, soundCloudBooth.decks]);
+  const seekControls = useMemo<StudioDjControlSpec[]>(() => (
+    soundCloudBooth.decks.flatMap((deck, deckIndex) => {
+      const panelCenterX = deckIndex === 0 ? -STUDIO_SOUNDCLOUD_SEEK_PANEL_OFFSET_X : STUDIO_SOUNDCLOUD_SEEK_PANEL_OFFSET_X;
+      const accentColor = getSoundCloudDeckAccent(deck, phaseVisuals);
+      const isSeekBlocked = !deck.hotCueState.activeTrackKey || deck.display.playbackDuration <= 0 || !deck.display.isWidgetReady;
+      const xOffsets = [-0.24, -0.12, 0, 0.12, 0.24] as const;
+      const stepControls = STUDIO_SOUNDCLOUD_SEEK_STEPS.flatMap((step, stepIndex) => {
+        const label = formatSoundCloudSeekStepLabel(step);
+        const reverseDelta = -step;
+        const forwardDelta = step;
+        const canNudgeCue = !deck.hotCueState.isEditingCue || Boolean(deck.hotCueState.selectedCueId);
+
+        return [
+          {
+            id: `soundcloud-deck-${deck.id.toLowerCase()}-seek-rev-${label}`,
+            label: `-${label}`,
+            caption: getSoundCloudSeekCaption(deck, reverseDelta),
+            position: [panelCenterX + xOffsets[stepIndex], STUDIO_SOUNDCLOUD_SEEK_CONTROL_Y, STUDIO_SOUNDCLOUD_SEEK_PANEL_CENTER_Z - 0.044] as Vec3,
+            size: STUDIO_SOUNDCLOUD_SEEK_BUTTON_SIZE,
+            accentColor,
+            enabled: !isSeekBlocked && canNudgeCue,
+            isActive: false,
+            onActivate: () => {
+              if (deck.hotCueState.isEditingCue) {
+                pushSoundCloudBoothConsoleEvent(pushConsoleEvent, {
+                  kind: "cue",
+                  deckId: deck.id,
+                  label: "CUE NUDGE",
+                  detail: `${deck.hotCueState.selectedCueId ?? "SELECT"} ${formatSoundCloudSeekStepLabel(reverseDelta)}S BACK`,
+                });
+                deck.hotCueActions.nudgeSelectedCue(reverseDelta);
+                return;
+              }
+
+              pushSoundCloudBoothConsoleEvent(pushConsoleEvent, {
+                kind: "seek",
+                deckId: deck.id,
+                label: "SEEK BACK",
+                detail: `${formatSoundCloudSeekStepLabel(reverseDelta)}S`,
+              });
+              deck.seekActions.seekBy(reverseDelta);
+            },
+          },
+          {
+            id: `soundcloud-deck-${deck.id.toLowerCase()}-seek-fwd-${label}`,
+            label: `+${label}`,
+            caption: getSoundCloudSeekCaption(deck, forwardDelta),
+            position: [panelCenterX + xOffsets[stepIndex], STUDIO_SOUNDCLOUD_SEEK_CONTROL_Y, STUDIO_SOUNDCLOUD_SEEK_PANEL_CENTER_Z + 0.044] as Vec3,
+            size: STUDIO_SOUNDCLOUD_SEEK_BUTTON_SIZE,
+            accentColor,
+            enabled: !isSeekBlocked && canNudgeCue,
+            isActive: false,
+            onActivate: () => {
+              if (deck.hotCueState.isEditingCue) {
+                pushSoundCloudBoothConsoleEvent(pushConsoleEvent, {
+                  kind: "cue",
+                  deckId: deck.id,
+                  label: "CUE NUDGE",
+                  detail: `${deck.hotCueState.selectedCueId ?? "SELECT"} +${formatSoundCloudSeekStepLabel(forwardDelta)}S`,
+                });
+                deck.hotCueActions.nudgeSelectedCue(forwardDelta);
+                return;
+              }
+
+              pushSoundCloudBoothConsoleEvent(pushConsoleEvent, {
+                kind: "seek",
+                deckId: deck.id,
+                label: "SEEK FWD",
+                detail: `+${formatSoundCloudSeekStepLabel(forwardDelta)}S`,
+              });
+              deck.seekActions.seekBy(forwardDelta);
+            },
+          },
+        ];
+      });
+
+      return [
+        {
+          id: `soundcloud-deck-${deck.id.toLowerCase()}-cue-edit`,
+          label: deck.hotCueState.isEditingCue ? "Edit On" : "Edit",
+          caption: getSoundCloudCueEditCaption(deck),
+          position: [panelCenterX, STUDIO_SOUNDCLOUD_SEEK_CONTROL_Y, STUDIO_SOUNDCLOUD_SEEK_PANEL_CENTER_Z - 0.13] as Vec3,
+          size: STUDIO_SOUNDCLOUD_SEEK_EDIT_BUTTON_SIZE,
+          accentColor,
+          enabled: !isSeekBlocked,
+          isActive: deck.hotCueState.isEditingCue && !isSeekBlocked,
+          onActivate: () => {
+            pushSoundCloudBoothConsoleEvent(pushConsoleEvent, {
+              kind: "cue",
+              deckId: deck.id,
+              label: "CUE EDIT",
+              detail: deck.hotCueState.isEditingCue ? "OFF" : "ON",
+            });
+            deck.hotCueActions.toggleEditCueMode();
+          },
+        },
+        ...stepControls,
+      ];
+    })
+  ), [phaseVisuals, pushConsoleEvent, soundCloudBooth.decks]);
+  const crossfaderControls = useMemo<StudioDjControlSpec[]>(() => [
+    {
+      id: "soundcloud-crossfader-a",
+      label: "A",
+      caption: "SoundCloud Crossfader A",
+      position: [-STUDIO_SOUNDCLOUD_CROSSFADER_BUTTON_OFFSET_X, STUDIO_SOUNDCLOUD_CROSSFADER_BUTTON_Y, STUDIO_SOUNDCLOUD_CROSSFADER_BUTTON_Z],
+      size: STUDIO_SOUNDCLOUD_CROSSFADER_BUTTON_SIZE,
+      accentColor: phaseVisuals.gridPrimary,
+      isActive: soundCloudBooth.mixer.crossfader <= -0.5,
+      onActivate: () => {
+        pushSoundCloudBoothConsoleEvent(pushConsoleEvent, {
+          kind: "mixer",
+          label: "XFADE",
+          detail: "A",
+        });
+        soundCloudBooth.mixer.onSetCrossfader?.(-1);
+      },
+    },
+    {
+      id: "soundcloud-crossfader-mid",
+      label: "Mid",
+      caption: "SoundCloud Crossfader Mid",
+      position: [0, STUDIO_SOUNDCLOUD_CROSSFADER_BUTTON_Y, STUDIO_SOUNDCLOUD_CROSSFADER_BUTTON_Z],
+      size: STUDIO_SOUNDCLOUD_CROSSFADER_MID_BUTTON_SIZE,
+      accentColor: phaseVisuals.gridSecondary,
+      isActive: Math.abs(soundCloudBooth.mixer.crossfader) < 0.5,
+      onActivate: () => {
+        pushSoundCloudBoothConsoleEvent(pushConsoleEvent, {
+          kind: "mixer",
+          label: "XFADE",
+          detail: "MID",
+        });
+        soundCloudBooth.mixer.onSetCrossfader?.(0);
+      },
+    },
+    {
+      id: "soundcloud-crossfader-b",
+      label: "B",
+      caption: "SoundCloud Crossfader B",
+      position: [STUDIO_SOUNDCLOUD_CROSSFADER_BUTTON_OFFSET_X, STUDIO_SOUNDCLOUD_CROSSFADER_BUTTON_Y, STUDIO_SOUNDCLOUD_CROSSFADER_BUTTON_Z],
+      size: STUDIO_SOUNDCLOUD_CROSSFADER_BUTTON_SIZE,
+      accentColor: phaseVisuals.timerAccent,
+      isActive: soundCloudBooth.mixer.crossfader >= 0.5,
+      onActivate: () => {
+        pushSoundCloudBoothConsoleEvent(pushConsoleEvent, {
+          kind: "mixer",
+          label: "XFADE",
+          detail: "B",
+        });
+        soundCloudBooth.mixer.onSetCrossfader?.(1);
+      },
+    },
+  ], [
+    phaseVisuals.gridPrimary,
+    phaseVisuals.gridSecondary,
+    phaseVisuals.timerAccent,
+    soundCloudBooth.mixer,
+    pushConsoleEvent,
+  ]);
+  return (
+    <group position={STUDIO_SOUNDCLOUD_DJ_POSITION} rotation={STUDIO_SOUNDCLOUD_DJ_ROTATION}>
+      <mesh position={[0, 0.63, 0]}>
+        <boxGeometry args={STUDIO_SOUNDCLOUD_TABLE_SURFACE_SIZE} />
+        <meshBasicMaterial args={[{ color: "#a336d6", transparent: true, opacity: 0.22, toneMapped: false }]} />
+      </mesh>
+      <mesh position={[0, 0.315, 0]}>
+        <boxGeometry args={[STUDIO_SOUNDCLOUD_TABLE_SURFACE_SIZE[0] + STUDIO_SOUNDCLOUD_TABLE_EDGE_THICKNESS * 2, STUDIO_SOUNDCLOUD_TABLE_EDGE_HEIGHT, STUDIO_SOUNDCLOUD_TABLE_SURFACE_SIZE[2] + STUDIO_SOUNDCLOUD_TABLE_EDGE_THICKNESS * 2]} />
+        <meshStandardMaterial args={[{ color: "#5b1c73", emissive: "#f64fff", emissiveIntensity: 0.09, roughness: 0.76, metalness: 0.04 }]} />
+      </mesh>
+      {[
+        [-STUDIO_SOUNDCLOUD_TABLE_LEG_INSET_X, -STUDIO_SOUNDCLOUD_TABLE_LEG_INSET_Z],
+        [STUDIO_SOUNDCLOUD_TABLE_LEG_INSET_X, -STUDIO_SOUNDCLOUD_TABLE_LEG_INSET_Z],
+        [-STUDIO_SOUNDCLOUD_TABLE_LEG_INSET_X, STUDIO_SOUNDCLOUD_TABLE_LEG_INSET_Z],
+        [STUDIO_SOUNDCLOUD_TABLE_LEG_INSET_X, STUDIO_SOUNDCLOUD_TABLE_LEG_INSET_Z],
+      ].map(([x, z]) => (
+        <mesh key={`soundcloud-table-leg-${x}-${z}`} position={[x, 0.13, z]}>
+          <boxGeometry args={STUDIO_SOUNDCLOUD_TABLE_LEG_SIZE} />
+          <meshStandardMaterial args={[{ color: "#1a1330", emissive: "#0c0716", emissiveIntensity: 0.12, roughness: 0.88, metalness: 0.02 }]} />
+        </mesh>
+      ))}
+      <mesh position={[0, 0.44, 0]}>
+        <boxGeometry args={[STUDIO_SOUNDCLOUD_TABLE_SURFACE_SIZE[0] - 0.1, 0.014, STUDIO_SOUNDCLOUD_TABLE_SURFACE_SIZE[2] - 0.1]} />
+        <meshBasicMaterial args={[{ color: phaseVisuals.gridSecondary, transparent: true, opacity: 0.06, toneMapped: false }]} />
+      </mesh>
+      <mesh position={[STUDIO_SOUNDCLOUD_STATION_GRID.leftX, 0.448, STUDIO_SOUNDCLOUD_STATION_GRID.backZ]}>
+        <boxGeometry args={[0.08, 0.006, STUDIO_SOUNDCLOUD_TABLE_SURFACE_SIZE[2] - 0.24]} />
+        <meshBasicMaterial args={[{ color: phaseVisuals.gridPrimary, transparent: true, opacity: 0.07, toneMapped: false }]} />
+      </mesh>
+      <mesh position={[STUDIO_SOUNDCLOUD_STATION_GRID.rightX, 0.448, STUDIO_SOUNDCLOUD_STATION_GRID.backZ]}>
+        <boxGeometry args={[0.08, 0.006, STUDIO_SOUNDCLOUD_TABLE_SURFACE_SIZE[2] - 0.24]} />
+        <meshBasicMaterial args={[{ color: phaseVisuals.gridPrimary, transparent: true, opacity: 0.07, toneMapped: false }]} />
+      </mesh>
+      <mesh position={[STUDIO_SOUNDCLOUD_STATION_GRID.centerX, 0.448, STUDIO_SOUNDCLOUD_STATION_GRID.midZ]}>
+        <boxGeometry args={[STUDIO_SOUNDCLOUD_TABLE_SURFACE_SIZE[0] - 0.36, 0.006, 0.08]} />
+        <meshBasicMaterial args={[{ color: phaseVisuals.gridSecondary, transparent: true, opacity: 0.05, toneMapped: false }]} />
+      </mesh>
+      <mesh position={[STUDIO_SOUNDCLOUD_STATION_GRID.centerX, 0.448, STUDIO_SOUNDCLOUD_STATION_GRID.frontZ]}>
+        <boxGeometry args={[STUDIO_SOUNDCLOUD_TABLE_SURFACE_SIZE[0] - 0.52, 0.006, 0.08]} />
+        <meshBasicMaterial args={[{ color: phaseVisuals.timerAccent, transparent: true, opacity: 0.04, toneMapped: false }]} />
+      </mesh>
+      <StudioSoundCloudDeckMonitor
+        consoleEvents={soundCloudBooth.consoleEvents}
+        deckA={deckA}
+        deckB={deckB}
+        mixer={soundCloudBooth.mixer}
+        onDecreaseWaveformResolution={() => setSoundCloudWaveformResolution(-1)}
+        onIncreaseWaveformResolution={() => setSoundCloudWaveformResolution(1)}
+        onPushConsoleEvent={soundCloudBooth.onPushConsoleEvent}
+        phaseVisuals={phaseVisuals}
+        waveformResolution={waveformResolution}
+      />
+      <mesh position={[0, 0.652, -0.24]}>
+        <boxGeometry args={[0.44, 0.018, 0.84]} />
+        <meshBasicMaterial args={[{ color: phaseVisuals.gridSecondary, transparent: true, opacity: 0.08, toneMapped: false }]} />
+      </mesh>
+      {cueShelfBases.map((shelf) => (
+        <mesh key={shelf.id} position={shelf.position}>
+          <boxGeometry args={STUDIO_SOUNDCLOUD_CUE_SHELF_SIZE} />
+          <meshBasicMaterial args={[{ color: shelf.accentColor, transparent: true, opacity: shelf.enabled ? (shelf.isActive ? 0.13 : 0.08) : 0.04, toneMapped: false }]} />
+        </mesh>
+      ))}
+      {seekPanelBases.map((panel) => (
+        <mesh key={panel.id} position={panel.position}>
+          <boxGeometry args={STUDIO_SOUNDCLOUD_SEEK_PANEL_SIZE} />
+          <meshBasicMaterial args={[{ color: panel.accentColor, transparent: true, opacity: panel.enabled ? (panel.isActive ? 0.14 : 0.07) : 0.035, toneMapped: false }]} />
+        </mesh>
+      ))}
+      <StudioSoundCloudDeckPanel deck={deckA} onPushConsoleEvent={soundCloudBooth.onPushConsoleEvent} phaseVisuals={phaseVisuals} position={[-STUDIO_SOUNDCLOUD_DECK_OFFSET_X, 0, STUDIO_SOUNDCLOUD_DECK_Z]} />
+      <StudioSoundCloudDeckPanel deck={deckB} onPushConsoleEvent={soundCloudBooth.onPushConsoleEvent} phaseVisuals={phaseVisuals} position={[STUDIO_SOUNDCLOUD_DECK_OFFSET_X, 0, STUDIO_SOUNDCLOUD_DECK_Z]} />
+      {soundCloudBooth.decks.map((deck, deckIndex) => {
+        const deckOffsetX = deckIndex === 0 ? -STUDIO_SOUNDCLOUD_DECK_OFFSET_X : STUDIO_SOUNDCLOUD_DECK_OFFSET_X;
+        const trimDragId = `studio-dj-soundcloud-deck-${deck.id.toLowerCase()}-trim-drag`;
+
+        return (
+          <StudioSoundCloudDragFader
+            key={trimDragId}
+            accentColor={activeDragId === trimDragId ? phaseVisuals.gridPrimary : getSoundCloudDeckAccent(deck, phaseVisuals)}
+            id={trimDragId}
+            label={`Hold Drag ${deck.label} Trim`}
+            max={100}
+            min={0}
+            onChange={deck.onSetTrimPercent}
+            onCommit={(value) => {
+              pushSoundCloudBoothConsoleEvent(pushConsoleEvent, {
+                kind: "mixer",
+                deckId: deck.id,
+                label: "TRIM",
+                detail: `${Math.round(value)}%`,
+              });
+            }}
+            position={[deckOffsetX, 0.753, STUDIO_SOUNDCLOUD_DECK_Z + STUDIO_SOUNDCLOUD_DECK_TRIM_FADER_Z]}
+            railSize={STUDIO_SOUNDCLOUD_DECK_TRIM_FADER_SIZE}
+            sensitivity={STUDIO_SOUNDCLOUD_VOLUME_DRAG_SENSITIVITY}
+            value={deck.trimPercent}
+          />
+        );
+      })}
+      <StudioSoundCloudCrateBrowser
+        deck={deckA}
+        onPushConsoleEvent={soundCloudBooth.onPushConsoleEvent}
+        onSetScrollOffset={handleSetCrateScrollOffset}
+        phaseVisuals={phaseVisuals}
+        position={[-STUDIO_SOUNDCLOUD_CRATE_SCREEN_X, STUDIO_SOUNDCLOUD_CRATE_SCREEN_Y, STUDIO_SOUNDCLOUD_CRATE_SCREEN_Z]}
+        scrollOffset={crateScrollOffsets.A}
+      />
+      <StudioSoundCloudCrateBrowser
+        deck={deckB}
+        onPushConsoleEvent={soundCloudBooth.onPushConsoleEvent}
+        onSetScrollOffset={handleSetCrateScrollOffset}
+        phaseVisuals={phaseVisuals}
+        position={[STUDIO_SOUNDCLOUD_CRATE_SCREEN_X, STUDIO_SOUNDCLOUD_CRATE_SCREEN_Y, STUDIO_SOUNDCLOUD_CRATE_SCREEN_Z]}
+        scrollOffset={crateScrollOffsets.B}
+      />
+      {deckButtonPods.map((pod) => (
+        <mesh key={pod.id} position={pod.position}>
+          <boxGeometry args={[0.56, 0.015, 0.18]} />
+          <meshBasicMaterial args={[{ color: pod.accentColor, transparent: true, opacity: 0.06, toneMapped: false }]} />
+        </mesh>
+      ))}
+      <StudioSoundCloudDragFader
+        accentColor={isCrossfaderGrabbed ? phaseVisuals.gridPrimary : phaseVisuals.gridSecondary}
+        id="studio-dj-soundcloud-crossfader-drag"
+        label="Hold Drag SoundCloud Crossfader"
+        max={1}
+        min={-1}
+        onChange={soundCloudBooth.mixer.onSetCrossfader}
+        onCommit={(value) => {
+          pushSoundCloudBoothConsoleEvent(pushConsoleEvent, {
+            kind: "mixer",
+            label: "XFADE",
+            detail: getSoundCloudCrossfaderLabel(value),
+          });
+        }}
+        position={STUDIO_SOUNDCLOUD_CROSSFADER_RAIL_POSITION}
+        railSize={STUDIO_SOUNDCLOUD_UPPER_FADER_RAIL_SIZE}
+        sensitivity={STUDIO_SOUNDCLOUD_CROSSFADER_DRAG_SENSITIVITY}
+        value={soundCloudBooth.mixer.crossfader}
+      />
+      {Array.from({ length: STUDIO_SOUNDCLOUD_UPPER_FADER_TICK_COUNT }, (_, index) => {
+        const x = -0.3 + index * 0.1;
+
+        return (
+          <mesh key={`soundcloud-upper-fader-tick-${index}`} position={[x, STUDIO_SOUNDCLOUD_CROSSFADER_RAIL_POSITION[1] + 0.016, STUDIO_SOUNDCLOUD_CROSSFADER_RAIL_POSITION[2]]}>
+            <boxGeometry args={[0.01, index % 2 === 0 ? 0.034 : 0.022, 0.012]} />
+            <meshBasicMaterial args={[{ color: index === 3 ? phaseVisuals.gridPrimary : "#a9bdc9", transparent: true, opacity: index === 3 ? 0.68 : 0.3, toneMapped: false }]} />
+          </mesh>
+        );
+      })}
+      <mesh position={STUDIO_SOUNDCLOUD_LOWER_RAIL_POSITION}>
+        <boxGeometry args={STUDIO_SOUNDCLOUD_LOWER_RAIL_SIZE} />
+        <meshBasicMaterial args={[{ color: "#6f86a3", transparent: true, opacity: 0.2, toneMapped: false }]} />
+      </mesh>
+      <StudioSoundCloudDragFader
+        accentColor={isMasterGrabbed ? phaseVisuals.timerAccent : phaseVisuals.gridSecondary}
+        id="studio-dj-soundcloud-master-drag"
+        label="Hold Drag SoundCloud Master"
+        max={100}
+        min={0}
+        onChange={soundCloudBooth.mixer.onSetMasterVolume}
+        onCommit={(value) => {
+          pushSoundCloudBoothConsoleEvent(pushConsoleEvent, {
+            kind: "mixer",
+            label: "MASTER",
+            detail: `${Math.round(value)}%`,
+          });
+        }}
+        position={[0, STUDIO_SOUNDCLOUD_LOWER_RAIL_POSITION[1] + 0.016, STUDIO_SOUNDCLOUD_LOWER_RAIL_POSITION[2]]}
+        railSize={[0.5, 0.014, 0.034]}
+        sensitivity={STUDIO_SOUNDCLOUD_VOLUME_DRAG_SENSITIVITY}
+        value={soundCloudBooth.mixer.masterVolume}
+      />
+      {deckControls.map((control) => (
+        <StudioDjControl key={control.id} control={control} />
+      ))}
+      {cueControls.map((control) => (
+        <StudioDjControl key={control.id} control={control} />
+      ))}
+      {seekControls.map((control) => (
+        <StudioDjControl key={control.id} control={control} />
+      ))}
+      {crossfaderControls.map((control) => (
+        <StudioDjControl key={control.id} control={control} />
+      ))}
+    </group>
+  );
 }
 
 function StudioDjDeckPanel({
@@ -4630,10 +7471,10 @@ function StudioAudioEngineControl({
     localDawAudioActions?.toggleMuted();
   }, [localDawAudioActions]);
   const handleVolumeDown = useCallback(() => {
-    localDawAudioActions?.setMasterVolume((localDawAudioState?.masterVolume ?? 0) - 0.05);
+    localDawAudioActions?.setMasterVolume((localDawAudioState?.masterVolume ?? 0) - STUDIO_MASTER_VOLUME_STEP);
   }, [localDawAudioActions, localDawAudioState?.masterVolume]);
   const handleVolumeUp = useCallback(() => {
-    localDawAudioActions?.setMasterVolume((localDawAudioState?.masterVolume ?? 0) + 0.05);
+    localDawAudioActions?.setMasterVolume((localDawAudioState?.masterVolume ?? 0) + STUDIO_MASTER_VOLUME_STEP);
   }, [localDawAudioActions, localDawAudioState?.masterVolume]);
   const audioControls = useMemo<StudioAudioControlSpec[]>(() => [
     {
@@ -4920,6 +7761,7 @@ function StudioRoleBadges({
   freeRoamPresence,
   localDawState,
   localUserId,
+  layoutState,
   ownerId,
   users,
 }: {
@@ -4927,6 +7769,7 @@ function StudioRoleBadges({
   freeRoamPresence: FreeRoamPresenceState[];
   localDawState?: LocalDawState;
   localUserId: string;
+  layoutState: StudioLayoutState;
   ownerId: string;
   users: SessionUser[];
 }) {
@@ -4945,6 +7788,7 @@ function StudioRoleBadges({
         }
 
         const nearestRole = STUDIO_ROLE_SPECS
+          .map((role) => getLayoutAdjustedStudioRoleSpec(role, layoutState))
           .map((role) => ({
             role,
             distanceSquared: getStudioRoleDistanceSquared(presence.position, role),
@@ -4968,11 +7812,12 @@ function StudioRoleBadges({
       });
 
     return occupantsByRole;
-  }, [area, freeRoamPresence, localUserId, ownerId, users]);
+  }, [area, freeRoamPresence, layoutState, localUserId, ownerId, users]);
 
   return (
     <>
       {STUDIO_ROLE_SPECS.map((role) => {
+        const adjustedRole = getLayoutAdjustedStudioRoleSpec(role, layoutState);
         const remoteOccupants = remoteOccupantsByRole.get(role.id) ?? [];
         const isLocal = localRoleId !== undefined && role.id === localRoleId;
         const visibleRemoteOccupant = isLocal ? undefined : remoteOccupants[0];
@@ -4981,7 +7826,7 @@ function StudioRoleBadges({
         return (
           <StudioRoleBadge
             key={role.id}
-            role={role}
+            role={adjustedRole}
             isLocal={isLocal}
             occupant={visibleRemoteOccupant}
             extraCount={extraCount}
@@ -5014,6 +7859,108 @@ function StudioStationLabel({
         <canvasTexture key={`studio-station-label-${label}-${accentColor}`} attach="map" args={[labelCanvas]} />
       </meshBasicMaterial>
     </mesh>
+  );
+}
+
+function StudioLayoutStationGroup({
+  children,
+  isMoving,
+  isTargeted,
+  stationId,
+  transform,
+  showGrabBox,
+}: {
+  children: ReactNode;
+  isMoving: boolean;
+  isTargeted: boolean;
+  stationId: StudioLayoutStationId;
+  transform: StudioLayoutTransform;
+  showGrabBox: boolean;
+}) {
+  const spec = STUDIO_LAYOUT_STATION_SPECS[stationId];
+  const targetRef = useRef<React.ElementRef<"mesh">>(null);
+  const hitboxOffset = spec.hitboxOffset ?? [0, 0, 0];
+  const hitboxOpacity = isMoving ? 0.3 : showGrabBox ? (isTargeted ? 0.14 : 0.035) : 0.001;
+  const inversePosition: Vec3 = [
+    -spec.defaultTransform.position[0],
+    -spec.defaultTransform.position[1],
+    -spec.defaultTransform.position[2],
+  ];
+  const inverseRotation: Vec3 = [
+    -spec.defaultTransform.rotation[0],
+    -spec.defaultTransform.rotation[1],
+    -spec.defaultTransform.rotation[2],
+  ];
+
+  useRegisterInteractable(useMemo(() => ({
+    id: `${STUDIO_LAYOUT_STATION_PREFIX}${stationId}`,
+    label: `Move ${spec.label}`,
+    objectRef: targetRef,
+    modes: ["movable" as const],
+    enabled: true,
+    onActivate: () => undefined,
+  }), [spec.label, stationId]));
+
+  return (
+    <group position={transform.position} rotation={transform.rotation}>
+      <mesh ref={targetRef} position={hitboxOffset}>
+        <boxGeometry args={spec.hitboxSize} />
+        <meshBasicMaterial args={[{
+          color: isMoving ? "#f8d36a" : "#57f3ff",
+          depthWrite: false,
+          opacity: hitboxOpacity,
+          toneMapped: false,
+          transparent: true,
+          wireframe: true,
+        }]} />
+      </mesh>
+      <group rotation={inverseRotation}>
+        <group position={inversePosition}>
+          {children}
+        </group>
+      </group>
+    </group>
+  );
+}
+
+function StudioLayoutMoveStatus({
+  moveState,
+  transform,
+}: {
+  moveState: StudioLayoutMoveState | null;
+  transform?: StudioLayoutTransform;
+}) {
+  const spec = moveState ? STUDIO_LAYOUT_STATION_SPECS[moveState.stationId] : null;
+  const statusCanvas = useMemo(() => {
+    if (!moveState || !spec) {
+      return null;
+    }
+
+    return createStudioTransportControlCanvas({
+      accentColor: moveState.floorLock ? "#73ff4c" : "#f8d36a",
+      caption: `${moveState.floorLock ? "FLOOR LOCK" : "MOUSE HEIGHT"} / Q-E ROTATE`,
+      isActive: true,
+      label: `MOVING ${spec.label}`,
+    });
+  }, [moveState, spec]);
+
+  if (!moveState || !spec || !transform || !statusCanvas) {
+    return null;
+  }
+
+  return (
+    <group position={[transform.position[0], transform.position[1] + spec.hitboxSize[1] + 0.35, transform.position[2]]} rotation={[0, transform.rotation[1], 0]}>
+      <mesh>
+        <planeGeometry args={[1.9, 0.54]} />
+        <meshBasicMaterial args={[{ transparent: true, opacity: 0.86, toneMapped: false }]} >
+          <canvasTexture key={`studio-layout-move-status-${moveState.stationId}-${moveState.floorLock ? "floor" : "free"}`} attach="map" args={[statusCanvas]} />
+        </meshBasicMaterial>
+      </mesh>
+      <mesh position={[0, -0.42, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+        <ringGeometry args={[0.32, 0.42, 32]} />
+        <meshBasicMaterial args={[{ color: moveState.floorLock ? "#73ff4c" : "#f8d36a", opacity: 0.42, toneMapped: false, transparent: true }]} />
+      </mesh>
+    </group>
   );
 }
 
@@ -5293,7 +8240,7 @@ function StudioPianoKey({
         ...note,
         gainScale,
       }, target, { allowSound });
-      localDawActions?.recordPianoNoteEvent(note);
+      localDawActions?.recordDawNoteEvent(note);
       if (allowSound && gainScale > 0) {
         onBroadcastDawLiveSound?.({
           areaId: "recording-studio",
@@ -5529,10 +8476,44 @@ function StudioRackShell({
   );
 }
 
+function getStudioOverviewScreenCanvasSize(screen: StudioOverviewScreenSpec) {
+  const minWidth = screen.kind === "sequence-grid"
+    ? 1024
+    : screen.kind === "arrangement-grid"
+      ? 1500
+      : screen.kind === "mixer-grid"
+        ? 1120
+        : 768;
+  const minHeight = screen.kind === "sequence-grid"
+    ? 512
+    : screen.kind === "arrangement-grid"
+      ? 700
+      : screen.kind === "mixer-grid"
+        ? 480
+        : 384;
+  const pixelsPerUnit = screen.kind === "sequence-grid"
+    ? 260
+    : screen.kind === "arrangement-grid"
+      ? 286
+      : screen.kind === "mixer-grid"
+        ? 240
+        : 220;
+
+  return {
+    height: Math.max(minHeight, Math.round(screen.size[1] * pixelsPerUnit)),
+    width: Math.max(minWidth, Math.round(screen.size[0] * pixelsPerUnit)),
+  };
+}
+
 function createStudioOverviewScreenCanvas(screen: StudioOverviewScreenSpec) {
   const canvas = document.createElement("canvas");
-  canvas.width = 768;
-  canvas.height = 384;
+  const isSequenceGrid = screen.kind === "sequence-grid";
+  const isArrangementGrid = screen.kind === "arrangement-grid";
+  const isMixerGrid = screen.kind === "mixer-grid";
+  const isPatchSignalTruth = screen.id === "studio-truth";
+  const canvasSize = getStudioOverviewScreenCanvasSize(screen);
+  canvas.width = canvasSize.width;
+  canvas.height = canvasSize.height;
 
   const context = canvas.getContext("2d");
 
@@ -5551,21 +8532,458 @@ function createStudioOverviewScreenCanvas(screen: StudioOverviewScreenSpec) {
   context.strokeRect(36, 36, canvas.width - 72, canvas.height - 72);
   context.globalAlpha = 1;
 
+  const titleFontSize = Math.round(Math.max(
+    38,
+    Math.min(54, canvas.width * (isSequenceGrid ? 0.043 : isArrangementGrid ? 0.036 : isMixerGrid ? 0.04 : 0.046)),
+  ));
+  const lineFontSize = Math.round(Math.max(
+    20,
+    Math.min(32, canvas.width * (isSequenceGrid ? 0.028 : isArrangementGrid ? 0.022 : isMixerGrid ? 0.024 : isPatchSignalTruth ? 0.027 : 0.032)),
+  ));
+  const lineStartY = Math.round(canvas.height * (isSequenceGrid ? 0.26 : isArrangementGrid ? 0.24 : isMixerGrid ? 0.25 : isPatchSignalTruth ? 0.31 : 0.33));
+  const lineStep = Math.round(Math.max(
+    28,
+    Math.min(44, canvas.height * (isSequenceGrid ? 0.066 : isArrangementGrid ? 0.058 : isMixerGrid ? 0.064 : isPatchSignalTruth ? 0.072 : 0.084)),
+  ));
+
   context.fillStyle = screen.accentColor;
   context.globalAlpha = 0.68;
-  context.font = "700 44px monospace";
+  context.font = `700 ${titleFontSize}px monospace`;
   context.textAlign = "left";
   context.textBaseline = "top";
   context.fillText(screen.title.toUpperCase(), 62, 54);
   context.globalAlpha = 1;
 
   context.fillStyle = "rgba(233, 251, 255, 0.64)";
-  context.font = "700 32px monospace";
+  context.font = `700 ${lineFontSize}px monospace`;
   screen.lines.forEach((line, index) => {
-    context.fillText(line, 72, 128 + index * 42);
+    context.fillText(line, 72, lineStartY + index * lineStep);
   });
 
-  if (screen.kind === "clip-grid") {
+  if (screen.kind === "sequence-grid") {
+    const sequence = screen.sequence;
+    const gridX = 468;
+    const gridY = 122;
+    const columnCount = 5;
+    const rowCount = 4;
+    const cellWidth = 84;
+    const cellHeight = 56;
+    const columnGap = 10;
+    const rowGap = 12;
+    const trackHeaderY = 88;
+    const sceneHeaderX = 430;
+
+    context.fillStyle = "rgba(233, 251, 255, 0.22)";
+    context.fillRect(sceneHeaderX - 6, gridY - 10, 2, rowCount * cellHeight + (rowCount - 1) * rowGap + 16);
+
+    const drawTrackHeader = (label: string, color: string, x: number) => {
+      context.fillStyle = color;
+      context.globalAlpha = 0.86;
+      context.font = "700 20px monospace";
+      context.textAlign = "center";
+      context.fillText(label.toUpperCase(), x + cellWidth / 2, trackHeaderY);
+      context.globalAlpha = 1;
+    };
+
+    const drawSceneHeader = (label: string, isSelected: boolean, y: number) => {
+      context.fillStyle = isSelected ? screen.accentColor : "rgba(233, 251, 255, 0.58)";
+      context.globalAlpha = isSelected ? 0.96 : 0.68;
+      context.font = isSelected ? "700 18px monospace" : "700 16px monospace";
+      context.textAlign = "right";
+      context.fillText(label, sceneHeaderX, y + 19);
+      context.globalAlpha = 1;
+    };
+
+    const statePalette: Record<DawClipState, { fill: string; text: string; border: string }> = {
+      empty: { fill: "rgba(9, 15, 25, 0.82)", text: "rgba(169, 189, 201, 0.72)", border: "rgba(95, 113, 134, 0.34)" },
+      armed: { fill: "rgba(120, 86, 16, 0.78)", text: "#ffe7a6", border: "rgba(248, 211, 106, 0.72)" },
+      queued: { fill: "rgba(83, 63, 18, 0.8)", text: "#f8d36a", border: "rgba(248, 211, 106, 0.6)" },
+      stopped: { fill: "rgba(17, 30, 50, 0.86)", text: "#c6d7e6", border: "rgba(111, 134, 163, 0.58)" },
+      playing: { fill: "rgba(16, 58, 64, 0.88)", text: "#bff7ff", border: "rgba(87, 243, 255, 0.84)" },
+      recording: { fill: "rgba(87, 25, 42, 0.9)", text: "#ffd1da", border: "rgba(255, 102, 124, 0.9)" },
+    };
+
+    const getStateLabel = (state: DawClipState) => {
+      switch (state) {
+        case "armed":
+          return "ARM";
+        case "queued":
+          return "QED";
+        case "playing":
+          return "PLAY";
+        case "recording":
+          return "REC";
+        case "stopped":
+          return "STOP";
+        case "empty":
+        default:
+          return "EMPTY";
+      }
+    };
+
+    if (!sequence) {
+      for (let row = 0; row < rowCount; row += 1) {
+        for (let column = 0; column < columnCount; column += 1) {
+          const x = gridX + column * (cellWidth + columnGap);
+          const y = gridY + row * (cellHeight + rowGap);
+          context.fillStyle = "rgba(87, 243, 255, 0.06)";
+          context.fillRect(x, y, cellWidth, cellHeight);
+          context.strokeStyle = "rgba(87, 243, 255, 0.22)";
+          context.lineWidth = 2;
+          context.strokeRect(x, y, cellWidth, cellHeight);
+        }
+      }
+    } else {
+      sequence.tracks.slice(0, columnCount).forEach((track, columnIndex) => {
+        drawTrackHeader(track.label, track.color, gridX + columnIndex * (cellWidth + columnGap));
+      });
+
+      sequence.scenes.slice(0, rowCount).forEach((scene, rowIndex) => {
+        const rowTop = gridY + rowIndex * (cellHeight + rowGap);
+        drawSceneHeader(String(scene).padStart(2, "0"), sequence.cells.some((cell) => cell.clip.sceneIndex === rowIndex && cell.isSelected), rowTop);
+      });
+
+      sequence.cells.forEach((cell) => {
+        const columnIndex = sequence.tracks.findIndex((track) => track.id === cell.track.id);
+        const rowIndex = cell.clip.sceneIndex;
+
+        if (columnIndex < 0 || rowIndex < 0 || columnIndex >= columnCount || rowIndex >= rowCount) {
+          return;
+        }
+
+        const x = gridX + columnIndex * (cellWidth + columnGap);
+        const y = gridY + rowIndex * (cellHeight + rowGap);
+        const palette = statePalette[cell.clip.state];
+        const isSelected = cell.isSelected;
+        const noteDensityMarkers = Math.max(0, Math.min(4, cell.noteDensityMarkers));
+        const cellGlowAlpha = isSelected ? 0.24 : cell.clip.state === "playing" || cell.clip.state === "recording" ? 0.18 : 0.08;
+
+        context.fillStyle = palette.fill;
+        context.fillRect(x, y, cellWidth, cellHeight);
+        context.fillStyle = cell.track.color;
+        context.globalAlpha = cellGlowAlpha;
+        context.fillRect(x, y, cellWidth, 4);
+        context.globalAlpha = 1;
+
+        context.strokeStyle = isSelected ? screen.accentColor : palette.border;
+        context.lineWidth = isSelected ? 4 : 2;
+        context.strokeRect(x + (isSelected ? 0.5 : 1), y + (isSelected ? 0.5 : 1), cellWidth - (isSelected ? 1 : 2), cellHeight - (isSelected ? 1 : 2));
+
+        if (isSelected) {
+          context.fillStyle = "rgba(233, 251, 255, 0.14)";
+          context.fillRect(x + 3, y + 3, cellWidth - 6, cellHeight - 6);
+        }
+
+        context.fillStyle = palette.text;
+        context.globalAlpha = cell.clip.state === "empty" ? 0.7 : 0.95;
+        context.font = isSelected ? "700 20px monospace" : "700 18px monospace";
+        context.textAlign = "left";
+        context.fillText(getStateLabel(cell.clip.state), x + 8, y + 8);
+        context.globalAlpha = 1;
+
+        if (cell.noteCount > 0) {
+          context.fillStyle = "rgba(233, 251, 255, 0.72)";
+          context.font = "600 12px monospace";
+          context.textAlign = "right";
+          context.fillText(`${String(cell.noteCount).padStart(2, "0")} N`, x + cellWidth - 7, y + 10);
+        }
+
+        for (let markerIndex = 0; markerIndex < noteDensityMarkers; markerIndex += 1) {
+          context.fillStyle = markerIndex === 0 && cell.clip.state === "recording"
+            ? "#ff667c"
+            : markerIndex === 0 && cell.clip.state === "playing"
+              ? "#57f3ff"
+              : cell.track.color;
+          context.globalAlpha = 0.86 - markerIndex * 0.08;
+          context.fillRect(x + 7 + markerIndex * 10, y + cellHeight - 12, 6, 7);
+        }
+        context.globalAlpha = 1;
+
+        if (cell.hasGuitarLabel) {
+          context.fillStyle = "#f8d36a";
+          context.globalAlpha = 0.92;
+          context.font = "800 14px monospace";
+          context.textAlign = "left";
+          context.fillText("GTR", x + 8, y + cellHeight - 15);
+          context.globalAlpha = 1;
+        }
+
+        if (cell.clip.state === "playing" && cell.lastPlaybackNoteId) {
+          context.fillStyle = "#57f3ff";
+          context.globalAlpha = 0.85;
+          context.fillRect(x + cellWidth - 14, y + cellHeight - 16, 6, 10);
+          context.globalAlpha = 1;
+        }
+      });
+    }
+  } else if (screen.kind === "arrangement-grid") {
+    const arrangement = screen.arrangement;
+    const laneTracks = arrangement?.tracks ?? [];
+    const bars = arrangement?.bars ?? [1, 2, 3, 4, 5, 6, 7, 8];
+    const blocks = arrangement?.blocks ?? [];
+    const gridLeft = 218;
+    const gridTop = 120;
+    const gridRight = 58;
+    const gridBottom = 80;
+    const laneCount = Math.max(1, laneTracks.length);
+    const contentWidth = canvas.width - gridLeft - gridRight;
+    const contentHeight = canvas.height - gridTop - gridBottom;
+    const laneHeight = contentHeight / laneCount;
+    const barWidth = contentWidth / Math.max(1, bars.length);
+    const statePalette: Record<DawClipState, { fill: string; text: string; border: string }> = {
+      empty: { fill: "rgba(9, 15, 25, 0.82)", text: "rgba(169, 189, 201, 0.72)", border: "rgba(95, 113, 134, 0.34)" },
+      armed: { fill: "rgba(120, 86, 16, 0.78)", text: "#ffe7a6", border: "rgba(248, 211, 106, 0.72)" },
+      queued: { fill: "rgba(83, 63, 18, 0.8)", text: "#f8d36a", border: "rgba(248, 211, 106, 0.6)" },
+      stopped: { fill: "rgba(17, 30, 50, 0.86)", text: "#c6d7e6", border: "rgba(111, 134, 163, 0.58)" },
+      playing: { fill: "rgba(16, 58, 64, 0.88)", text: "#bff7ff", border: "rgba(87, 243, 255, 0.84)" },
+      recording: { fill: "rgba(87, 25, 42, 0.9)", text: "#ffd1da", border: "rgba(255, 102, 124, 0.9)" },
+    };
+
+    context.fillStyle = "rgba(233, 251, 255, 0.18)";
+    context.fillRect(gridLeft - 18, gridTop - 8, 2, laneCount * laneHeight + 10);
+
+    bars.forEach((bar) => {
+      const x = gridLeft + (bar - 1) * barWidth;
+      context.fillStyle = bar % 2 === 1 ? "rgba(87, 243, 255, 0.08)" : "rgba(233, 251, 255, 0.04)";
+      context.fillRect(x + 1, gridTop - 24, barWidth - 2, contentHeight + 24);
+      context.strokeStyle = bar === 1 ? screen.accentColor : "rgba(233, 251, 255, 0.16)";
+      context.globalAlpha = bar === 1 ? 0.62 : 0.28;
+      context.lineWidth = bar === 1 ? 3 : 1.5;
+      context.beginPath();
+      context.moveTo(x, gridTop - 10);
+      context.lineTo(x, gridTop + contentHeight);
+      context.stroke();
+      context.globalAlpha = 1;
+
+      context.fillStyle = bar === 1 ? screen.accentColor : "rgba(233, 251, 255, 0.62)";
+      context.font = bar === 1 ? "800 24px monospace" : "700 20px monospace";
+      context.textAlign = "center";
+      context.fillText(String(bar), x + barWidth / 2, gridTop - 50);
+      context.fillStyle = "rgba(233, 251, 255, 0.48)";
+      context.font = "700 14px monospace";
+      context.fillText(`BAR ${String(bar).padStart(2, "0")}`, x + barWidth / 2, gridTop - 24);
+    });
+
+    laneTracks.forEach((track, laneIndex) => {
+      const laneTop = gridTop + laneIndex * laneHeight;
+      const laneCenterY = laneTop + laneHeight / 2;
+      context.fillStyle = track.color;
+      context.globalAlpha = 0.22;
+      context.fillRect(gridLeft - 18, laneTop + 2, contentWidth + 16, Math.max(1, laneHeight - 4));
+      context.globalAlpha = 1;
+      context.strokeStyle = "rgba(233, 251, 255, 0.08)";
+      context.lineWidth = 1;
+      context.strokeRect(gridLeft - 18.5, laneTop + 0.5, contentWidth + 16, laneHeight - 1);
+
+      context.fillStyle = track.color;
+      context.font = "800 24px monospace";
+      context.textAlign = "right";
+      context.fillText(fitCanvasText(context, track.label.toUpperCase(), gridLeft - 84), gridLeft - 28, laneCenterY - 8);
+      context.fillStyle = "rgba(233, 251, 255, 0.74)";
+      context.font = "700 14px monospace";
+      context.fillText(fitCanvasText(context, track.sourceLabel, gridLeft - 84), gridLeft - 28, laneCenterY + 16);
+    });
+
+    blocks.forEach((block) => {
+      const laneTop = gridTop + block.laneIndex * laneHeight;
+      const x = gridLeft + (block.startBar - 1) * barWidth + 6;
+      const blockWidth = Math.max(24, (block.endBar - block.startBar + 1) * barWidth - 12);
+      const blockHeight = Math.max(34, laneHeight - 22);
+      const blockY = laneTop + (laneHeight - blockHeight) / 2;
+      const palette = statePalette[block.clip.state];
+      const clipStateColors = getClipStateColors(block.clip.state);
+      const isFmGuitarBlock = block.hasGuitarLabel;
+
+      context.fillStyle = palette.fill;
+      context.fillRect(x, blockY, blockWidth, blockHeight);
+      context.fillStyle = block.track.color;
+      context.globalAlpha = block.clip.state === "playing" || block.clip.state === "recording" ? 0.28 : 0.18;
+      context.fillRect(x, blockY, blockWidth, 5);
+      context.globalAlpha = 1;
+
+      context.strokeStyle = block.clip.state === "playing" || block.clip.state === "recording" ? clipStateColors.emissive : palette.border;
+      context.lineWidth = block.clip.state === "playing" || block.clip.state === "recording" ? 4 : 2;
+      context.strokeRect(
+        x + (block.clip.state === "playing" || block.clip.state === "recording" ? 0.5 : 1),
+        blockY + (block.clip.state === "playing" || block.clip.state === "recording" ? 0.5 : 1),
+        blockWidth - (block.clip.state === "playing" || block.clip.state === "recording" ? 1 : 2),
+        blockHeight - (block.clip.state === "playing" || block.clip.state === "recording" ? 1 : 2),
+      );
+
+      context.fillStyle = palette.text;
+      context.globalAlpha = 0.98;
+      context.font = "800 18px monospace";
+      context.textAlign = "left";
+      context.fillText(block.stateLabel, x + 9, blockY + 7);
+
+      context.fillStyle = "rgba(233, 251, 255, 0.76)";
+      context.font = "700 13px monospace";
+      context.textAlign = "right";
+      context.fillText(`${String(block.noteCount).padStart(2, "0")} N`, x + blockWidth - 8, blockY + 10);
+
+      context.fillStyle = isFmGuitarBlock ? "#f8d36a" : block.track.color;
+      context.font = "800 15px monospace";
+      context.textAlign = "left";
+      context.fillText(fitCanvasText(context, block.label, blockWidth - 18), x + 9, blockY + blockHeight - 29);
+
+      context.fillStyle = isFmGuitarBlock ? "#f8d36a" : "rgba(233, 251, 255, 0.82)";
+      context.font = "700 13px monospace";
+      context.fillText(fitCanvasText(context, block.sourceLabel, blockWidth - 18), x + 9, blockY + blockHeight - 12);
+
+      const markerCount = Math.max(0, Math.min(4, block.noteDensityMarkers));
+      for (let markerIndex = 0; markerIndex < markerCount; markerIndex += 1) {
+        context.fillStyle = markerIndex === 0 && block.clip.state === "recording"
+          ? "#ff667c"
+          : markerIndex === 0 && block.clip.state === "playing"
+            ? "#57f3ff"
+            : block.track.color;
+        context.globalAlpha = 0.9 - markerIndex * 0.08;
+        context.fillRect(x + 8 + markerIndex * 11, blockY + blockHeight - 12, 7, 6);
+      }
+      context.globalAlpha = 1;
+    });
+
+    const playheadBar = Math.max(1, Math.min(bars.length, arrangement?.playheadBar ?? 1));
+    const playheadBeat = Math.max(1, arrangement?.playheadBeat ?? 1);
+    const beatOffset = Math.max(0, Math.min(0.75, (playheadBeat - 1) / 4));
+    const playheadX = gridLeft + ((playheadBar - 1) + beatOffset) * barWidth;
+    const playheadMoving = arrangement?.playheadIsMoving ?? false;
+    const playheadColor = playheadMoving ? screen.accentColor : "rgba(169, 189, 201, 0.76)";
+
+    context.fillStyle = playheadMoving ? "rgba(87, 243, 255, 0.12)" : "rgba(169, 189, 201, 0.08)";
+    context.fillRect(playheadX - 2, gridTop - 18, 4, contentHeight + 18);
+    context.strokeStyle = playheadColor;
+    context.globalAlpha = playheadMoving ? 0.96 : 0.72;
+    context.lineWidth = playheadMoving ? 4 : 3;
+    context.beginPath();
+    context.moveTo(playheadX, gridTop - 12);
+    context.lineTo(playheadX, gridTop + contentHeight);
+    context.stroke();
+    context.globalAlpha = 1;
+
+    context.fillStyle = playheadColor;
+    context.globalAlpha = playheadMoving ? 0.96 : 0.8;
+    context.beginPath();
+    context.moveTo(playheadX - 8, gridTop - 18);
+    context.lineTo(playheadX + 8, gridTop - 18);
+    context.lineTo(playheadX, gridTop - 4);
+    context.closePath();
+    context.fill();
+    context.globalAlpha = 1;
+  } else if (screen.kind === "mixer-grid") {
+    const mixer = screen.mixer;
+    const strips = mixer?.strips ?? [];
+    const trackStripX = 468;
+    const trackStripY = 140;
+    const stripWidth = 86;
+    const stripHeight = 200;
+    const stripGap = 14;
+
+    context.fillStyle = "rgba(233, 251, 255, 0.22)";
+    context.fillRect(trackStripX - 18, trackStripY - 24, 2, stripHeight + 26);
+    context.fillRect(canvas.width - 188, trackStripY - 24, 2, stripHeight + 26);
+
+    const drawStrip = (strip: StudioMixerStripSpec, index: number) => {
+      const x = trackStripX + index * (stripWidth + stripGap);
+      const meterFillHeight = Math.max(6, Math.round((stripHeight - 74) * Math.max(0, Math.min(1, strip.meterLevel))));
+      const meterY = trackStripY + stripHeight - 42 - meterFillHeight;
+
+      context.fillStyle = "rgba(9, 16, 28, 0.9)";
+      context.fillRect(x, trackStripY, stripWidth, stripHeight);
+      context.strokeStyle = strip.accentColor;
+      context.globalAlpha = 0.42;
+      context.lineWidth = 2;
+      context.strokeRect(x + 1, trackStripY + 1, stripWidth - 2, stripHeight - 2);
+      context.globalAlpha = 1;
+
+      context.fillStyle = strip.accentColor;
+      context.globalAlpha = 0.8;
+      context.fillRect(x, trackStripY, stripWidth, 6);
+      context.globalAlpha = 1;
+
+      context.fillStyle = strip.accentColor;
+      context.font = "700 18px monospace";
+      context.textAlign = "center";
+      context.fillText(strip.label, x + stripWidth / 2, trackStripY + 18);
+
+      context.fillStyle = "rgba(233, 251, 255, 0.9)";
+      context.font = "700 15px monospace";
+      context.fillText(strip.volumeLabel, x + stripWidth / 2, trackStripY + 44);
+
+      context.fillStyle = strip.muteLabel === "MUTE" ? "#ff667c" : "#73ff4c";
+      context.font = "700 15px monospace";
+      context.fillText(strip.muteLabel, x + stripWidth / 2, trackStripY + 64);
+
+      context.fillStyle = "rgba(9, 16, 28, 0.95)";
+      context.fillRect(x + 28, trackStripY + 80, 30, stripHeight - 104);
+      context.strokeStyle = "rgba(233, 251, 255, 0.16)";
+      context.strokeRect(x + 28.5, trackStripY + 80.5, 29, stripHeight - 105);
+
+      context.fillStyle = strip.muteLabel === "MUTE" ? "#ff667c" : strip.accentColor;
+      context.fillRect(x + 30, meterY, 26, meterFillHeight);
+
+      context.fillStyle = "rgba(233, 251, 255, 0.46)";
+      context.font = "600 12px monospace";
+      context.fillText(Math.round(strip.meterLevel * 100).toString().padStart(2, "0"), x + stripWidth / 2, trackStripY + stripHeight - 28);
+    };
+
+    strips.slice(0, 5).forEach(drawStrip);
+
+    const masterX = canvas.width - 148;
+    const masterHeight = 258;
+    const masterMeterFillHeight = Math.max(8, Math.round((masterHeight - 92) * Math.max(0, Math.min(1, mixer?.masterMeterLevel ?? 0.02))));
+    const masterMeterY = trackStripY + masterHeight - 52 - masterMeterFillHeight;
+
+    context.fillStyle = "rgba(9, 16, 28, 0.96)";
+    context.fillRect(masterX, trackStripY, 98, masterHeight);
+    context.strokeStyle = screen.accentColor;
+    context.globalAlpha = 0.56;
+    context.lineWidth = 3;
+    context.strokeRect(masterX + 1.5, trackStripY + 1.5, 95, masterHeight - 3);
+    context.globalAlpha = 1;
+
+    context.fillStyle = screen.accentColor;
+    context.font = "700 18px monospace";
+    context.textAlign = "center";
+    context.fillText("MASTER", masterX + 49, trackStripY + 18);
+
+    context.fillStyle = "rgba(233, 251, 255, 0.9)";
+    context.font = "700 15px monospace";
+    context.fillText(mixer?.masterVolumeLabel ?? "V00", masterX + 49, trackStripY + 44);
+
+    context.fillStyle = mixer?.masterMuteLabel === "MUTE" ? "#ff667c" : "#73ff4c";
+    context.fillText(mixer?.masterMuteLabel ?? "MUTE", masterX + 49, trackStripY + 64);
+
+    context.fillStyle = "rgba(9, 16, 28, 0.95)";
+    context.fillRect(masterX + 34, trackStripY + 80, 30, masterHeight - 104);
+    context.strokeStyle = "rgba(233, 251, 255, 0.16)";
+    context.strokeRect(masterX + 34.5, trackStripY + 80.5, 29, masterHeight - 105);
+    context.fillStyle = screen.accentColor;
+    context.fillRect(masterX + 36, masterMeterY, 26, masterMeterFillHeight);
+    context.fillStyle = "rgba(233, 251, 255, 0.46)";
+    context.font = "600 12px monospace";
+    context.fillText(Math.round((mixer?.masterMeterLevel ?? 0.02) * 100).toString().padStart(2, "0"), masterX + 49, trackStripY + masterHeight - 28);
+
+    context.fillStyle = "rgba(233, 251, 255, 0.58)";
+    context.font = "700 19px monospace";
+    context.textAlign = "left";
+    context.fillText("ENGINE", 70, 300);
+    context.fillStyle = screen.accentColor;
+    context.font = "800 22px monospace";
+    context.fillText(mixer?.engineLine ?? "ENGINE OFF", 70, 330);
+    context.fillStyle = "rgba(233, 251, 255, 0.58)";
+    context.font = "700 19px monospace";
+    context.fillText("SILENCE", 70, 370);
+    context.fillStyle = "#f8d36a";
+    context.font = "800 20px monospace";
+    context.fillText(mixer?.silenceLine ?? "SILENCE ENGINE OFF", 70, 398);
+    context.fillStyle = "rgba(233, 251, 255, 0.58)";
+    context.font = "700 19px monospace";
+    context.fillText("LAST SOUND", 70, 438);
+    context.fillStyle = "#57f3ff";
+    context.font = "800 20px monospace";
+    context.fillText(mixer?.lastSoundLine ?? "LAST SOUND --", 70, 466);
+  } else if (screen.kind === "clip-grid") {
     const gridX = 442;
     const gridY = 128;
     const cellWidth = 42;
@@ -5587,7 +9005,19 @@ function createStudioOverviewScreenCanvas(screen: StudioOverviewScreenSpec) {
   context.fillStyle = "rgba(169, 189, 201, 0.46)";
   context.font = "700 22px monospace";
   context.textAlign = "right";
-  context.fillText(screen.id === "studio-truth" ? "LOCAL PATCH" : "STATIC PLAN", canvas.width - 62, canvas.height - 62);
+  context.fillText(
+    screen.kind === "sequence-grid"
+      ? "5X4 SESSION VIEW"
+      : screen.kind === "arrangement-grid"
+        ? "8 BAR ARRANGEMENT"
+      : screen.kind === "mixer-grid"
+        ? "5 STRIP MIXER"
+        : screen.id === "studio-truth"
+          ? "PATCH / SIGNAL"
+          : "STATIC PLAN",
+      canvas.width - 62,
+      canvas.height - 62,
+    );
 
   return canvas;
 }
@@ -5597,17 +9027,17 @@ function StudioOverviewScreen({ screen }: { screen: StudioOverviewScreenSpec }) 
 
   return (
     <group position={screen.position} rotation={screen.rotation}>
-      <mesh position={[0, 0, -0.024]}>
-        <boxGeometry args={[screen.size[0] + 0.12, screen.size[1] + 0.1, 0.045]} />
+      <mesh position={[0, 0, -0.026]}>
+        <boxGeometry args={[screen.size[0] + 0.14, screen.size[1] + 0.12, 0.05]} />
         <meshStandardMaterial args={[{ color: "#07111f", emissive: "#03070f", emissiveIntensity: 0.16, roughness: 0.72, metalness: 0.08 }]} />
       </mesh>
-      <mesh position={[0, 0, 0.006]}>
+      <mesh position={[0, 0, 0.008]}>
         <planeGeometry args={screen.size} />
         <meshBasicMaterial args={[{ transparent: true, opacity: 0.78, toneMapped: false }]}>
           <canvasTexture key={`studio-overview-${screen.id}`} attach="map" args={[screenCanvas]} />
         </meshBasicMaterial>
       </mesh>
-      <mesh position={[0, -screen.size[1] / 2 + 0.055, 0.018]}>
+      <mesh position={[0, -screen.size[1] / 2 + 0.06, 0.02]}>
         <boxGeometry args={[screen.size[0] * 0.72, 0.026, 0.018]} />
         <meshBasicMaterial args={[{ color: screen.accentColor, transparent: true, opacity: 0.22, toneMapped: false }]} />
       </mesh>
@@ -5628,6 +9058,22 @@ function formatDawTransportLines(localDawState?: LocalDawState) {
   ];
 }
 
+function formatArrangementTransportBarBeat(bar: number, beat: number) {
+  return `B${String(bar).padStart(2, "0")}.${String(beat).padStart(2, "0")}`;
+}
+
+function formatArrangementTransportState(state?: LocalDawState["transport"]["state"] | SharedDawTransport["state"]) {
+  if (state === "playing") {
+    return "PLAY";
+  }
+
+  if (state === "paused") {
+    return "PAUSE";
+  }
+
+  return "STOP";
+}
+
 function formatDawTrackLines(localDawState?: LocalDawState) {
   return (localDawState?.tracks.map((track) => (
     `${track.label.toUpperCase()} V${String(Math.round(track.volume * 100)).padStart(2, "0")} ${track.muted ? "MUTE" : "ON"}`
@@ -5640,51 +9086,589 @@ function formatDawTrackLines(localDawState?: LocalDawState) {
   ]).slice(0, 5);
 }
 
-function formatDawClipGridLines(
-  localDawState?: LocalDawState,
-  sharedDawClips?: SharedDawClipsState,
-  localUserIdForSharedDawClips?: string,
-  canAdminSharedDawClips?: boolean,
-) {
-  if (!localDawState) {
-    return ["SCENES 01-04", "EMPTY CLIPS", "LAUNCH LATER"];
+function getStudioStatusEngineLine(localDawAudioState?: LocalDawAudioEngineState) {
+  if (!localDawAudioState || localDawAudioState.status !== "ready") {
+    return "ENGINE OFF";
   }
 
-  const selectedScene = localDawState.selectedSceneIndex + 1;
+  if (localDawAudioState.isMuted) {
+    return "ENGINE MUTED";
+  }
+
+  if (localDawAudioState.masterVolume <= 0) {
+    return "ENGINE VOL 0";
+  }
+
+  return "ENGINE READY";
+}
+
+function getStudioStatusMasterLine(localDawAudioState?: LocalDawAudioEngineState) {
+  if (!localDawAudioState || localDawAudioState.status !== "ready") {
+    return "MASTER --";
+  }
+
+  const displayPercent = Math.round((localDawAudioState.masterVolume / STUDIO_DISPLAY_MAX_MASTER_VOLUME) * 100);
+
+  return `MASTER ${Math.max(0, Math.min(100, displayPercent))}%`;
+}
+
+function getStudioStatusGuitarLine({
+  guitarHolderLabel,
+  isLocalHoldingGuitar,
+  isGuitarHeldByAnyone,
+  recordingStatus,
+}: {
+  guitarHolderLabel: string | null;
+  isLocalHoldingGuitar: boolean;
+  isGuitarHeldByAnyone: boolean;
+  recordingStatus?: StudioGuitarRecordingStatus;
+}) {
+  if (isLocalHoldingGuitar && recordingStatus?.isEnabled) {
+    return `GTR REC ${recordingStatus.caption}`;
+  }
+
+  if (isLocalHoldingGuitar) {
+    return "GTR HELD BY YOU / LIVE";
+  }
+
+  if (isGuitarHeldByAnyone) {
+    return `GTR HELD BY ${guitarHolderLabel ?? "FRIEND"}`;
+  }
+
+  return "GTR AVAILABLE";
+}
+
+function getStudioStatusActivityLine(localDawState?: LocalDawState, localDawAudioState?: LocalDawAudioEngineState) {
+  const recordingClip = localDawState?.clips.find((clip) => clip.state === "recording");
+  const playingClip = localDawState?.clips.find((clip) => clip.state === "playing");
+  const trackLabel = (trackId: DawTrackId) => (
+    localDawState?.tracks.find((track) => track.id === trackId)?.label.toUpperCase() ?? trackId.toUpperCase()
+  );
+
+  if (recordingClip) {
+    return `NOW REC ${trackLabel(recordingClip.trackId)} S${recordingClip.sceneIndex + 1}`;
+  }
+
+  if (playingClip) {
+    return `NOW PLAY ${trackLabel(playingClip.trackId)} S${playingClip.sceneIndex + 1}`;
+  }
+
+  if (localDawAudioState?.lastFmSynthNoteLabel) {
+    return `LIVE FM ${localDawAudioState.lastFmSynthNoteLabel}`;
+  }
+
+  if (localDawAudioState?.lastPianoLiveNoteLabel) {
+    return `LIVE PIANO ${localDawAudioState.lastPianoLiveNoteLabel}`;
+  }
+
+  if (localDawAudioState?.lastDrumHitLabel) {
+    return `LIVE DRUM ${localDawAudioState.lastDrumHitLabel}`;
+  }
+
+  if (localDawAudioState?.lastBassNoteLabel) {
+    return `LIVE BASS ${localDawAudioState.lastBassNoteLabel}`;
+  }
+
+  return "NOW IDLE";
+}
+
+function getStudioStatusNextAction({
+  isGuitarHeldByAnyone,
+  isLocalHoldingGuitar,
+  localDawAudioState,
+  localDawState,
+  recordingStatus,
+}: {
+  isGuitarHeldByAnyone: boolean;
+  isLocalHoldingGuitar: boolean;
+  localDawAudioState?: LocalDawAudioEngineState;
+  localDawState?: LocalDawState;
+  recordingStatus?: StudioGuitarRecordingStatus;
+}) {
+  if (!localDawAudioState || localDawAudioState.status !== "ready") {
+    return "NEXT: PRESS ENGINE";
+  }
+
+  if (localDawAudioState.isMuted) {
+    return "NEXT: UNMUTE";
+  }
+
+  if (localDawAudioState.masterVolume <= 0) {
+    return "NEXT: TURN UP MASTER";
+  }
+
+  if (!isGuitarHeldByAnyone) {
+    return "NEXT: PICK GUITAR";
+  }
+
+  if (isLocalHoldingGuitar && recordingStatus?.isEnabled) {
+    return "NEXT: STRUM TO RECORD";
+  }
+
+  if (isLocalHoldingGuitar) {
+    return "NEXT: CLICK STRUM / 1-9";
+  }
+
+  if (localDawState?.clips.some((clip) => clip.state === "recording")) {
+    return "NEXT: PLAY OR STOP REC";
+  }
+
+  if (localDawState?.clips.some((clip) => clip.state === "playing")) {
+    return "NEXT: LISTEN OR MIX";
+  }
+
+  return "NEXT: ARM REC OR PLAY CLIP";
+}
+
+function formatBigStudioStatusLines({
+  guitarHolderLabel,
+  isGuitarHeldByAnyone,
+  isLocalHoldingGuitar,
+  localDawAudioState,
+  localDawState,
+  recordingStatus,
+}: {
+  guitarHolderLabel: string | null;
+  isGuitarHeldByAnyone: boolean;
+  isLocalHoldingGuitar: boolean;
+  localDawAudioState?: LocalDawAudioEngineState;
+  localDawState?: LocalDawState;
+  recordingStatus?: StudioGuitarRecordingStatus;
+}) {
+  return [
+    getStudioStatusEngineLine(localDawAudioState),
+    getStudioStatusMasterLine(localDawAudioState),
+    getStudioStatusGuitarLine({
+      guitarHolderLabel,
+      isGuitarHeldByAnyone,
+      isLocalHoldingGuitar,
+      recordingStatus,
+    }),
+    getStudioStatusActivityLine(localDawState, localDawAudioState),
+    getStudioStatusNextAction({
+      isGuitarHeldByAnyone,
+      isLocalHoldingGuitar,
+      localDawAudioState,
+      localDawState,
+      recordingStatus,
+    }),
+  ];
+}
+
+function getStudioMixerSilenceLine(localDawState?: LocalDawState, localDawAudioState?: LocalDawAudioEngineState) {
+  if (!localDawAudioState || localDawAudioState.status !== "ready") {
+    return "SILENCE ENGINE OFF";
+  }
+
+  if (localDawAudioState.isMuted) {
+    return "SILENCE ENGINE MUTED";
+  }
+
+  if (localDawAudioState.masterVolume <= 0) {
+    return "SILENCE MASTER 0";
+  }
+
+  if (!localDawState?.tracks.some((track) => !track.muted && track.volume > 0)) {
+    return "SILENCE ALL TRACKS MUTED";
+  }
+
+  return "SILENCE NO ACTIVE VOICE";
+}
+
+function getStudioMixerLastSoundLine(localDawAudioState?: LocalDawAudioEngineState) {
+  if (!localDawAudioState) {
+    return "LAST SOUND --";
+  }
+
+  if (localDawAudioState.lastPianoLiveNoteLabel) {
+    return `LAST LIVE PN ${localDawAudioState.lastPianoLiveNoteLabel}`;
+  }
+
+  if (localDawAudioState.lastDrumHitLabel) {
+    return `LAST GEN DR ${localDawAudioState.lastDrumHitLabel}`;
+  }
+
+  if (localDawAudioState.lastFmSynthNoteLabel) {
+    return `LAST GEN FM ${localDawAudioState.lastFmSynthNoteLabel}`;
+  }
+
+  if (localDawAudioState.lastBassNoteLabel) {
+    return `LAST GEN BA ${localDawAudioState.lastBassNoteLabel}`;
+  }
+
+  return "LAST SOUND --";
+}
+
+function createStudioMixerMonitor(localDawState?: LocalDawState, localDawAudioState?: LocalDawAudioEngineState): StudioMixerMonitorSpec {
+  const strips = (localDawState?.tracks.slice(0, 5) ?? []).map((track) => ({
+    accentColor: track.color,
+    label: track.label.toUpperCase(),
+    meterLevel: localDawState ? getTrackMeterLevel(localDawState, localDawAudioState, track) : 0.02,
+    muteLabel: track.muted ? "MUTE" : "OPEN",
+    volumeLabel: `V${String(Math.round(track.volume * 100)).padStart(2, "0")}`,
+  }));
+  const masterVolume = localDawAudioState?.masterVolume ?? 0;
+  const masterMuted = localDawAudioState?.isMuted ?? true;
+  const masterMeterLevel = localDawState ? getMasterMeterLevel(localDawState, localDawAudioState) : 0.02;
+  const engineLine = getStudioStatusEngineLine(localDawAudioState);
+  const silenceLine = getStudioMixerSilenceLine(localDawState, localDawAudioState);
+  const lastSoundLine = getStudioMixerLastSoundLine(localDawAudioState);
+
+  return {
+    engineLine,
+    lastSoundLine,
+    lines: [
+      engineLine,
+      `MASTER ${Math.max(0, Math.min(100, Math.round((masterVolume / STUDIO_DISPLAY_MAX_MASTER_VOLUME) * 100)))}% ${masterMuted ? "MUTE" : "OPEN"}`,
+      silenceLine,
+      lastSoundLine,
+      "5 TRACK STRIPS",
+    ],
+    masterMeterLevel,
+    masterMuteLabel: masterMuted ? "MUTE" : "OPEN",
+    masterVolumeLabel: `V${String(Math.round(masterVolume * 100)).padStart(2, "0")}`,
+    silenceLine,
+    strips,
+  };
+}
+
+function getSequenceClipStateLabel(state: DawClipState) {
+  switch (state) {
+    case "armed":
+      return "ARM";
+    case "queued":
+      return "QED";
+    case "playing":
+      return "PLAY";
+    case "recording":
+      return "REC";
+    case "stopped":
+      return "STOP";
+    case "empty":
+    default:
+      return "EMPTY";
+  }
+}
+
+function getArrangementNoteSourceLabel(source: LocalDawMidiNoteEvent["source"]) {
+  switch (source) {
+    case "piano-live":
+      return "PNO LIVE";
+    case "guitar-live":
+      return "GTR LIVE";
+    case "shared-import":
+      return "IMPORT";
+    default:
+      return "LIVE";
+  }
+}
+
+function getArrangementTrackSourceLabel(trackId: DawTrackId) {
+  switch (trackId) {
+    case "drums":
+      return "DRUM LOOPS";
+    case "bass":
+      return "BASS PATTERN";
+    case "fm-synth":
+      return "FM SYNTH / GTR";
+    case "piano":
+      return "PIANO NOTES";
+    case "looper":
+      return "LOOPER CLIPS";
+    default:
+      return "TRACK CLIPS";
+  }
+}
+
+function getArrangementClipSourceLabel(clip: LocalDawClip, hasGuitarNotes: boolean) {
+  const sceneLabel = `S${String(clip.sceneIndex + 1).padStart(2, "0")}`;
+
+  if (clip.trackId === "fm-synth" && hasGuitarNotes) {
+    return clip.state === "recording" ? `GTR REC FM ${sceneLabel}` : `GTR IN FM ${sceneLabel}`;
+  }
+
+  switch (clip.trackId) {
+    case "drums":
+      return `DRUM LOOP ${sceneLabel}`;
+    case "bass":
+      return `BASS LINE ${sceneLabel}`;
+    case "fm-synth":
+      return `FM CLIP ${sceneLabel}`;
+    case "piano":
+      return `PIANO NOTES ${sceneLabel}`;
+    case "looper":
+      return `LOOPER ${clip.lengthBars} BAR ${sceneLabel}`;
+    default:
+      return clip.label.toUpperCase();
+  }
+}
+
+function getArrangementSourceSummaryLabel(
+  notes: LocalDawMidiNoteEvent[],
+  trackId: DawTrackId,
+  clipState?: DawClipState,
+) {
+  const sourceSet = new Set(notes.map((note) => note.source));
+
+  if (sourceSet.size === 0) {
+    return getArrangementTrackSourceLabel(trackId);
+  }
+
+  const labels: string[] = [];
+
+  if (trackId === "fm-synth" && sourceSet.has("guitar-live")) {
+    labels.push(clipState === "recording" ? "GTR REC FM" : "GTR IN FM");
+    sourceSet.delete("guitar-live");
+  }
+
+  const sourcePriority: LocalDawMidiNoteEvent["source"][] = ["piano-live", "shared-import", "guitar-live"];
+
+  sourcePriority.forEach((source) => {
+    if (sourceSet.has(source)) {
+      labels.push(getArrangementNoteSourceLabel(source));
+      sourceSet.delete(source);
+    }
+  });
+
+  sourceSet.forEach((source) => {
+    labels.push(getArrangementNoteSourceLabel(source));
+  });
+
+  return labels.join(labels.length > 1 ? " + " : "");
+}
+
+function fitCanvasText(context: CanvasRenderingContext2D, text: string, maxWidth: number) {
+  if (context.measureText(text).width <= maxWidth) {
+    return text;
+  }
+
+  let trimmed = text;
+
+  while (trimmed.length > 1 && context.measureText(`${trimmed}...`).width > maxWidth) {
+    trimmed = trimmed.slice(0, -1);
+  }
+
+  return `${trimmed}...`;
+}
+
+function getArrangementPlaybackGuidanceLine(
+  localDawState: LocalDawState | undefined,
+  localDawAudioState: LocalDawAudioEngineState | undefined,
+  sharedDawTransport: SharedDawTransport | undefined,
+) {
+  const engineLine = getStudioStatusEngineLine(localDawAudioState);
+  const localTransportState = localDawState?.transport.state;
+  const sharedTransportState = sharedDawTransport?.state;
+
+  if (engineLine === "ENGINE OFF") {
+    return "ENGINE OFF: SILENT HERE | DISCORD NOT APP AUDIO";
+  }
+
+  if (engineLine === "ENGINE MUTED") {
+    return "ENGINE MUTED: SILENT HERE | DISCORD NOT APP AUDIO";
+  }
+
+  if (engineLine === "ENGINE VOL 0") {
+    return "ENGINE VOL 0: SILENT HERE | DISCORD NOT APP AUDIO";
+  }
+
+  if (sharedTransportState === "playing") {
+    return "SHARED PLAY: EACH ENGINE ON | DISCORD NOT APP AUDIO";
+  }
+
+  if (localTransportState === "playing") {
+    return "LOCAL LIVE: THIS BROWSER | DISCORD NOT APP AUDIO";
+  }
+
+  if (sharedTransportState) {
+    return "SHARED PLAY STOPPED | ENGINE ON TO HEAR HERE";
+  }
+
+  return "LOCAL LIVE: THIS BROWSER | DISCORD NOT APP AUDIO";
+}
+
+function createStudioArrangementTimelineMonitor(
+  localDawState?: LocalDawState,
+  localDawAudioState?: LocalDawAudioEngineState,
+  sharedDawTransport?: SharedDawTransport,
+): StudioArrangementTimelineSpec & { lines: string[] } {
+  if (!localDawState) {
+    return {
+      bars: [1, 2, 3, 4, 5, 6, 7, 8],
+      blocks: [],
+      playheadBeat: 1,
+      playheadBar: 1,
+      playheadIsMoving: false,
+      lines: [
+        "8 BAR MAP",
+        "5 REAL LANES / 0 CLIPS / 0 NOTES / 0 SOURCE BLOCKS",
+        sharedDawTransport ? `SHARED ${formatArrangementTransportState(sharedDawTransport.state)} ${formatArrangementTransportBarBeat(sharedDawTransport.anchorBar, sharedDawTransport.anchorBeat)}` : "SHARED LOCAL ONLY",
+        "LANES DRUMS BASS FM SYNTH PIANO LOOPER",
+        "SCOPE LOCAL | PLAYHEAD B01.01",
+        getArrangementPlaybackGuidanceLine(localDawState, localDawAudioState, sharedDawTransport),
+      ],
+      tracks: [],
+      transportScopeLabel: sharedDawTransport ? "SHARED" : "LOCAL",
+    };
+  }
+
+  const notesByClipId = new Map<string, LocalDawMidiNoteEvent[]>();
+
+  localDawState.midiNotes.forEach((note) => {
+    notesByClipId.set(note.clipId, [...(notesByClipId.get(note.clipId) ?? []), note]);
+  });
+
+  const tracks = localDawState.tracks.slice(0, 5).map((track) => {
+    const trackNotes = localDawState.midiNotes.filter((note) => (
+      localDawState.clips.some((clip) => clip.id === note.clipId && clip.trackId === track.id)
+    ));
+
+    return {
+      id: track.id,
+      label: track.label,
+      color: track.color,
+      sourceLabel: getArrangementSourceSummaryLabel(trackNotes, track.id),
+    };
+  });
+
+  const blocks = tracks.flatMap((track, laneIndex) => (
+    localDawState.clips
+      .filter((clip) => clip.trackId === track.id)
+      .sort((firstClip, secondClip) => firstClip.sceneIndex - secondClip.sceneIndex)
+      .map((clip) => {
+        const notes = notesByClipId.get(clip.id) ?? [];
+        const guitarNotes = notes.filter((note) => note.source === "guitar-live");
+        const noteDensityMarkers = notes.length === 0 ? 0 : Math.min(4, Math.ceil(notes.length / 4));
+        const startBar = Math.min(8, clip.sceneIndex * 2 + 1);
+        const endBar = Math.min(8, startBar + Math.max(1, clip.lengthBars) - 1);
+
+        return {
+          clip,
+          hasGuitarLabel: clip.trackId === "fm-synth" && guitarNotes.length > 0,
+          label: getArrangementClipSourceLabel(clip, guitarNotes.length > 0),
+          laneIndex,
+          noteCount: notes.length,
+          noteDensityMarkers,
+          startBar,
+          endBar,
+          sourceLabel: getArrangementSourceSummaryLabel(notes, track.id, clip.state),
+          stateLabel: getSequenceClipStateLabel(clip.state),
+          track,
+        };
+      })
+  ));
+
+  const guitarFmBlockCount = blocks.filter((block) => block.hasGuitarLabel).length;
+  const totalNotes = localDawState.midiNotes.length;
+  const playheadBar = Math.max(1, localDawState.transport.bar);
+  const playheadBeat = Math.max(1, localDawState.transport.beat);
+  const playheadIsMoving = sharedDawTransport?.state === "playing" || localDawState.transport.state === "playing";
+
+  return {
+    bars: [1, 2, 3, 4, 5, 6, 7, 8],
+    blocks,
+    lines: [
+      "8 BAR MAP",
+      `${tracks.length} LANES / ${blocks.length} CLIPS / ${totalNotes} NOTES / ${guitarFmBlockCount} GTR FM`,
+      `LOCAL ${formatArrangementTransportState(localDawState.transport.state)} ${formatArrangementTransportBarBeat(playheadBar, playheadBeat)}`,
+      sharedDawTransport
+        ? `SHARED ${formatArrangementTransportState(sharedDawTransport.state)} ${formatArrangementTransportBarBeat(sharedDawTransport.anchorBar, sharedDawTransport.anchorBeat)}`
+        : "SHARED LOCAL ONLY",
+      `SCOPE ${sharedDawTransport ? "SHARED" : "LOCAL"} | PLAYHEAD ${formatArrangementTransportBarBeat(playheadBar, playheadBeat)}`,
+      getArrangementPlaybackGuidanceLine(localDawState, localDawAudioState, sharedDawTransport),
+    ],
+    playheadBeat,
+    playheadBar,
+    playheadIsMoving,
+    tracks,
+    transportScopeLabel: sharedDawTransport ? "SHARED" : "LOCAL",
+  };
+}
+
+function createStudioSequenceMonitor(localDawState?: LocalDawState): StudioSequenceMonitorSpec {
+  if (!localDawState) {
+    return {
+      lines: [
+        "SCENES 01-04",
+        "5 TRACKS",
+        "WAITING FOR CLIPS",
+        "SELECT A LANE",
+        "GTR LATER",
+      ],
+      sequence: null,
+    };
+  }
+
+  const noteCountsByClipId = new Map<string, LocalDawMidiNoteEvent[]>();
+
+  localDawState.midiNotes.forEach((note) => {
+    noteCountsByClipId.set(note.clipId, [...(noteCountsByClipId.get(note.clipId) ?? []), note]);
+  });
+
+  const tracks = localDawState.tracks.slice(0, 5).map((track) => ({
+    id: track.id,
+    label: track.label,
+    color: track.color,
+  }));
+  const scenes = [1, 2, 3, 4];
+  const cells: StudioSequenceGridCellSpec[] = localDawState.tracks.slice(0, 5).flatMap((track) => {
+    return scenes.map((sceneNumber) => {
+      const sceneIndex = sceneNumber - 1;
+      const clip = (localDawState.clips.find((candidate) => candidate.trackId === track.id && candidate.sceneIndex === sceneIndex) ?? {
+        id: `sequence-empty-${track.id}-${sceneIndex}`,
+        label: "",
+        lengthBars: 1,
+        sceneIndex,
+        state: "empty" as const,
+        trackId: track.id,
+      }) as LocalDawClip;
+      const notes = noteCountsByClipId.get(clip.id) ?? [];
+      const guitarNotes = notes.filter((note) => note.source === "guitar-live");
+      const noteDensityMarkers = notes.length === 0 ? 0 : Math.min(4, Math.ceil(notes.length / 3));
+
+      return {
+        clip,
+        hasGuitarLabel: clip.trackId === "fm-synth" && guitarNotes.length > 0,
+        isLastPlayback: localDawState.lastPlaybackTrigger?.clipId === clip.id,
+        isSelected: localDawState.selectedTrackId === clip.trackId && localDawState.selectedSceneIndex === clip.sceneIndex,
+        lastPlaybackNoteId: localDawState.lastPlaybackTrigger?.clipId === clip.id ? localDawState.lastPlaybackTrigger.noteId : null,
+        noteCount: notes.length,
+        noteDensityMarkers,
+        stateLabel: getSequenceClipStateLabel(clip.state),
+        track,
+      };
+    });
+  });
+  const selectedTrack = localDawState.tracks.find((track) => track.id === localDawState.selectedTrackId) ?? localDawState.tracks[0];
+  const selectedTrackLabel = selectedTrack?.label.toUpperCase() ?? "TRACK";
   const selectedClip = localDawState.clips.find((clip) => (
     clip.trackId === localDawState.selectedTrackId &&
     clip.sceneIndex === localDawState.selectedSceneIndex
   ));
-  const selectedClipNoteCount = selectedClip
-    ? localDawState.midiNotes.filter((note) => note.clipId === selectedClip.id).length
-    : 0;
+  const selectedClipNotes = selectedClip ? noteCountsByClipId.get(selectedClip.id) ?? [] : [];
+  const selectedClipLabel = selectedClip ? getSequenceClipStateLabel(selectedClip.state) : "EMPTY";
   const playingClipCount = localDawState.clips.filter((clip) => clip.state === "playing").length;
-  const armedClipCount = localDawState.clips.filter((clip) => clip.state === "armed").length;
   const recordingClipCount = localDawState.clips.filter((clip) => clip.state === "recording").length;
-  const selectedSharedClip = getSelectedSharedDawClip(localDawState, sharedDawClips);
-  const selectedSharedStatus = selectedClip?.shared?.importStatus === "conflict"
-    ? "SHARED CONFLICT"
-    : selectedClip?.shared?.importStatus === "synced"
-      ? "SHARED SYNCED"
-      : selectedSharedClip
-        ? "SHARED AVAILABLE"
-        : "LOCAL ONLY";
-  const ownerLine = !selectedSharedClip
-    ? `${sharedDawClips?.clips.length ?? 0} SHARED SLOTS`
-    : selectedSharedClip.summary.ownerUserId === localUserIdForSharedDawClips
-      ? "OWNER YOU"
-      : canAdminSharedDawClips
-        ? "OWNER PEER / HOST"
-        : "OWNER PEER";
+  const armedClipCount = localDawState.clips.filter((clip) => clip.state === "armed").length;
+  const guitarNotesInFmCount = localDawState.clips.reduce((count, clip) => (
+    clip.trackId === "fm-synth" ? count + (noteCountsByClipId.get(clip.id)?.some((note) => note.source === "guitar-live") ? 1 : 0) : count
+  ), 0);
+  const selectedScene = localDawState.selectedSceneIndex + 1;
 
-  return [
-    `SCENE ${String(selectedScene).padStart(2, "0")} SELECTED`,
-    `${selectedClipNoteCount} NOTES`,
-    selectedSharedStatus,
-    ownerLine,
-    `${recordingClipCount} REC ${playingClipCount} PLAY`,
-    `${armedClipCount} ARMED`,
-  ];
+  return {
+    lines: [
+      `SEL ${selectedTrackLabel} S${String(selectedScene).padStart(2, "0")} ${selectedClipLabel}`,
+      `${playingClipCount} PLAY ${recordingClipCount} REC ${armedClipCount} ARM`,
+      guitarNotesInFmCount > 0 ? `FM GUITAR ${guitarNotesInFmCount} CLIPS` : "FM SYNTH READY",
+      selectedClip ? `${selectedClipNotes.length} NOTES SELECTED` : "NO CLIP SELECTED",
+      "5X4 SESSION VIEW",
+    ],
+    sequence: {
+      cells,
+      scenes,
+      tracks,
+    },
+  };
 }
 
 function formatDawDeviceLines(localDawState?: LocalDawState) {
@@ -5717,16 +9701,16 @@ function getStudioTruthEngineLine(localDawAudioState?: LocalDawAudioEngineState)
   }
 
   if (localDawAudioState.masterVolume <= 0) {
-    return "VOLUME ZERO";
+    return "ENGINE VOL 0";
   }
 
-  return "READY";
+  return "ENGINE READY";
 }
 
 function getStudioTruthState(localDawState?: LocalDawState, localDawAudioState?: LocalDawAudioEngineState) {
   const patch = localDawState?.patch;
   const engineLine = getStudioTruthEngineLine(localDawAudioState);
-  const isEngineReady = engineLine === "READY";
+  const isEngineReady = engineLine === "ENGINE READY";
   const isPianoPatched = patch ? isPortPatchedToAudioInterfaceInput(patch, "piano-out") : false;
   const isDrumMixPatched = patch ? canDrumMixerPatchReachInterface(patch) : false;
   const areSpeakersPatched = patch ? isAudioInterfaceOutputPatchedToSpeakers(patch) : false;
@@ -5741,15 +9725,70 @@ function getStudioTruthState(localDawState?: LocalDawState, localDawAudioState?:
   };
 }
 
-function formatStudioTruthPanelLines(localDawState?: LocalDawState, localDawAudioState?: LocalDawAudioEngineState) {
-  const truth = getStudioTruthState(localDawState, localDawAudioState);
+function getStudioPatchSignalLine(localDawState?: LocalDawState, localDawAudioState?: LocalDawAudioEngineState) {
+  if (!localDawAudioState || localDawAudioState.status !== "ready") {
+    return "SIGNAL OFF";
+  }
+
+  if (localDawAudioState.isMuted || localDawAudioState.masterVolume <= 0) {
+    return "SIGNAL SILENT";
+  }
+
+  if (!localDawState?.patch) {
+    return "SIGNAL LOCAL ONLY";
+  }
+
+  const hasRouteToSpeakers = (
+    canPianoLivePatchReachSpeakers(localDawState.patch) ||
+    (
+      canDrumMixerPatchReachInterface(localDawState.patch) &&
+      isAudioInterfaceOutputPatchedToSpeakers(localDawState.patch)
+    )
+  );
+
+  return hasRouteToSpeakers ? "SIGNAL READY" : "SIGNAL LOCAL ONLY";
+}
+
+function formatStudioPatchSignalTruthLines({
+  guitarHolderLabel,
+  isGuitarHeldByAnyone,
+  isLocalHoldingGuitar,
+  localDawAudioState,
+  localDawState,
+  recordingStatus,
+  sharedDawClips,
+  sharedDawTransport,
+}: {
+  guitarHolderLabel: string | null;
+  isGuitarHeldByAnyone: boolean;
+  isLocalHoldingGuitar: boolean;
+  localDawAudioState?: LocalDawAudioEngineState;
+  localDawState?: LocalDawState;
+  recordingStatus?: StudioGuitarRecordingStatus;
+  sharedDawClips?: SharedDawClipsState;
+  sharedDawTransport?: SharedDawTransport;
+}) {
+  const patch = localDawState?.patch;
+  const pianoToSpeakers = patch ? canPianoLivePatchReachSpeakers(patch) : false;
+  const drumMixToInterface = patch ? canDrumMixerPatchReachInterface(patch) : false;
+  const interfaceToSpeakers = patch ? isAudioInterfaceOutputPatchedToSpeakers(patch) : false;
+  const sharedClipCount = sharedDawClips?.clips.length ?? 0;
+  const liveAppState = sharedDawTransport?.state === "playing" ? "PLAY" : sharedDawTransport?.state === "stopped" ? "STOP" : "LOCAL";
 
   return [
-    truth.engineLine,
-    truth.isPianoPatched ? "PIANO PATCHED" : "PIANO MISSING",
-    truth.isDrumMixPatched ? "DRUM MIX PATCHED" : "DRUM MIX MISSING",
-    truth.areSpeakersPatched ? "SPEAKERS PATCHED" : "SPEAKERS MISSING",
-    "PATCHES LOCAL ONLY",
+    getStudioStatusEngineLine(localDawAudioState),
+    getStudioStatusMasterLine(localDawAudioState),
+    `PATCH PIANO SPK ${pianoToSpeakers ? "Y" : "N"} / DRUM IF ${drumMixToInterface ? "Y" : "N"} / IF SPK ${interfaceToSpeakers ? "Y" : "N"}`,
+    getStudioPatchSignalLine(localDawState, localDawAudioState),
+    getStudioStatusGuitarLine({
+      guitarHolderLabel,
+      isGuitarHeldByAnyone,
+      isLocalHoldingGuitar,
+      recordingStatus,
+    }),
+    sharedDawTransport
+      ? `LIVE APP ${liveAppState} ${sharedClipCount} CLIPS | FRIENDS NEED OWN ENGINE`
+      : "LIVE APP LOCAL ONLY | FRIENDS NEED OWN ENGINE",
   ];
 }
 
@@ -5865,10 +9904,10 @@ function StudioSoundActivitySpeakers({
   })), [activity.hasGeneratedEvent, activity.hasSpeakerPatch, activity.isDisplayAudible]);
 
   return (
-    <group position={[-14.35, 0, 2.48]} rotation={[0, Math.PI, 0]}>
+    <group position={[-14.35, 0, 2.48]} rotation={[0, 0, 0]}>
       <mesh position={[0, 1.18, -0.035]}>
         <boxGeometry args={[2.28, 1.02, 0.07]} />
-        <meshStandardMaterial args={[{ color: "#06101d", emissive: activity.accentColor, emissiveIntensity: activity.isLive ? 0.18 : 0.06, roughness: 0.72 }]} />
+        <meshStandardMaterial args={[{ color: "#06101d", emissive: activity.accentColor, emissiveIntensity: activity.isLive ? 0.04 : 0.02, roughness: 0.72 }]} />
       </mesh>
       <mesh position={[0, 1.78, -0.08]}>
         <planeGeometry args={[1.12, 0.28]} />
@@ -5904,7 +9943,7 @@ function StudioSoundActivitySpeakers({
         <group key={`studio-speaker-${speakerX}`} position={[speakerX, 1.14, -0.09]}>
           <mesh>
             <boxGeometry args={[0.48, 0.62, 0.12]} />
-            <meshStandardMaterial args={[{ color: "#0b1525", emissive: activity.accentColor, emissiveIntensity: activity.isDisplayAudible ? 0.12 : 0.04, roughness: 0.68 }]} />
+            <meshStandardMaterial args={[{ color: "#0b1525", emissive: activity.accentColor, emissiveIntensity: activity.isDisplayAudible ? 0.05 : 0.02, roughness: 0.68 }]} />
           </mesh>
           <mesh position={[0, 0, -0.075]} rotation={[Math.PI / 2, 0, 0]}>
             <cylinderGeometry args={[0.17, 0.17, 0.035, 32]} />
@@ -5953,6 +9992,300 @@ function MarkerPost({
   );
 }
 
+function StudioDjPlatform({ phaseVisuals }: { phaseVisuals: PhaseVisuals }) {
+  const rampStepSpecs = [
+    { z: 2.34, height: 0.16, depth: 0.16, opacity: 0.08 },
+    { z: 2.52, height: 0.34, depth: 0.17, opacity: 0.1 },
+    { z: 2.72, height: 0.56, depth: 0.18, opacity: 0.12 },
+    { z: 2.94, height: 0.82, depth: 0.19, opacity: 0.14 },
+    { z: 3.17, height: 1.1, depth: 0.2, opacity: 0.16 },
+    { z: 3.34, height: 1.32, depth: 0.18, opacity: 0.18 },
+  ];
+  const rampXPositions = [STUDIO_DJ_PLATFORM_LEFT_RAMP_POSITION[0], STUDIO_DJ_PLATFORM_RIGHT_RAMP_POSITION[0]];
+
+  return (
+    <group>
+      <mesh position={STUDIO_DJ_PLATFORM_CENTER}>
+        <boxGeometry args={STUDIO_DJ_PLATFORM_SIZE} />
+        <meshStandardMaterial args={[{ color: "#17102d", emissive: "#3b1464", emissiveIntensity: 0.2, roughness: 0.78, metalness: 0.04 }]} />
+      </mesh>
+      <mesh position={[STUDIO_DJ_PLATFORM_CENTER[0], STUDIO_DJ_PLATFORM_FLOOR_Y + 0.014, STUDIO_DJ_PLATFORM_CENTER[2]]}>
+        <boxGeometry args={[STUDIO_DJ_PLATFORM_SIZE[0] - 0.18, 0.018, STUDIO_DJ_PLATFORM_SIZE[2] - 0.18]} />
+        <meshBasicMaterial args={[{ color: phaseVisuals.timerAccent, transparent: true, opacity: 0.12, toneMapped: false }]} />
+      </mesh>
+      {[
+        [STUDIO_DJ_PLATFORM_CENTER[0], STUDIO_DJ_PLATFORM_CENTER[2] - STUDIO_DJ_PLATFORM_SIZE[2] / 2],
+        [STUDIO_DJ_PLATFORM_CENTER[0], STUDIO_DJ_PLATFORM_CENTER[2] + STUDIO_DJ_PLATFORM_SIZE[2] / 2],
+      ].map(([x, z]) => (
+        <mesh key={`studio-dj-platform-z-trim-${z}`} position={[x, STUDIO_DJ_PLATFORM_FLOOR_Y + 0.034, z]}>
+          <boxGeometry args={[STUDIO_DJ_PLATFORM_SIZE[0], 0.036, 0.045]} />
+          <meshBasicMaterial args={[{ color: phaseVisuals.gridPrimary, transparent: true, opacity: 0.42, toneMapped: false }]} />
+        </mesh>
+      ))}
+      {[
+        [STUDIO_DJ_PLATFORM_CENTER[0] - STUDIO_DJ_PLATFORM_SIZE[0] / 2, STUDIO_DJ_PLATFORM_CENTER[2]],
+        [STUDIO_DJ_PLATFORM_CENTER[0] + STUDIO_DJ_PLATFORM_SIZE[0] / 2, STUDIO_DJ_PLATFORM_CENTER[2]],
+      ].map(([x, z]) => (
+        <mesh key={`studio-dj-platform-x-trim-${x}`} position={[x, STUDIO_DJ_PLATFORM_FLOOR_Y + 0.034, z]}>
+          <boxGeometry args={[0.045, 0.036, STUDIO_DJ_PLATFORM_SIZE[2]]} />
+          <meshBasicMaterial args={[{ color: phaseVisuals.gridSecondary, transparent: true, opacity: 0.34, toneMapped: false }]} />
+        </mesh>
+      ))}
+      {rampXPositions.flatMap((x) => (
+        rampStepSpecs.map((step, index) => (
+          <mesh key={`studio-dj-platform-ramp-${x}-${index}`} position={[x, step.height / 2, step.z]}>
+            <boxGeometry args={[STUDIO_DJ_PLATFORM_RAMP_SIZE[0], step.height, step.depth]} />
+            <meshStandardMaterial args={[{ color: "#151f35", emissive: phaseVisuals.gridSecondary, emissiveIntensity: step.opacity, roughness: 0.82, metalness: 0.02 }]} />
+          </mesh>
+        ))
+      ))}
+      <mesh position={[STUDIO_DJ_PLATFORM_CENTER[0], STUDIO_DJ_PLATFORM_FLOOR_Y + 0.042, STUDIO_DJ_PLATFORM_CENTER[2] - STUDIO_DJ_PLATFORM_SIZE[2] / 2 - 0.16]}>
+        <boxGeometry args={[1.18, 0.022, 0.08]} />
+        <meshBasicMaterial args={[{ color: phaseVisuals.timerAccent, transparent: true, opacity: 0.36, toneMapped: false }]} />
+      </mesh>
+    </group>
+  );
+}
+
+function getStudioGuitarAudioReadiness(localDawAudioState?: LocalDawAudioEngineState): StudioGuitarAudioReadiness {
+  if (!localDawAudioState || localDawAudioState.status !== "ready") {
+    return { label: "SILENT", reason: "ENGINE OFF" };
+  }
+
+  if (localDawAudioState.isMuted) {
+    return { label: "SILENT", reason: "MUTED" };
+  }
+
+  if (localDawAudioState.masterVolume <= 0) {
+    return { label: "SILENT", reason: "VOLUME 0" };
+  }
+
+  return { label: "AUDIBLE", reason: "ENGINE READY" };
+}
+
+function StudioGuitarNoteStrip({
+  accentColor,
+  feedbackKey,
+  selectedIndex,
+}: {
+  accentColor: string;
+  feedbackKey: number;
+  selectedIndex: number;
+}) {
+  return (
+    <group position={[0, 0.095, 0.62]}>
+      {Array.from({ length: 9 }, (_, index) => {
+        const isSelected = index === selectedIndex;
+        const opacity = isSelected ? (feedbackKey > 0 ? 0.86 : 0.68) : 0.22;
+
+        return (
+          <group key={index} position={[(index - 4) * 0.105, 0, 0]}>
+            <mesh>
+              <boxGeometry args={[0.07, 0.028, 0.13]} />
+              <meshBasicMaterial args={[{ color: isSelected ? accentColor : "#9aacbd", transparent: true, opacity, toneMapped: false }]} />
+            </mesh>
+            <mesh position={[0, 0.021, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+              <planeGeometry args={[0.055, 0.052]} />
+              <meshBasicMaterial args={[{ color: isSelected ? "#050914" : "#16243a", transparent: true, opacity: 0.66, toneMapped: false }]} />
+            </mesh>
+          </group>
+        );
+      })}
+    </group>
+  );
+}
+
+function StudioGuitarStand({
+  holderLabel,
+  isHeldByAnyone,
+  isHeldByLocal,
+  isHeldByAnother,
+  localDawAudioState,
+  onDrop,
+  onPickup,
+  onToggleRecording,
+  studioGuitarBankLabel = "B1 E2-B3",
+  recordingStatus,
+  studioGuitarFeedbackKey = 0,
+  studioGuitarNoteIndex = 0,
+  studioGuitarNoteLabel = "E2",
+  studioGuitarSlotIndex = 0,
+}: {
+  holderLabel?: string | null;
+  isHeldByAnyone: boolean;
+  isHeldByLocal: boolean;
+  isHeldByAnother: boolean;
+  localDawAudioState?: LocalDawAudioEngineState;
+  onDrop?: () => void;
+  onPickup?: () => void;
+  onToggleRecording?: () => void;
+  studioGuitarBankLabel?: string;
+  recordingStatus?: StudioGuitarRecordingStatus;
+  studioGuitarFeedbackKey?: number;
+  studioGuitarNoteIndex?: number;
+  studioGuitarNoteLabel?: string;
+  studioGuitarSlotIndex?: number;
+}) {
+  const guitarRef = useRef<React.ElementRef<"mesh">>(null);
+  const recordRef = useRef<React.ElementRef<"mesh">>(null);
+  const effectiveRecordingStatus = recordingStatus ?? { caption: "REC OFF", isEnabled: false, label: "LIVE" };
+  const accentColor = isHeldByLocal ? "#f8d36a" : isHeldByAnother ? "#ff8c5a" : "#57f3ff";
+  const audioReadiness = getStudioGuitarAudioReadiness(localDawAudioState);
+  const ownershipLabel = isHeldByLocal
+    ? `HELD ${studioGuitarNoteLabel}`
+    : isHeldByAnother
+      ? `HELD BY ${holderLabel ?? "SOMEONE"}`
+      : "GUITAR";
+  const ownershipCaption = isHeldByLocal ? "CLICK DROP" : isHeldByAnother ? "WAIT" : "CLICK PICKUP";
+  const labelCanvas = useMemo(() => createStudioTransportControlCanvas({
+    accentColor,
+    caption: ownershipCaption,
+    isActive: isHeldByLocal,
+    label: ownershipLabel,
+  }), [accentColor, isHeldByLocal, ownershipCaption, ownershipLabel]);
+  const helpCanvas = useMemo(() => createStudioTransportControlCanvas({
+    accentColor: "#e9fbff",
+    caption: isHeldByAnother ? "ONE HOLDER" : "Q/E BANK",
+    isActive: !isHeldByAnother,
+    label: isHeldByAnother ? "IN USE" : "1-9 NOTES",
+  }), [isHeldByAnother]);
+  const noteCanvas = useMemo(() => createStudioTransportControlCanvas({
+    accentColor,
+    caption: `${studioGuitarSlotIndex + 1} / ${studioGuitarBankLabel}`,
+    isActive: isHeldByLocal,
+    label: `NOTE ${studioGuitarNoteLabel}`,
+  }), [accentColor, isHeldByLocal, studioGuitarBankLabel, studioGuitarNoteLabel, studioGuitarSlotIndex]);
+  const audioCanvas = useMemo(() => createStudioTransportControlCanvas({
+    accentColor: audioReadiness.label === "AUDIBLE" ? "#73ff4c" : "#f8d36a",
+    caption: audioReadiness.reason,
+    isActive: audioReadiness.label === "AUDIBLE",
+    label: audioReadiness.label,
+  }), [audioReadiness.label, audioReadiness.reason]);
+  const recordingCanvas = useMemo(() => createStudioTransportControlCanvas({
+    accentColor: effectiveRecordingStatus.isEnabled ? "#ff667c" : "#57f3ff",
+    caption: isHeldByLocal ? effectiveRecordingStatus.caption : isHeldByAnother ? "Holder Only" : "Pick Up First",
+    isActive: isHeldByLocal && effectiveRecordingStatus.isEnabled,
+    label: isHeldByLocal ? effectiveRecordingStatus.label : "REC LOCK",
+  }), [effectiveRecordingStatus.caption, effectiveRecordingStatus.isEnabled, effectiveRecordingStatus.label, isHeldByAnother, isHeldByLocal]);
+
+  useRegisterInteractable(useMemo(() => ({
+    id: "studio-guitar-stand",
+    label: isHeldByLocal ? "Drop Guitar" : isHeldByAnother ? `Guitar Held By ${holderLabel ?? "Someone"}` : "Pick Up Guitar",
+    objectRef: guitarRef,
+    modes: ["clickable" as const],
+    enabled: Boolean(isHeldByLocal ? onDrop : !isHeldByAnother && onPickup),
+    onActivate: () => {
+      if (isHeldByLocal) {
+        onDrop?.();
+        return;
+      }
+
+      if (!isHeldByAnother) {
+        onPickup?.();
+      }
+    },
+  }), [holderLabel, isHeldByAnother, isHeldByLocal, onDrop, onPickup]));
+
+  useRegisterInteractable(useMemo(() => ({
+    id: "studio-guitar-record-toggle",
+    label: effectiveRecordingStatus.isEnabled ? "Stop Guitar Recording" : "Record Guitar",
+    objectRef: recordRef,
+    modes: ["clickable" as const],
+    enabled: Boolean(isHeldByLocal && onToggleRecording),
+    onActivate: () => {
+      onToggleRecording?.();
+    },
+  }), [effectiveRecordingStatus.isEnabled, isHeldByLocal, onToggleRecording]));
+
+  return (
+    <group position={[-18.92, 0, 1.82]} rotation={[0, -0.34, 0]}>
+      <mesh position={[0, 0.04, 0]}>
+        <boxGeometry args={[0.72, 0.055, 0.58]} />
+        <meshStandardMaterial args={[{ color: "#07111f", emissive: accentColor, emissiveIntensity: 0.12, roughness: 0.72, metalness: 0.05 }]} />
+      </mesh>
+      <mesh position={[0, 0.46, 0]}>
+        <boxGeometry args={[0.055, 0.82, 0.055]} />
+        <meshStandardMaterial args={[{ color: "#101c2e", emissive: accentColor, emissiveIntensity: 0.14, roughness: 0.62, metalness: 0.08 }]} />
+      </mesh>
+      <mesh position={[0, 0.88, -0.05]} rotation={[0.22, 0, 0]}>
+        <boxGeometry args={[0.5, 0.05, 0.08]} />
+        <meshStandardMaterial args={[{ color: "#16243a", emissive: accentColor, emissiveIntensity: 0.12, roughness: 0.62, metalness: 0.06 }]} />
+      </mesh>
+      <group position={[0, 0.82, -0.06]} rotation={[0.16, 0, -0.18]} visible={!isHeldByAnyone}>
+        <mesh ref={guitarRef} position={[0, 0, 0]} scale={[1.04, 0.7, 0.16]}>
+          <sphereGeometry args={[0.25, 28, 18]} />
+          <meshStandardMaterial args={[{ color: "#8b4b25", emissive: "#301307", emissiveIntensity: 0.18, roughness: 0.56, metalness: 0.03 }]} />
+        </mesh>
+        <mesh position={[0.12, 0.01, -0.02]} scale={[0.52, 0.36, 0.03]}>
+          <sphereGeometry args={[0.13, 20, 12]} />
+          <meshBasicMaterial args={[{ color: "#14090a", transparent: true, opacity: 0.75, toneMapped: false }]} />
+        </mesh>
+        <mesh position={[0.42, 0.025, -0.045]} rotation={[0, 0, -0.03]}>
+          <boxGeometry args={[0.68, 0.08, 0.055]} />
+          <meshStandardMaterial args={[{ color: "#5b321d", emissive: "#1b0c06", emissiveIntensity: 0.12, roughness: 0.52 }]} />
+        </mesh>
+        <mesh position={[0.82, 0.035, -0.045]} rotation={[0, 0, -0.03]}>
+          <boxGeometry args={[0.17, 0.15, 0.065]} />
+          <meshStandardMaterial args={[{ color: "#32170e", roughness: 0.5, metalness: 0.02 }]} />
+        </mesh>
+        {[-0.05, -0.032, -0.014, 0.004, 0.022, 0.04].map((y, index) => (
+          <mesh key={index} position={[0.44, y + 0.025, -0.078]} rotation={[0, 0, -0.03]}>
+            <boxGeometry args={[0.86, 0.004, 0.004]} />
+            <meshBasicMaterial args={[{ color: "#d8efff", transparent: true, opacity: 0.62, toneMapped: false }]} />
+          </mesh>
+        ))}
+      </group>
+      {isHeldByAnyone ? (
+        <mesh ref={guitarRef} position={[0, 0.82, -0.06]}>
+          <boxGeometry args={[0.56, 0.5, 0.08]} />
+          <meshBasicMaterial args={[{ color: accentColor, transparent: true, opacity: 0.16, wireframe: true, toneMapped: false }]} />
+        </mesh>
+      ) : null}
+      <mesh position={[0, 1.28, -0.18]} rotation={[-0.22, 0, 0]}>
+        <planeGeometry args={[0.92, 0.46]} />
+        <meshBasicMaterial args={[{ transparent: true, opacity: 0.72, toneMapped: false }]} >
+          <canvasTexture key={`studio-guitar-label-${isHeldByLocal ? "local" : isHeldByAnother ? "remote" : "ready"}-${holderLabel ?? "none"}`} attach="map" args={[labelCanvas]} />
+        </meshBasicMaterial>
+      </mesh>
+      <mesh position={[0, 0.22, 0.28]} rotation={[-Math.PI / 2, 0, 0]}>
+        <planeGeometry args={[0.82, 0.4]} />
+        <meshBasicMaterial args={[{ transparent: true, opacity: 0.5, toneMapped: false }]} >
+          <canvasTexture key="studio-guitar-help" attach="map" args={[helpCanvas]} />
+        </meshBasicMaterial>
+      </mesh>
+      <mesh position={[-0.56, 0.78, 0.04]} rotation={[0, 0.36, 0]}>
+        <planeGeometry args={[0.62, 0.3]} />
+        <meshBasicMaterial args={[{ transparent: true, opacity: 0.62, toneMapped: false }]} >
+          <canvasTexture key={`studio-guitar-note-${studioGuitarNoteLabel}-${studioGuitarNoteIndex}-${studioGuitarFeedbackKey}`} attach="map" args={[noteCanvas]} />
+        </meshBasicMaterial>
+      </mesh>
+      <mesh position={[0.56, 0.78, 0.04]} rotation={[0, -0.36, 0]}>
+        <planeGeometry args={[0.62, 0.3]} />
+        <meshBasicMaterial args={[{ transparent: true, opacity: audioReadiness.label === "AUDIBLE" ? 0.54 : 0.72, toneMapped: false }]} >
+          <canvasTexture key={`studio-guitar-audio-${audioReadiness.label}-${audioReadiness.reason}`} attach="map" args={[audioCanvas]} />
+        </meshBasicMaterial>
+      </mesh>
+      <mesh ref={recordRef} position={[0, 0.53, 0.39]}>
+        <boxGeometry args={[0.6, 0.045, 0.18]} />
+        <meshStandardMaterial args={[{
+          color: isHeldByLocal ? "#10192b" : "#101722",
+          emissive: effectiveRecordingStatus.isEnabled ? "#ff667c" : "#57f3ff",
+          emissiveIntensity: isHeldByLocal ? 0.18 : 0.06,
+          roughness: 0.7,
+          metalness: 0.04,
+        }]} />
+      </mesh>
+      <mesh position={[0, 0.562, 0.39]} rotation={[-Math.PI / 2, 0, 0]}>
+        <planeGeometry args={[0.5, 0.13]} />
+        <meshBasicMaterial args={[{ transparent: true, opacity: isHeldByLocal ? 0.76 : 0.45, toneMapped: false }]} >
+          <canvasTexture key={`studio-guitar-rec-${effectiveRecordingStatus.label}-${effectiveRecordingStatus.caption}-${isHeldByLocal ? "local" : "locked"}`} attach="map" args={[recordingCanvas]} />
+        </meshBasicMaterial>
+      </mesh>
+      <StudioGuitarNoteStrip accentColor={accentColor} feedbackKey={studioGuitarFeedbackKey} selectedIndex={studioGuitarSlotIndex} />
+    </group>
+  );
+}
+
 export function Level1RecordingStudioRoom({
   area,
   opening,
@@ -5976,6 +10309,19 @@ export function Level1RecordingStudioRoom({
   onPublishSharedDawClip,
   onClearSharedDawClip,
   onBroadcastDawLiveSound,
+  soundCloudBooth,
+  studioGuitar,
+  onPickupStudioGuitar,
+  onDropStudioGuitar,
+  heldStudioInstrument,
+  studioGuitarBankLabel,
+  studioGuitarRecordingStatus,
+  onToggleStudioGuitarRecording,
+  studioGuitarFeedbackKey,
+  studioGuitarNoteIndex,
+  studioGuitarNoteLabel,
+  studioGuitarSlotIndex,
+  showLayoutGrabBoxes = true,
 }: {
   area: LevelAreaConfig;
   opening: LevelOpeningConfig;
@@ -5999,7 +10345,22 @@ export function Level1RecordingStudioRoom({
   onPublishSharedDawClip?: (clip: SharedDawClipPublishPayload) => void;
   onClearSharedDawClip?: (trackId: SharedDawTrackId, sceneIndex: number) => void;
   onBroadcastDawLiveSound?: (sound: SharedDawLiveSoundPayload) => void;
+  soundCloudBooth?: SoundCloudBoothState;
+  studioGuitar?: SharedStudioGuitarState;
+  onPickupStudioGuitar?: () => void;
+  onDropStudioGuitar?: () => void;
+  heldStudioInstrument?: HeldStudioInstrument;
+  studioGuitarBankLabel?: string;
+  studioGuitarRecordingStatus?: StudioGuitarRecordingStatus;
+  onToggleStudioGuitarRecording?: () => void;
+  studioGuitarFeedbackKey?: number;
+  studioGuitarNoteIndex?: number;
+  studioGuitarNoteLabel?: string;
+  studioGuitarSlotIndex?: number;
+  showLayoutGrabBoxes?: boolean;
 }) {
+  const { activeHit, aimContext } = useInteractionRegistry();
+  const { gl } = useThree();
   const width = area.bounds.max[0] - area.bounds.min[0];
   const depth = area.bounds.max[2] - area.bounds.min[2];
   const height = area.bounds.max[1] - area.bounds.min[1];
@@ -6015,62 +10376,407 @@ export function Level1RecordingStudioRoom({
   const thresholdMaxX = opening.clearanceBounds?.max[0] ?? opening.position[0];
   const thresholdWidth = thresholdMaxX - thresholdMinX;
   const thresholdCenterX = thresholdMinX + thresholdWidth / 2;
+  const guitarHolderUser = users.find((user) => user.id === studioGuitar?.holderUserId);
+  const guitarHolderLabel = guitarHolderUser?.displayName ?? (studioGuitar?.holderUserId ? "Someone" : null);
+  const isLocalHoldingGuitar = studioGuitar?.holderUserId === localUserId;
+  const isGuitarHeldByAnother = Boolean(studioGuitar?.holderUserId && !isLocalHoldingGuitar);
+  const isGuitarHeldByAnyone = Boolean(studioGuitar?.holderUserId);
+  const sequenceMonitor = useMemo(() => createStudioSequenceMonitor(localDawState), [localDawState]);
+  const arrangementMonitor = useMemo(
+    () => createStudioArrangementTimelineMonitor(localDawState, localDawAudioState, sharedDawTransport),
+    [localDawAudioState, localDawState, sharedDawTransport],
+  );
+  const mixerMonitor = useMemo(() => createStudioMixerMonitor(localDawState, localDawAudioState), [localDawAudioState, localDawState]);
+  const [layoutState, setLayoutState] = useState<StudioLayoutState>(() => loadStudioLayoutState());
+  const [layoutMoveState, setLayoutMoveState] = useState<StudioLayoutMoveState | null>(null);
+  const layoutMoveStateRef = useRef<StudioLayoutMoveState | null>(null);
+  const aimContextRef = useRef(aimContext);
+  const activeLayoutStationId = getStationIdFromLayoutHitId(activeHit?.id);
+  const movingLayoutStationId = layoutMoveState?.stationId ?? null;
+
+  useEffect(() => {
+    layoutMoveStateRef.current = layoutMoveState;
+  }, [layoutMoveState]);
+
+  useEffect(() => {
+    aimContextRef.current = aimContext;
+  }, [aimContext]);
+
+  useEffect(() => {
+    saveStudioLayoutState(layoutState);
+  }, [layoutState]);
+
+  const updateStationTransform = useCallback((stationId: StudioLayoutStationId, transform: StudioLayoutTransform) => {
+    setLayoutState((currentState) => {
+      const currentTransform = currentState[stationId];
+
+      if (areStudioLayoutTransformsEqual(currentTransform, transform)) {
+        return currentState;
+      }
+
+      return {
+        ...currentState,
+        [stationId]: cloneStudioLayoutTransform(transform),
+      };
+    });
+  }, []);
+
+  const resetLayoutStation = useCallback((stationId: StudioLayoutStationId) => {
+    updateStationTransform(stationId, STUDIO_LAYOUT_STATION_SPECS[stationId].defaultTransform);
+  }, [updateStationTransform]);
+
+  const resetAllLayoutStations = useCallback(() => {
+    setLayoutState(createDefaultStudioLayoutState());
+    setLayoutMoveState(null);
+  }, []);
+
+  const beginMoveStation = useCallback((stationId: StudioLayoutStationId) => {
+    const spec = STUDIO_LAYOUT_STATION_SPECS[stationId];
+    const currentTransform = layoutState[stationId] ?? spec.defaultTransform;
+    const currentAimContext = aimContextRef.current;
+    const distanceFromCamera = currentAimContext
+      ? Math.max(1.35, Math.min(8, Math.hypot(
+        currentTransform.position[0] - currentAimContext.origin[0],
+        currentTransform.position[1] - currentAimContext.origin[1],
+        currentTransform.position[2] - currentAimContext.origin[2],
+      ) || spec.followDistance))
+      : spec.followDistance;
+
+    setLayoutMoveState({
+      stationId,
+      startTransform: cloneStudioLayoutTransform(currentTransform),
+      distanceFromCamera,
+      floorLock: spec.defaultFloorLock,
+    });
+  }, [layoutState]);
+
+  const placeMovingStation = useCallback(() => {
+    setLayoutMoveState(null);
+  }, []);
+
+  const cancelMovingStation = useCallback(() => {
+    const currentMoveState = layoutMoveStateRef.current;
+
+    if (!currentMoveState) {
+      return;
+    }
+
+    updateStationTransform(currentMoveState.stationId, currentMoveState.startTransform);
+    setLayoutMoveState(null);
+  }, [updateStationTransform]);
+
+  const rotateMovingStation = useCallback((direction: -1 | 1, isFine = false) => {
+    const currentMoveState = layoutMoveStateRef.current;
+
+    if (!currentMoveState) {
+      return;
+    }
+
+    const step = isFine ? 0.04 : 0.16;
+
+    setLayoutState((currentState) => {
+      const currentTransform = currentState[currentMoveState.stationId];
+
+      return {
+        ...currentState,
+        [currentMoveState.stationId]: {
+          position: [...currentTransform.position],
+          rotation: [
+            currentTransform.rotation[0],
+            currentTransform.rotation[1] + step * direction,
+            currentTransform.rotation[2],
+          ],
+        },
+      };
+    });
+  }, []);
+
+  const resetMovingStationHeight = useCallback(() => {
+    const currentMoveState = layoutMoveStateRef.current;
+
+    if (!currentMoveState) {
+      return;
+    }
+
+    const spec = STUDIO_LAYOUT_STATION_SPECS[currentMoveState.stationId];
+
+    setLayoutState((currentState) => {
+      const currentTransform = currentState[currentMoveState.stationId];
+
+      return {
+        ...currentState,
+        [currentMoveState.stationId]: {
+          ...cloneStudioLayoutTransform(currentTransform),
+          position: [currentTransform.position[0], spec.floorHeight, currentTransform.position[2]],
+        },
+      };
+    });
+  }, []);
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.repeat || event.ctrlKey || event.metaKey || event.altKey || isStudioLayoutInteractiveTarget(event.target)) {
+        return;
+      }
+
+      const currentMoveState = layoutMoveStateRef.current;
+
+      if (currentMoveState) {
+        if (event.code === "KeyF") {
+          event.preventDefault();
+          event.stopImmediatePropagation();
+          placeMovingStation();
+          return;
+        }
+
+        if (event.code === "Escape") {
+          event.preventDefault();
+          event.stopImmediatePropagation();
+          cancelMovingStation();
+          return;
+        }
+
+        if (event.code === "KeyQ" || event.code === "KeyE") {
+          event.preventDefault();
+          event.stopImmediatePropagation();
+          rotateMovingStation(event.code === "KeyQ" ? -1 : 1, event.shiftKey);
+          return;
+        }
+
+        if (event.code === "KeyG") {
+          event.preventDefault();
+          event.stopImmediatePropagation();
+          setLayoutMoveState((currentState) => currentState ? { ...currentState, floorLock: !currentState.floorLock } : currentState);
+          return;
+        }
+
+        if (event.code === "KeyH") {
+          event.preventDefault();
+          event.stopImmediatePropagation();
+          resetMovingStationHeight();
+          return;
+        }
+      }
+
+      if (event.code === "KeyF" && activeLayoutStationId) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        beginMoveStation(activeLayoutStationId);
+        return;
+      }
+
+      if (event.code === "Backspace") {
+        const stationIdToReset = currentMoveState?.stationId ?? activeLayoutStationId;
+
+        if (event.shiftKey) {
+          event.preventDefault();
+          event.stopImmediatePropagation();
+          resetAllLayoutStations();
+          return;
+        }
+
+        if (stationIdToReset) {
+          event.preventDefault();
+          event.stopImmediatePropagation();
+          resetLayoutStation(stationIdToReset);
+        }
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown, { capture: true });
+
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown, { capture: true });
+    };
+  }, [
+    activeLayoutStationId,
+    beginMoveStation,
+    cancelMovingStation,
+    placeMovingStation,
+    resetAllLayoutStations,
+    resetLayoutStation,
+    resetMovingStationHeight,
+    rotateMovingStation,
+  ]);
+
+  useEffect(() => {
+    const canvas = gl.domElement;
+    const handlePointerDown = (event: PointerEvent) => {
+      if (!layoutMoveStateRef.current || event.button !== 0 || isStudioLayoutInteractiveTarget(event.target)) {
+        return;
+      }
+
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      placeMovingStation();
+    };
+
+    canvas.addEventListener("pointerdown", handlePointerDown, { capture: true });
+
+    return () => {
+      canvas.removeEventListener("pointerdown", handlePointerDown, { capture: true });
+    };
+  }, [gl, placeMovingStation]);
+
+  useFrame(() => {
+    const currentMoveState = layoutMoveStateRef.current;
+
+    if (!currentMoveState) {
+      return;
+    }
+
+    const spec = STUDIO_LAYOUT_STATION_SPECS[currentMoveState.stationId];
+    const currentAimContext = aimContextRef.current;
+
+    if (!currentAimContext) {
+      return;
+    }
+
+    const target: Vec3 = [
+      currentAimContext.origin[0] + currentAimContext.direction[0] * currentMoveState.distanceFromCamera,
+      currentAimContext.origin[1] + currentAimContext.direction[1] * currentMoveState.distanceFromCamera,
+      currentAimContext.origin[2] + currentAimContext.direction[2] * currentMoveState.distanceFromCamera,
+    ];
+
+    const nextPosition: Vec3 = [
+      target[0],
+      currentMoveState.floorLock ? spec.floorHeight : Math.max(-0.2, Math.min(7.5, target[1])),
+      target[2],
+    ];
+
+    setLayoutState((currentState) => {
+      const currentTransform = currentState[currentMoveState.stationId];
+      const nextTransform: StudioLayoutTransform = {
+        position: nextPosition,
+        rotation: [...currentTransform.rotation],
+      };
+
+      if (areStudioLayoutTransformsEqual(currentTransform, nextTransform)) {
+        return currentState;
+      }
+
+      return {
+        ...currentState,
+        [currentMoveState.stationId]: nextTransform,
+      };
+    });
+  });
+
   const overviewScreens = useMemo<StudioOverviewScreenSpec[]>(() => [
+    {
+      id: "big-status",
+      title: "Studio Status",
+      lines: formatBigStudioStatusLines({
+        guitarHolderLabel,
+        isGuitarHeldByAnyone,
+        isLocalHoldingGuitar,
+        localDawAudioState,
+        localDawState,
+        recordingStatus: studioGuitarRecordingStatus,
+      }),
+      accentColor: getStudioTruthPanelAccentColor(localDawState, localDawAudioState),
+      position: [-22.18, 3.56, -5.25],
+      rotation: [0, Math.PI / 2, 0],
+      size: [4.3, 1.34],
+    },
     {
       id: "transport",
       title: "Transport",
       lines: formatDawTransportLines(localDawState),
       accentColor: phaseVisuals.gridSecondary,
-      position: [-22.28, 2.72, -4.6],
+      position: [-22.18, 2.76, -0.02],
       rotation: [0, Math.PI / 2, 0],
-      size: [2.15, 0.78],
+      size: [2.28, 0.82],
     },
     {
-      id: "clip-grid",
-      title: "Clip Grid",
-      lines: formatDawClipGridLines(localDawState, sharedDawClips, localUserIdForSharedDawClips, canAdminSharedDawClips),
+      id: "sequence-grid",
+      title: "Sequence View",
+      lines: sequenceMonitor.lines,
       accentColor: phaseVisuals.gridPrimary,
-      position: [-22.28, 1.78, -6.75],
+      position: [-22.18, 1.66, -6.86],
       rotation: [0, Math.PI / 2, 0],
-      size: [1.65, 0.9],
-      kind: "clip-grid",
+      size: [2.84, 1.26],
+      kind: "sequence-grid",
+      sequence: sequenceMonitor.sequence,
+    },
+    {
+      id: "arrangement-timeline",
+      title: "Arrangement Timeline",
+      lines: arrangementMonitor.lines,
+      accentColor: phaseVisuals.gridPrimary,
+      position: [-16.88, 5.04, -8.58],
+      rotation: [0, 0, 0],
+      size: [5.38, 2.16],
+      kind: "arrangement-grid",
+      arrangement: arrangementMonitor,
     },
     {
       id: "track-list",
       title: "Track List",
       lines: formatDawTrackLines(localDawState),
       accentColor: "#73ff4c",
-      position: [-17.2, 2.05, 0.69],
-      rotation: [0, Math.PI, 0],
-      size: [2.15, 0.78],
+      position: [-22.18, 2.58, -2.86],
+      rotation: [0, Math.PI / 2, 0],
+      size: [2.32, 0.84],
     },
     {
       id: "device-rack",
       title: "Device Rack",
       lines: formatDawDeviceLines(localDawState),
       accentColor: phaseVisuals.timerAccent,
-      position: [-16.95, 2.2, -8.68],
+      position: [-16.88, 2.24, -8.58],
       rotation: [0, 0, 0],
-      size: [2.25, 0.78],
+      size: [2.4, 0.84],
+    },
+    {
+      id: "mixer-view",
+      title: "Mixer View",
+      lines: mixerMonitor.lines,
+      accentColor: phaseVisuals.gridSecondary,
+      position: [-16.88, 3.18, -8.58],
+      rotation: [0, 0, 0],
+      size: [3.38, 1.3],
+      kind: "mixer-grid",
+      mixer: mixerMonitor,
     },
     {
       id: "studio-truth",
-      title: "Studio Truth",
-      lines: formatStudioTruthPanelLines(localDawState, localDawAudioState),
+      title: "Patch / Signal",
+      lines: formatStudioPatchSignalTruthLines({
+        guitarHolderLabel,
+        isGuitarHeldByAnyone,
+        isLocalHoldingGuitar,
+        localDawAudioState,
+        localDawState,
+        recordingStatus: studioGuitarRecordingStatus,
+        sharedDawClips,
+        sharedDawTransport,
+      }),
       accentColor: getStudioTruthPanelAccentColor(localDawState, localDawAudioState),
-      position: [-22.28, 1.48, -2.82],
+      position: [-22.18, 1.44, -2.88],
       rotation: [0, Math.PI / 2, 0],
-      size: [2.15, 0.9],
+      size: [2.34, 0.96],
     },
   ], [
     phaseVisuals.gridPrimary,
     phaseVisuals.gridSecondary,
     phaseVisuals.timerAccent,
+    arrangementMonitor,
     localDawState,
     localDawAudioState,
     sharedDawClips,
-    localUserIdForSharedDawClips,
-    canAdminSharedDawClips,
+    sharedDawTransport,
+    guitarHolderLabel,
+    isGuitarHeldByAnyone,
+    isLocalHoldingGuitar,
+    mixerMonitor.lines,
+    mixerMonitor.lastSoundLine,
+    mixerMonitor.silenceLine,
+    mixerMonitor.engineLine,
+    studioGuitarRecordingStatus,
+    sequenceMonitor.lines,
+    sequenceMonitor.sequence,
+    mixerMonitor,
   ]);
 
   return (
@@ -6120,56 +10826,80 @@ export function Level1RecordingStudioRoom({
         <boxGeometry args={[2.35, 0.055, 0.08]} />
         <meshBasicMaterial args={[{ color: phaseVisuals.gridSecondary }]} />
       </mesh>
-      <StudioDeskShell
-        accentColor={phaseVisuals.gridSecondary}
-        label="DAW"
-        position={[-21.25, 0, -4.6]}
-        rotation={[0, Math.PI / 2, 0]}
-        showLabel={false}
-        size={[2.65, 0.58, 0.58]}
-        variant="daw"
-      />
-      <StudioTransportControls
-        localDawState={localDawState}
-        localDawActions={localDawActions}
-        phaseVisuals={phaseVisuals}
-        sharedDawTransport={sharedDawTransport}
-        canControlSharedDawTransport={canControlSharedDawTransport}
-        onSetSharedDawTempo={onSetSharedDawTempo}
-        onPlaySharedDawTransport={onPlaySharedDawTransport}
-        onStopSharedDawTransport={onStopSharedDawTransport}
-      />
-      <StudioClipGridControls localDawState={localDawState} localDawActions={localDawActions} phaseVisuals={phaseVisuals} />
-      <StudioSharedClipControls
-        localDawState={localDawState}
-        localDawActions={localDawActions}
-        sharedDawClips={sharedDawClips}
-        localUserIdForSharedDawClips={localUserIdForSharedDawClips}
-        canAdminSharedDawClips={canAdminSharedDawClips}
-        onPublishSharedDawClip={onPublishSharedDawClip}
-        onClearSharedDawClip={onClearSharedDawClip}
-        phaseVisuals={phaseVisuals}
-      />
-      <StudioDeviceChainControls localDawState={localDawState} localDawActions={localDawActions} phaseVisuals={phaseVisuals} />
-      <StudioMixerControls
-        localDawState={localDawState}
-        localDawActions={localDawActions}
-        localDawAudioState={localDawAudioState}
-        localDawAudioActions={localDawAudioActions}
-        phaseVisuals={phaseVisuals}
-      />
-      <StudioAudioEngineControl localDawAudioState={localDawAudioState} localDawAudioActions={localDawAudioActions} phaseVisuals={phaseVisuals} />
-      <StudioAudioInterface localDawAudioState={localDawAudioState} localDawState={localDawState} phaseVisuals={phaseVisuals} />
-      <StudioPatchResetControl localDawActions={localDawActions} localDawState={localDawState} phaseVisuals={phaseVisuals} />
-      <StudioPianoShell
-        accentColor="#73ff4c"
-        localDawState={localDawState}
-        localDawActions={localDawActions}
-        localDawAudioState={localDawAudioState}
-        localDawAudioActions={localDawAudioActions}
-        onBroadcastDawLiveSound={onBroadcastDawLiveSound}
-        position={STUDIO_PIANO_POSITION}
-      />
+      <StudioLayoutStationGroup stationId="daw" transform={layoutState.daw} isMoving={movingLayoutStationId === "daw"} isTargeted={activeLayoutStationId === "daw"} showGrabBox={showLayoutGrabBoxes}>
+        <StudioDeskShell
+          accentColor={phaseVisuals.gridSecondary}
+          label="DAW"
+          position={STUDIO_DAW_POSITION}
+          rotation={STUDIO_DAW_ROTATION}
+          showLabel={false}
+          size={[2.65, 0.58, 0.58]}
+          variant="daw"
+        />
+        <StudioTransportControls
+          localDawState={localDawState}
+          localDawActions={localDawActions}
+          phaseVisuals={phaseVisuals}
+          sharedDawTransport={sharedDawTransport}
+          canControlSharedDawTransport={canControlSharedDawTransport}
+          onSetSharedDawTempo={onSetSharedDawTempo}
+          onPlaySharedDawTransport={onPlaySharedDawTransport}
+          onStopSharedDawTransport={onStopSharedDawTransport}
+        />
+        <StudioClipGridControls localDawState={localDawState} localDawActions={localDawActions} phaseVisuals={phaseVisuals} />
+        <StudioSharedClipControls
+          localDawState={localDawState}
+          localDawActions={localDawActions}
+          sharedDawClips={sharedDawClips}
+          localUserIdForSharedDawClips={localUserIdForSharedDawClips}
+          canAdminSharedDawClips={canAdminSharedDawClips}
+          onPublishSharedDawClip={onPublishSharedDawClip}
+          onClearSharedDawClip={onClearSharedDawClip}
+          phaseVisuals={phaseVisuals}
+        />
+        <StudioDeviceChainControls localDawState={localDawState} localDawActions={localDawActions} phaseVisuals={phaseVisuals} />
+        <StudioMixerControls
+          localDawState={localDawState}
+          localDawActions={localDawActions}
+          localDawAudioState={localDawAudioState}
+          localDawAudioActions={localDawAudioActions}
+          phaseVisuals={phaseVisuals}
+        />
+        <StudioAudioEngineControl localDawAudioState={localDawAudioState} localDawAudioActions={localDawAudioActions} phaseVisuals={phaseVisuals} />
+        <StudioPatchResetControl localDawActions={localDawActions} localDawState={localDawState} phaseVisuals={phaseVisuals} />
+      </StudioLayoutStationGroup>
+      <StudioLayoutStationGroup stationId="audio-interface" transform={layoutState["audio-interface"]} isMoving={movingLayoutStationId === "audio-interface"} isTargeted={activeLayoutStationId === "audio-interface"} showGrabBox={showLayoutGrabBoxes}>
+        <StudioAudioInterface localDawAudioState={localDawAudioState} localDawState={localDawState} phaseVisuals={phaseVisuals} />
+      </StudioLayoutStationGroup>
+      <StudioLayoutStationGroup stationId="piano" transform={layoutState.piano} isMoving={movingLayoutStationId === "piano"} isTargeted={activeLayoutStationId === "piano"} showGrabBox={showLayoutGrabBoxes}>
+        <StudioPianoShell
+          accentColor="#73ff4c"
+          localDawState={localDawState}
+          localDawActions={localDawActions}
+          localDawAudioState={localDawAudioState}
+          localDawAudioActions={localDawAudioActions}
+          onBroadcastDawLiveSound={onBroadcastDawLiveSound}
+          position={STUDIO_PIANO_POSITION}
+        />
+      </StudioLayoutStationGroup>
+      <StudioLayoutStationGroup stationId="guitar" transform={layoutState.guitar} isMoving={movingLayoutStationId === "guitar"} isTargeted={activeLayoutStationId === "guitar"} showGrabBox={showLayoutGrabBoxes}>
+        <StudioGuitarStand
+          holderLabel={guitarHolderLabel}
+          isHeldByAnyone={isGuitarHeldByAnyone || heldStudioInstrument === "guitar"}
+          isHeldByLocal={isLocalHoldingGuitar || heldStudioInstrument === "guitar"}
+          isHeldByAnother={isGuitarHeldByAnother}
+          localDawAudioState={localDawAudioState}
+          onDrop={onDropStudioGuitar}
+          onPickup={onPickupStudioGuitar}
+          onToggleRecording={onToggleStudioGuitarRecording}
+          studioGuitarBankLabel={studioGuitarBankLabel}
+          recordingStatus={studioGuitarRecordingStatus}
+          studioGuitarFeedbackKey={studioGuitarFeedbackKey}
+          studioGuitarNoteIndex={studioGuitarNoteIndex}
+          studioGuitarNoteLabel={studioGuitarNoteLabel}
+          studioGuitarSlotIndex={studioGuitarSlotIndex}
+        />
+      </StudioLayoutStationGroup>
       <StudioFmSynthControls
         localDawState={localDawState}
         localDawAudioState={localDawAudioState}
@@ -6177,38 +10907,51 @@ export function Level1RecordingStudioRoom({
         onBroadcastDawLiveSound={onBroadcastDawLiveSound}
         phaseVisuals={phaseVisuals}
       />
-      <StudioDeskShell
-        accentColor="#f8d36a"
-        label="Looper"
-        position={[-17.0, 0, -8.1]}
-        rotation={[0, 0, 0]}
-        size={[2.28, 0.5, 1.02]}
-        variant="looper"
-      />
-      <StudioLooperControls localDawState={localDawState} localDawActions={localDawActions} phaseVisuals={phaseVisuals} />
-      <StudioDrumMachineControls
-        localDawState={localDawState}
-        localDawAudioState={localDawAudioState}
-        localDawAudioActions={localDawAudioActions}
-        onBroadcastDawLiveSound={onBroadcastDawLiveSound}
-        phaseVisuals={phaseVisuals}
-      />
-      <StudioDrumKit
-        localDawState={localDawState}
-        localDawAudioState={localDawAudioState}
-        localDawAudioActions={localDawAudioActions}
-        onBroadcastDawLiveSound={onBroadcastDawLiveSound}
-        phaseVisuals={phaseVisuals}
-      />
-      <StudioDeskShell
-        accentColor="#f64fff"
-        label="DJ"
-        position={[-12.0, 0, -1.2]}
-        rotation={[0, -0.55, 0]}
-        size={[1.48, 0.52, 0.62]}
-        variant="dj"
-      />
-      <StudioDjControls localDawState={localDawState} localDawActions={localDawActions} phaseVisuals={phaseVisuals} />
+      <StudioLayoutStationGroup stationId="looper" transform={layoutState.looper} isMoving={movingLayoutStationId === "looper"} isTargeted={activeLayoutStationId === "looper"} showGrabBox={showLayoutGrabBoxes}>
+        <StudioDeskShell
+          accentColor="#f8d36a"
+          label="Looper"
+          position={STUDIO_LOOPER_POSITION}
+          rotation={STUDIO_LOOPER_ROTATION}
+          size={[2.28, 0.5, 1.02]}
+          variant="looper"
+        />
+        <StudioLooperControls localDawState={localDawState} localDawActions={localDawActions} phaseVisuals={phaseVisuals} />
+        <StudioDrumMachineControls
+          localDawState={localDawState}
+          localDawAudioState={localDawAudioState}
+          localDawAudioActions={localDawAudioActions}
+          onBroadcastDawLiveSound={onBroadcastDawLiveSound}
+          phaseVisuals={phaseVisuals}
+        />
+      </StudioLayoutStationGroup>
+      <StudioLayoutStationGroup stationId="drums" transform={layoutState.drums} isMoving={movingLayoutStationId === "drums"} isTargeted={activeLayoutStationId === "drums"} showGrabBox={showLayoutGrabBoxes}>
+        <StudioDrumKit
+          localDawState={localDawState}
+          localDawAudioState={localDawAudioState}
+          localDawAudioActions={localDawAudioActions}
+          onBroadcastDawLiveSound={onBroadcastDawLiveSound}
+          phaseVisuals={phaseVisuals}
+        />
+      </StudioLayoutStationGroup>
+      <StudioDjPlatform phaseVisuals={phaseVisuals} />
+      <StudioLayoutStationGroup stationId="dj" transform={layoutState.dj} isMoving={movingLayoutStationId === "dj"} isTargeted={activeLayoutStationId === "dj"} showGrabBox={showLayoutGrabBoxes}>
+        {soundCloudBooth ? (
+          <StudioSoundCloudDjControls soundCloudBooth={soundCloudBooth} phaseVisuals={phaseVisuals} />
+        ) : (
+          <>
+            <StudioDeskShell
+              accentColor="#f64fff"
+              label="DJ"
+              position={STUDIO_SOUNDCLOUD_DJ_POSITION}
+              rotation={STUDIO_SOUNDCLOUD_DJ_ROTATION}
+              size={STUDIO_SOUNDCLOUD_DJ_DESK_SIZE}
+              variant="dj"
+            />
+            <StudioDjControls localDawState={localDawState} localDawActions={localDawActions} phaseVisuals={phaseVisuals} />
+          </>
+        )}
+      </StudioLayoutStationGroup>
       <StudioRackShell accentColor={phaseVisuals.gridPrimary} label="Instrument Rack" position={[-20.1, 0, -8.32]} />
       <StudioBassMachineControls
         localDawState={localDawState}
@@ -6227,13 +10970,32 @@ export function Level1RecordingStudioRoom({
       <StudioLoosePatchCablePreview localDawState={localDawState} />
       <StudioPatchInteractionTargets localDawState={localDawState} localDawActions={localDawActions} phaseVisuals={phaseVisuals} />
 
-      {overviewScreens.map((screen) => (
-        <StudioOverviewScreen key={screen.id} screen={screen} />
-      ))}
+      {overviewScreens.map((screen) => {
+        const stationId = getStudioOverviewScreenStationId(screen.id);
+
+        return (
+          <StudioLayoutStationGroup
+            key={screen.id}
+            stationId={stationId}
+            transform={layoutState[stationId]}
+            isMoving={movingLayoutStationId === stationId}
+            isTargeted={activeLayoutStationId === stationId}
+            showGrabBox={showLayoutGrabBoxes}
+          >
+            <StudioOverviewScreen screen={screen} />
+          </StudioLayoutStationGroup>
+        );
+      })}
+
+      <StudioLayoutMoveStatus
+        moveState={layoutMoveState}
+        transform={layoutMoveState ? layoutState[layoutMoveState.stationId] : undefined}
+      />
 
       <StudioRoleBadges
         area={area}
         freeRoamPresence={freeRoamPresence}
+        layoutState={layoutState}
         localDawState={localDawState}
         localUserId={localUserId}
         ownerId={ownerId}
