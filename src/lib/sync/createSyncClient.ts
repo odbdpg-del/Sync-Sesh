@@ -3,13 +3,21 @@ import type { SyncClient } from "./types";
 import { getLocalProfile } from "../session/localProfile";
 import { WebSocketSyncClient } from "./wsSyncClient";
 
+function isDiscordProxyHost() {
+  return window.location.host.includes("discordsays.com") || window.location.host.includes("discordsez.com");
+}
+
+function buildActivityProxyWebSocketUrl() {
+  const url = new URL("/sync", window.location.href);
+  url.protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+  return url.toString();
+}
+
 function resolveSyncServerUrl() {
   const configuredUrl = import.meta.env.VITE_SYNC_SERVER_URL;
 
-  if (!configuredUrl || configuredUrl === "auto") {
-    const url = new URL("/sync", window.location.href);
-    url.protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    return url.toString();
+  if (!configuredUrl || configuredUrl === "auto" || isDiscordProxyHost()) {
+    return buildActivityProxyWebSocketUrl();
   }
 
   try {
@@ -18,9 +26,7 @@ function resolveSyncServerUrl() {
     const isRemotePage = window.location.hostname !== "localhost" && window.location.hostname !== "127.0.0.1";
 
     if (isLocalTarget && isRemotePage) {
-      const proxiedUrl = new URL("/sync", window.location.href);
-      proxiedUrl.protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-      return proxiedUrl.toString();
+      return buildActivityProxyWebSocketUrl();
     }
 
     return parsed.toString();
