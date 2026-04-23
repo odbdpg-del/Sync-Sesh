@@ -24,12 +24,14 @@ import type {
   SharedDawControlEvent,
   SharedDawLiveSoundPayload,
   SharedDawMidiNote,
+  SharedStudioGuitarState,
 } from "../../types/session";
 
 export const DEFAULT_TIMER_SECONDS = 50;
 export const DEFAULT_PRECOUNT_SECONDS = 3;
 export const TIMER_PRESETS = [30, 45, 60];
 export const PRECOUNT_PRESETS = [3, 5];
+export const MAX_COUNTDOWN_PRECISION_DIGITS = 5;
 const MAX_RANGE_SCORE_RESULTS = 32;
 const FREE_ROAM_PRESENCE_TTL_MS = 10_000;
 const DEFAULT_DAW_BPM = 120;
@@ -237,12 +239,54 @@ function upsertRangeScoreResult(results: RangeScoreResult[], nextResult: RangeSc
     .slice(0, MAX_RANGE_SCORE_RESULTS);
 }
 
+function releaseStudioGuitar(studioGuitar: SharedStudioGuitarState, updatedAt: string, updatedByUserId: string | null) {
+  if (!studioGuitar.holderUserId) {
+    return studioGuitar;
+  }
+
+  return {
+    holderUserId: null,
+    updatedAt,
+    updatedByUserId,
+    revision: studioGuitar.revision + 1,
+  };
+}
+
+function releaseStudioGuitarIfHeldBy(
+  studioGuitar: SharedStudioGuitarState,
+  userId: string,
+  updatedAt: string,
+  updatedByUserId: string | null = userId,
+) {
+  if (studioGuitar.holderUserId !== userId) {
+    return studioGuitar;
+  }
+
+  return releaseStudioGuitar(studioGuitar, updatedAt, updatedByUserId);
+}
+
+function releaseStudioGuitarIfHolderMissing(studioGuitar: SharedStudioGuitarState, users: SessionUser[], updatedAt: string) {
+  if (!studioGuitar.holderUserId || users.some((user) => user.id === studioGuitar.holderUserId)) {
+    return studioGuitar;
+  }
+
+  return releaseStudioGuitar(studioGuitar, updatedAt, "system");
+}
+
 function clampPrecountDuration(value: number) {
   if (!Number.isFinite(value)) {
     return DEFAULT_PRECOUNT_SECONDS;
   }
 
   return PRECOUNT_PRESETS.includes(Math.round(value)) ? Math.round(value) : DEFAULT_PRECOUNT_SECONDS;
+}
+
+function clampCountdownPrecisionDigits(value: number) {
+  if (!Number.isFinite(value)) {
+    return 0;
+  }
+
+  return Math.min(MAX_COUNTDOWN_PRECISION_DIGITS, Math.max(0, Math.round(value)));
 }
 
 function clampDawBpm(value: number) {
@@ -725,6 +769,7 @@ export function createSessionSnapshot(overrides?: Partial<SessionSnapshot>): Ses
     timerConfig: {
       durationSeconds: DEFAULT_TIMER_SECONDS,
       preCountSeconds: DEFAULT_PRECOUNT_SECONDS,
+      countdownPrecisionDigits: 0,
       allowLateJoinSpectators: true,
       lateJoinersJoinReady: false,
       autoJoinOnLoad: false,
@@ -737,6 +782,7 @@ export function createSessionSnapshot(overrides?: Partial<SessionSnapshot>): Ses
     dawTransport: createInitialSharedDawTransport(),
     dawClips: createInitialSharedDawClipsState(),
     dawLiveSound: null,
+    studioGuitar: createInitialSharedStudioGuitarState(),
   };
 
   return {
@@ -764,6 +810,10 @@ export function createSessionSnapshot(overrides?: Partial<SessionSnapshot>): Ses
       clips: overrides?.dawClips?.clips ?? base.dawClips.clips,
     },
     dawLiveSound: overrides?.dawLiveSound ?? base.dawLiveSound,
+    studioGuitar: {
+      ...base.studioGuitar,
+      ...overrides?.studioGuitar,
+    },
     users: overrides?.users ?? base.users,
   };
 }
@@ -790,12 +840,48 @@ export function createInitialSharedDawClipsState(updatedAt = INITIAL_SHARED_DAW_
   };
 }
 
+export function createInitialSharedStudioGuitarState(updatedAt = INITIAL_SHARED_DAW_TRANSPORT_AT): SessionSnapshot["studioGuitar"] {
+  return {
+    holderUserId: null,
+    updatedAt,
+    updatedByUserId: null,
+    revision: 0,
+  };
+}
+
 export function normalizeSessionSnapshot(snapshot: SessionSnapshot): SessionSnapshot {
+  const studioGuitar = snapshot.studioGuitar ?? createInitialSharedStudioGuitarState();
+  const timerConfig = snapshot.timerConfig ?? {
+    durationSeconds: DEFAULT_TIMER_SECONDS,
+    preCountSeconds: DEFAULT_PRECOUNT_SECONDS,
+    countdownPrecisionDigits: 0,
+    allowLateJoinSpectators: true,
+    lateJoinersJoinReady: false,
+    autoJoinOnLoad: false,
+    presets: TIMER_PRESETS,
+    preCountPresets: PRECOUNT_PRESETS,
+  };
+
   return {
     ...snapshot,
+    timerConfig: {
+      durationSeconds: clampTimerDuration(timerConfig.durationSeconds),
+      preCountSeconds: clampPrecountDuration(timerConfig.preCountSeconds),
+      countdownPrecisionDigits: clampCountdownPrecisionDigits(timerConfig.countdownPrecisionDigits ?? 0),
+      allowLateJoinSpectators: timerConfig.allowLateJoinSpectators ?? true,
+      lateJoinersJoinReady: timerConfig.lateJoinersJoinReady ?? false,
+      autoJoinOnLoad: timerConfig.autoJoinOnLoad ?? false,
+      presets: timerConfig.presets ?? TIMER_PRESETS,
+      preCountPresets: timerConfig.preCountPresets ?? PRECOUNT_PRESETS,
+    },
     dawTransport: snapshot.dawTransport ?? createInitialSharedDawTransport(),
     dawClips: snapshot.dawClips ?? createInitialSharedDawClipsState(),
     dawLiveSound: snapshot.dawLiveSound ?? null,
+    studioGuitar: {
+      ...studioGuitar,
+      holderUserId: studioGuitar.holderUserId ?? null,
+      updatedByUserId: studioGuitar.updatedByUserId ?? null,
+    },
   };
 }
 
@@ -807,7 +893,10 @@ export function attachLocalProfile(
   const normalizedSnapshot = normalizeSessionSnapshot(snapshot);
   const normalizedTimerConfig = {
     ...normalizedSnapshot.timerConfig,
+    durationSeconds: clampTimerDuration(normalizedSnapshot.timerConfig.durationSeconds),
     preCountSeconds: clampPrecountDuration(normalizedSnapshot.timerConfig.preCountSeconds),
+    countdownPrecisionDigits: clampCountdownPrecisionDigits(normalizedSnapshot.timerConfig.countdownPrecisionDigits ?? 0),
+    presets: normalizedSnapshot.timerConfig.presets ?? TIMER_PRESETS,
     preCountPresets: normalizedSnapshot.timerConfig.preCountPresets ?? PRECOUNT_PRESETS,
   };
 
@@ -949,6 +1038,28 @@ export function reduceSessionEvent(snapshot: SessionSnapshot, event: SessionEven
         },
       };
     }
+    case "roll_display_name":
+    case "select_display_name": {
+      const localUser = snapshot.users.find((user) => user.id === actor.id);
+
+      if (!localUser) {
+        return snapshot;
+      }
+
+      return {
+        ...snapshot,
+        users: snapshot.users.map((user) => (
+          user.id === actor.id
+            ? {
+                ...user,
+                displayName: actor.displayName,
+                avatarSeed: actor.avatarSeed,
+                avatarUrl: actor.avatarUrl,
+              }
+            : user
+        )),
+      };
+    }
     case "ready_hold_start": {
       const localUser = snapshot.users.find((user) => user.id === actor.id);
 
@@ -961,6 +1072,7 @@ export function reduceSessionEvent(snapshot: SessionSnapshot, event: SessionEven
       return {
         ...snapshot,
         users: nextUsers,
+        studioGuitar: releaseStudioGuitarIfHolderMissing(snapshot.studioGuitar, nextUsers, new Date(nowMs).toISOString()),
         session: {
           ...snapshot.session,
           phase: getBaseLobbyPhase(nextUsers),
@@ -1100,6 +1212,7 @@ export function reduceSessionEvent(snapshot: SessionSnapshot, event: SessionEven
         freeRoamPresence: [],
         dawClips: createInitialSharedDawClipsState(new Date(nowMs).toISOString()),
         dawLiveSound: null,
+        studioGuitar: createInitialSharedStudioGuitarState(new Date(nowMs).toISOString()),
         session: {
           ...snapshot.session,
           phase: getBaseLobbyPhase(nextUsers),
@@ -1157,6 +1270,7 @@ export function reduceSessionEvent(snapshot: SessionSnapshot, event: SessionEven
       return {
         ...snapshot,
         users: nextUsers,
+        studioGuitar: releaseStudioGuitarIfHolderMissing(snapshot.studioGuitar, nextUsers, new Date(nowMs).toISOString()),
         session: {
           ...snapshot.session,
           phase: getBaseLobbyPhase(nextUsers),
@@ -1169,10 +1283,12 @@ export function reduceSessionEvent(snapshot: SessionSnapshot, event: SessionEven
       }
 
       const nextUsers = removeTestUsers(snapshot.users);
+      const updatedAt = new Date(nowMs).toISOString();
 
       return {
         ...snapshot,
         users: nextUsers,
+        studioGuitar: releaseStudioGuitarIfHolderMissing(snapshot.studioGuitar, nextUsers, updatedAt),
         session: {
           ...snapshot.session,
           phase: getBaseLobbyPhase(nextUsers),
@@ -1202,6 +1318,19 @@ export function reduceSessionEvent(snapshot: SessionSnapshot, event: SessionEven
         timerConfig: {
           ...snapshot.timerConfig,
           autoJoinOnLoad: event.enabled,
+        },
+      };
+    }
+    case "admin_set_countdown_precision_digits": {
+      if (!isActorHost(snapshot, actor)) {
+        return snapshot;
+      }
+
+      return {
+        ...snapshot,
+        timerConfig: {
+          ...snapshot.timerConfig,
+          countdownPrecisionDigits: clampCountdownPrecisionDigits(event.digits),
         },
       };
     }
@@ -1255,14 +1384,16 @@ export function reduceSessionEvent(snapshot: SessionSnapshot, event: SessionEven
     }
     case "free_roam_presence_clear": {
       const nextFreeRoamPresence = snapshot.freeRoamPresence.filter((presence) => presence.userId !== actor.id);
+      const nextStudioGuitar = releaseStudioGuitarIfHeldBy(snapshot.studioGuitar, actor.id, new Date(nowMs).toISOString());
 
-      if (nextFreeRoamPresence.length === snapshot.freeRoamPresence.length) {
+      if (nextFreeRoamPresence.length === snapshot.freeRoamPresence.length && nextStudioGuitar === snapshot.studioGuitar) {
         return snapshot;
       }
 
       return {
         ...snapshot,
         freeRoamPresence: nextFreeRoamPresence,
+        studioGuitar: nextStudioGuitar,
       };
     }
     case "daw_live_sound": {
@@ -1292,6 +1423,41 @@ export function reduceSessionEvent(snapshot: SessionSnapshot, event: SessionEven
           triggeredByUserId: actor.id,
           revision,
         },
+      };
+    }
+    case "studio_guitar_pickup": {
+      if (!isEligibleDawClipActor(snapshot, actor) || !isActorFreshInArea(snapshot, actor, "recording-studio", nowMs)) {
+        return snapshot;
+      }
+
+      if (snapshot.studioGuitar.holderUserId && snapshot.studioGuitar.holderUserId !== actor.id) {
+        return snapshot;
+      }
+
+      if (snapshot.studioGuitar.holderUserId === actor.id) {
+        return snapshot;
+      }
+
+      const updatedAt = new Date(nowMs).toISOString();
+
+      return {
+        ...snapshot,
+        studioGuitar: {
+          holderUserId: actor.id,
+          updatedAt,
+          updatedByUserId: actor.id,
+          revision: snapshot.studioGuitar.revision + 1,
+        },
+      };
+    }
+    case "studio_guitar_drop": {
+      if (snapshot.studioGuitar.holderUserId !== actor.id) {
+        return snapshot;
+      }
+
+      return {
+        ...snapshot,
+        studioGuitar: releaseStudioGuitar(snapshot.studioGuitar, new Date(nowMs).toISOString(), actor.id),
       };
     }
     case "daw_transport_set_tempo": {
@@ -1449,11 +1615,15 @@ export function advanceSessionTime(snapshot: SessionSnapshot, nowMs = Date.now()
   snapshot = normalizeSessionSnapshot(snapshot);
 
   const prunedFreeRoamPresence = pruneFreeRoamPresence(snapshot.freeRoamPresence, nowMs);
-  const snapshotWithFreshPresence = prunedFreeRoamPresence.length === snapshot.freeRoamPresence.length
+  const studioGuitarAfterPresence = snapshot.studioGuitar.holderUserId && !prunedFreeRoamPresence.some((presence) => presence.userId === snapshot.studioGuitar.holderUserId)
+    ? releaseStudioGuitar(snapshot.studioGuitar, new Date(nowMs).toISOString(), "system")
+    : snapshot.studioGuitar;
+  const snapshotWithFreshPresence = prunedFreeRoamPresence.length === snapshot.freeRoamPresence.length && studioGuitarAfterPresence === snapshot.studioGuitar
     ? snapshot
     : {
       ...snapshot,
       freeRoamPresence: prunedFreeRoamPresence,
+      studioGuitar: studioGuitarAfterPresence,
     };
 
   if (!hasValidCountdownTimeline(snapshotWithFreshPresence)) {

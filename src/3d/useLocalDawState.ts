@@ -8,7 +8,7 @@ export type DawStationId = "daw" | "piano-midi" | "looper" | "dj" | "instrument-
 export type DawTrackId = SharedDawTrackId;
 export type DawDeviceKind = "instrument" | "filter" | "echo" | "reverb";
 export type DawClipState = "empty" | "armed" | "stopped" | "queued" | "playing" | "recording";
-export type LocalDawNoteSource = "piano-live" | "shared-import";
+export type LocalDawNoteSource = "piano-live" | "guitar-live" | "shared-import";
 export type LocalDawDjDeckId = "A" | "B";
 export type LocalDawDjDeckVisualState = "empty" | "cued" | "playing";
 export type LocalDawDjDeckSourceKind = "local-clip";
@@ -54,6 +54,11 @@ export interface LocalDawNoteInput {
   frequency: number;
   durationSeconds?: number;
   source?: LocalDawNoteSource;
+}
+
+export interface LocalDawNoteRecordTarget {
+  trackId: DawTrackId;
+  sceneIndex: number;
 }
 
 export interface LocalDawMidiNoteEvent {
@@ -194,7 +199,8 @@ export interface LocalDawActions {
   selectClip: (clipId: string) => void;
   activateClipVisualState: (clipId: string) => void;
   toggleSelectedClipRecording: () => void;
-  recordPianoNoteEvent: (note: LocalDawNoteInput) => void;
+  setClipRecording: (trackId: DawTrackId, sceneIndex: number, isRecording: boolean) => void;
+  recordDawNoteEvent: (note: LocalDawNoteInput, target?: LocalDawNoteRecordTarget) => void;
   markClipNotePlayback: (trigger: LocalDawPlaybackTrigger) => void;
   stopAllClipPlayback: () => void;
   setSelectedClipLoopLengthBars: (lengthBars: number) => void;
@@ -998,11 +1004,59 @@ export function useLocalDawState() {
       };
     });
   }, []);
-  const recordPianoNoteEvent = useCallback((note: LocalDawNoteInput) => {
+  const setClipRecording = useCallback((trackId: DawTrackId, sceneIndex: number, isRecording: boolean) => {
     setState((currentState) => {
+      const targetClip = currentState.clips.find((clip) => clip.trackId === trackId && clip.sceneIndex === sceneIndex);
+
+      if (!targetClip) {
+        return currentState;
+      }
+
+      const targetClipNoteCount = currentState.midiNotes.filter((note) => note.clipId === targetClip.id).length;
+      const nextTargetClipState: DawClipState = isRecording
+        ? "recording"
+        : targetClipNoteCount > 0 ? "stopped" : "empty";
+      const clips = currentState.clips.map((clip) => {
+        if (clip.id === targetClip.id) {
+          return {
+            ...clip,
+            state: nextTargetClipState,
+          };
+        }
+
+        if (isRecording && clip.trackId === targetClip.trackId && clip.state === "recording") {
+          return {
+            ...clip,
+            state: "stopped" as const,
+          };
+        }
+
+        return clip;
+      });
+      const isTrackStillArmed = clips.some((clip) => (
+        clip.trackId === targetClip.trackId &&
+        (clip.state === "armed" || clip.state === "recording")
+      ));
+
+      return {
+        ...currentState,
+        clips,
+        tracks: currentState.tracks.map((track) => (
+          track.id === targetClip.trackId ? { ...track, armed: isTrackStillArmed } : track
+        )),
+        selectedStationId: "daw",
+        selectedTrackId: targetClip.trackId,
+        selectedSceneIndex: targetClip.sceneIndex,
+      };
+    });
+  }, []);
+  const recordDawNoteEvent = useCallback((note: LocalDawNoteInput, target?: LocalDawNoteRecordTarget) => {
+    setState((currentState) => {
+      const targetTrackId = target?.trackId ?? currentState.selectedTrackId;
+      const targetSceneIndex = target?.sceneIndex ?? currentState.selectedSceneIndex;
       const selectedClip = currentState.clips.find((clip) => (
-        clip.trackId === currentState.selectedTrackId &&
-        clip.sceneIndex === currentState.selectedSceneIndex
+        clip.trackId === targetTrackId &&
+        clip.sceneIndex === targetSceneIndex
       ));
 
       if (!selectedClip || (selectedClip.state !== "armed" && selectedClip.state !== "recording")) {
@@ -1049,6 +1103,9 @@ export function useLocalDawState() {
         )),
         midiNotes: [...currentState.midiNotes, nextNote],
         lastRecordedNoteId: noteId,
+        selectedStationId: "daw",
+        selectedTrackId: selectedClip.trackId,
+        selectedSceneIndex: selectedClip.sceneIndex,
       };
     });
   }, []);
@@ -1399,13 +1456,14 @@ export function useLocalDawState() {
     connectActivePatchCableToPort,
     markClipNotePlayback,
     nudgeDjCrossfader,
-    recordPianoNoteEvent,
+    recordDawNoteEvent,
     resetPatchToDefaults,
     selectDevice,
     selectDjDeck,
     selectDjDeckSource,
     setDjCrossfader,
     setSelectedClipLoopLengthBars,
+    setClipRecording,
     setTrackVolume,
     selectClip,
     stopTransport,
@@ -1430,13 +1488,14 @@ export function useLocalDawState() {
     connectActivePatchCableToPort,
     markClipNotePlayback,
     nudgeDjCrossfader,
-    recordPianoNoteEvent,
+    recordDawNoteEvent,
     resetPatchToDefaults,
     selectDevice,
     selectDjDeck,
     selectDjDeckSource,
     setDjCrossfader,
     setSelectedClipLoopLengthBars,
+    setClipRecording,
     setTrackVolume,
     selectClip,
     stopTransport,

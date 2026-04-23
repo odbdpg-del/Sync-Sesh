@@ -1,26 +1,19 @@
 import type { LocalProfile } from "../../types/session";
+import { getAvatarSeedFromName, getRandomGeneratedProfileName } from "./generatedNames";
 
 const STORAGE_KEY = "dabsync.local-profile";
-const NAME_POOL = ["LaserFox", "PixelComet", "TurboMint", "ArcShift", "NovaLatch", "EchoBloom"];
+const LEGACY_NAME_POOL = new Set(["LaserFox", "PixelComet", "TurboMint", "ArcShift", "NovaLatch", "EchoBloom"]);
 
 function randomId() {
   return Math.random().toString(36).slice(2, 10);
 }
 
 function randomName() {
-  return NAME_POOL[Math.floor(Math.random() * NAME_POOL.length)];
-}
-
-function avatarSeedFromName(name: string) {
-  return name
-    .replace(/[^A-Za-z]/g, "")
-    .slice(0, 2)
-    .toUpperCase()
-    .padEnd(2, "X");
+  return getRandomGeneratedProfileName();
 }
 
 export function buildAvatarSeed(name: string) {
-  return avatarSeedFromName(name);
+  return getAvatarSeedFromName(name);
 }
 
 export function persistLocalProfile(localProfile: LocalProfile) {
@@ -33,24 +26,40 @@ export function persistLocalProfile(localProfile: LocalProfile) {
 
 export function getLocalProfile(): LocalProfile {
   if (typeof window === "undefined") {
+    const displayName = randomName();
+
     return {
       id: `user-${randomId()}`,
-      displayName: randomName(),
-      avatarSeed: "LX",
+      displayName,
+      avatarSeed: getAvatarSeedFromName(displayName),
     };
   }
 
   const existing = window.localStorage.getItem(STORAGE_KEY);
 
   if (existing) {
-    return JSON.parse(existing) as LocalProfile;
+    const parsed = JSON.parse(existing) as LocalProfile;
+
+    if (!LEGACY_NAME_POOL.has(parsed.displayName)) {
+      return parsed;
+    }
+
+    const displayName = randomName();
+    const refreshedProfile = {
+      ...parsed,
+      displayName,
+      avatarSeed: getAvatarSeedFromName(displayName),
+    };
+
+    persistLocalProfile(refreshedProfile);
+    return refreshedProfile;
   }
 
   const displayName = randomName();
   const localProfile: LocalProfile = {
     id: `user-${randomId()}`,
     displayName,
-    avatarSeed: avatarSeedFromName(displayName),
+    avatarSeed: getAvatarSeedFromName(displayName),
   };
 
   persistLocalProfile(localProfile);

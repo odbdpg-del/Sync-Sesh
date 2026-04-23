@@ -29,6 +29,7 @@ export class MockSyncClient implements SyncClient {
       dawTransport: initialState.dawTransport,
       dawClips: initialState.dawClips,
       dawLiveSound: initialState.dawLiveSound,
+      studioGuitar: initialState.studioGuitar,
     };
     this.syncStatus = initialState.syncStatus;
   }

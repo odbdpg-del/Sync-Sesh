@@ -2,12 +2,12 @@
 
 This repo uses a simple manager/worker flow for 3D vision work.
 
-The manager is the main Codex session. The manager reads the vision docs, cuts ideas into small phases, approves or revises worker output, reviews implementation, and closes the docs.
+The manager is the main Codex session. The manager reads the vision docs, researches the code, cuts ideas into small phases, prepares the implementation spec from the actual code seams, approves or revises worker output, reviews implementation, and closes the docs.
 
 The worker has two modes:
 
-- Prepare the phase for implementation.
 - Implement the approved phase and run `npm.cmd run build`.
+- Review or prepare a phase only when the manager explicitly decides a second read-only opinion is useful.
 
 Use this flow for 3D hidden-world work unless the user asks for a different process.
 
@@ -21,30 +21,46 @@ The manager owns the shape of the work.
 - Extract wishlist items from the idea.
 - Cut the work into phases small enough for one Codex implementation pass.
 - Block out phase headings and placeholders in the vision doc when useful.
-- Dispatch one worker at a time for phase preparation or implementation.
+- Prepare the implementation spec directly from code before dispatching implementation work.
+- Write the approved implementation spec into the active phase section before implementation starts.
+- Dispatch one worker at a time for implementation by default.
+- Dispatch a worker for read-only preparation/review only when a second code read is likely to save time or reduce risk.
 - Approve, revise, or reject the worker's implementation spec.
-- Ask the worker to write the approved spec into the vision doc.
 - During implementation, review code boundaries, check whether the work is staying on task, and prepare doc cleanup.
 - After implementation, verify build status, review changed files, and close the phase docs.
 
 The manager does not let implementation start until the phase has an approved implementation spec.
 
-## Worker Mode: Prepare The Phase
+## Manager Mode: Prepare The Phase
 
 Use this mode after the manager has selected a phase but before code changes.
 
-Worker task:
+Manager task:
 
 - Read the relevant phase skeleton and surrounding vision doc context.
 - Research the code seams needed for the phase.
 - Identify likely files to touch.
 - Identify files that should not be touched.
 - Identify existing helpers, types, state, hooks, and rendering paths to reuse.
-- Draft the implementation spec in chat.
+- Draft the implementation spec directly in the vision doc.
 - Include acceptance criteria, build/manual checks, risks, wishlist mapping, and non-goals.
-- Do not edit files unless the manager explicitly asks you to write the approved spec into the doc.
+- Mark the selected phase `[~]` only when the manager is ready to run the phase.
+- Do not dispatch implementation until this spec is written into the doc.
 
-The worker's preparation output should be specific enough that another Codex pass can implement it without re-discovering the whole codebase.
+The manager-prepared spec should be specific enough that a worker can implement it without re-discovering the whole codebase.
+
+## Worker Mode: Review Or Prepare The Phase
+
+This mode is optional. Use it only when a second read-only pass is likely to save time or catch risk.
+
+Worker task:
+
+- Read the phase skeleton, approved spec, and relevant code.
+- Do not edit files.
+- Return scope corrections, expected files, files to avoid, reused helpers, acceptance checks, risks, and unresolved questions.
+- Do not duplicate manager research unless asked.
+
+The manager can approve, revise, or ignore the worker's review. The manager still owns the final spec.
 
 ## Worker Mode: Implement The Phase
 
@@ -68,15 +84,43 @@ If the implementation uncovers a scope problem, stop and report it instead of ex
 1. User gives a vision idea.
 2. Manager reads the 3D docs and researches the code.
 3. Manager turns the idea into one or more small phase skeletons in the vision doc.
-4. Manager marks the selected phase as `[~]` before worker preparation starts.
-5. Manager tells the worker: prepare the phase for implementation.
-6. Worker researches code seams and writes the proposed implementation spec in chat.
-7. Manager approves or revises the spec.
-8. Manager tells the worker to write the approved spec into the vision doc.
-9. Manager tells the worker to implement the phase.
-10. Worker implements, runs `npm.cmd run build`, and fixes phase-caused build failures.
-11. Manager reviews the changed files, confirms scope, and closes the docs.
-12. Manager marks the completed phase as `[x]` and leaves future phases as `[ ]`.
+4. Manager selects one active phase and marks it `[~]`.
+5. Manager prepares the implementation spec from code and writes it into the phase section.
+6. Optional: Manager dispatches a read-only review/prep worker if a second opinion is useful.
+7. Manager revises the spec if needed.
+8. Manager dispatches a worker to implement the approved phase, or implements directly for a small phase.
+9. Worker implements, runs `npm.cmd run build`, and fixes phase-caused build failures.
+10. Manager reviews the changed files, confirms scope, and closes the docs.
+11. Manager marks the completed phase as `[x]` and leaves future phases as `[ ]`.
+
+## Worker Lifecycle And Token Efficiency
+
+The manager may choose between reusing one worker and spawning a fresh worker.
+
+Reuse the same worker when:
+
+- The next task depends on the worker's immediate prior context.
+- The worker is continuing the same phase.
+- The worker has just implemented code and needs to answer a narrow follow-up.
+
+Spawn a fresh worker when:
+
+- A new phase has a different code area or mental model.
+- The old worker has accumulated too much irrelevant context.
+- A clean implementation pass would be cheaper than making the old worker reorient.
+- The manager has already prepared a narrow spec and the worker only needs that spec plus a few file paths.
+
+Close workers when:
+
+- Their implementation or review is complete.
+- Their context is no longer needed.
+- The phase changes and a fresh worker would be more token-efficient.
+
+Default preference:
+
+- Manager prepares the phase spec.
+- Spawn a fresh worker for implementation when the phase is non-trivial.
+- Keep one worker alive only while it is actively useful.
 
 ## Phase Status Markers
 
@@ -111,7 +155,7 @@ Before implementation, `Checklist Items Achieved` and `Completed Implementation`
 ## Guardrails
 
 - One phase at a time.
-- One worker at a time unless the user explicitly asks for parallel work.
+- One worker at a time unless the user explicitly asks for parallel work or the manager has independent, disjoint subtasks.
 - No implementation before an approved spec.
 - Keep phases small enough for one build-verified pass.
 - Keep the normal 2D app free of visible 3D affordances unless a phase explicitly changes that.
@@ -126,13 +170,13 @@ Before implementation, `Checklist Items Achieved` and `Completed Implementation`
 Prepare prompt:
 
 ```text
-Prepare this phase for implementation. Read the phase skeleton and surrounding vision doc context, then research the code seams. Do not edit files. Return a proposed implementation spec in chat with expected files, files to avoid, existing helpers to reuse, acceptance criteria, build/manual checks, risks, wishlist mapping, and non-goals.
+Review this phase before implementation. Read the approved phase spec and relevant code seams. Do not edit files. Return scope corrections, expected files, files to avoid, existing helpers to reuse, acceptance criteria, build/manual checks, risks, wishlist mapping, and unresolved questions.
 ```
 
 Write-spec prompt:
 
 ```text
-Write the approved implementation spec into the phase section of the vision doc. Do not implement code. Keep the spec scoped to the approved phase and preserve surrounding completed phase history.
+No worker prompt is normally needed. The manager writes the approved implementation spec into the phase section of the vision doc before implementation.
 ```
 
 Implement prompt:

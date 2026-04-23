@@ -34,7 +34,7 @@ type RaycasterLike = {
 };
 
 export type InteractableRef = RefObject<InteractableObject | null>;
-export type InteractionMode = "clickable" | "shootable";
+export type InteractionMode = "clickable" | "shootable" | "movable" | "draggable";
 export type InteractionInput = "keyboard" | "pointer";
 
 export interface AimContext {
@@ -57,6 +57,12 @@ export interface InteractionActivation extends InteractionHit {
   mode: InteractionMode;
 }
 
+export interface InteractionDragDelta {
+  movementX: number;
+  movementY: number;
+  point?: [number, number, number];
+}
+
 export interface ShotEvent {
   mode: "shootable";
   input: "pointer";
@@ -70,6 +76,9 @@ export interface InteractableRegistration {
   modes?: InteractionMode[];
   enabled?: boolean;
   onActivate?: (activation: InteractionActivation) => void;
+  onDragStart?: (activation: InteractionActivation) => void;
+  onDragMove?: (delta: InteractionDragDelta) => void;
+  onDragEnd?: () => void;
 }
 
 interface AimState {
@@ -79,11 +88,16 @@ interface AimState {
 
 interface InteractionContextValue {
   activeHit: InteractionHit | null;
+  activeDragId: string | null;
   aimContext: AimContext | null;
   registerInteractable: (registration: InteractableRegistration) => () => void;
   setAimState: (state: AimState | null) => void;
   activateCurrent: (mode: InteractionMode, input: InteractionInput) => InteractionActivation | null;
   activateActive: (mode: InteractionMode, input: InteractionInput) => InteractionActivation | null;
+  startCurrentDrag: (input: InteractionInput) => InteractionActivation | null;
+  updateActiveDrag: (delta: InteractionDragDelta) => void;
+  endActiveDrag: () => void;
+  getActiveDragObject: () => InteractableObject | null;
   getRegistrations: () => InteractableRegistration[];
   notifyShot: (event: ShotEvent) => void;
   subscribeToShot: (listener: (event: ShotEvent) => void) => () => void;
@@ -91,6 +105,11 @@ interface InteractionContextValue {
 
 const CENTER_POINT = { x: 0, y: 0 } as const;
 const InteractionContext = createContext<InteractionContextValue | null>(null);
+let activeInteractionDragCount = 0;
+
+export function isInteractionDragActive() {
+  return activeInteractionDragCount > 0;
+}
 
 function isInteractiveTarget(target: EventTarget | null) {
   if (!(target instanceof HTMLElement)) {
@@ -184,9 +203,11 @@ export function InteractionProvider({ children }: { children: ReactNode }) {
   const registrationsRef = useRef(new Map<string, InteractableRegistration>());
   const shotListenersRef = useRef(new Set<(event: ShotEvent) => void>());
   const activeHitRef = useRef<InteractionHit | null>(null);
+  const activeDragRef = useRef<{ activation: InteractionActivation; registration: InteractableRegistration } | null>(null);
   const aimHitsRef = useRef<InteractionHit[]>([]);
   const aimContextRef = useRef<AimContext | null>(null);
   const [activeHit, setActiveHitState] = useState<InteractionHit | null>(null);
+  const [activeDragId, setActiveDragId] = useState<string | null>(null);
   const [aimContext, setAimContextState] = useState<AimContext | null>(null);
 
   const registerInteractable = useCallback((registration: InteractableRegistration) => {
@@ -257,6 +278,48 @@ export function InteractionProvider({ children }: { children: ReactNode }) {
     return activation;
   }, []);
 
+  const endActiveDrag = useCallback(() => {
+    const drag = activeDragRef.current;
+
+    if (!drag) {
+      return;
+    }
+
+    activeDragRef.current = null;
+    activeInteractionDragCount = Math.max(0, activeInteractionDragCount - 1);
+    setActiveDragId(null);
+    drag.registration.onDragEnd?.();
+  }, []);
+
+  const startCurrentDrag = useCallback((input: InteractionInput) => {
+    const hit = aimHitsRef.current.find((candidate) => candidate.modes.includes("draggable"));
+
+    if (!hit) {
+      return null;
+    }
+
+    const registration = registrationsRef.current.get(hit.id);
+
+    if (!registration || registration.enabled === false) {
+      return null;
+    }
+
+    endActiveDrag();
+
+    const activation = { ...hit, input, mode: "draggable" as const };
+    activeDragRef.current = { activation, registration };
+    activeInteractionDragCount += 1;
+    setActiveDragId(hit.id);
+    registration.onDragStart?.(activation);
+    return activation;
+  }, [endActiveDrag]);
+
+  const updateActiveDrag = useCallback((delta: InteractionDragDelta) => {
+    activeDragRef.current?.registration.onDragMove?.(delta);
+  }, []);
+
+  const getActiveDragObject = useCallback(() => activeDragRef.current?.registration.objectRef.current ?? null, []);
+
   const getRegistrations = useCallback(() => [...registrationsRef.current.values()], []);
   const notifyShot = useCallback((event: ShotEvent) => {
     shotListenersRef.current.forEach((listener) => listener(event));
@@ -269,17 +332,26 @@ export function InteractionProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
+  useEffect(() => () => {
+    endActiveDrag();
+  }, [endActiveDrag]);
+
   const value = useMemo<InteractionContextValue>(() => ({
     activeHit,
+    activeDragId,
     activateActive,
     aimContext,
     registerInteractable,
     setAimState,
     activateCurrent,
+    endActiveDrag,
+    getActiveDragObject,
     getRegistrations,
     notifyShot,
+    startCurrentDrag,
     subscribeToShot,
-  }), [activeHit, activateActive, aimContext, activateCurrent, getRegistrations, notifyShot, registerInteractable, setAimState, subscribeToShot]);
+    updateActiveDrag,
+  }), [activeDragId, activeHit, activateActive, aimContext, activateCurrent, endActiveDrag, getActiveDragObject, getRegistrations, notifyShot, registerInteractable, setAimState, startCurrentDrag, subscribeToShot, updateActiveDrag]);
 
   return <InteractionContext.Provider value={value}>{children}</InteractionContext.Provider>;
 }
@@ -302,7 +374,7 @@ export function useRegisterInteractable(registration: InteractableRegistration) 
 
 export function AimInteractionController({ enabled, enablePointerShoot = false }: { enabled: boolean; enablePointerShoot?: boolean }) {
   const { camera, gl, raycaster } = useThree();
-  const { activateActive, activateCurrent, getRegistrations, notifyShot, setAimState } = useInteractionRegistry();
+  const { activateActive, activateCurrent, endActiveDrag, getActiveDragObject, getRegistrations, notifyShot, setAimState, startCurrentDrag, updateActiveDrag } = useInteractionRegistry();
   const enabledRef = useRef(enabled);
   const enablePointerShootRef = useRef(enablePointerShoot);
 
@@ -311,8 +383,9 @@ export function AimInteractionController({ enabled, enablePointerShoot = false }
 
     if (!enabled) {
       setAimState(null);
+      endActiveDrag();
     }
-  }, [enabled, setAimState]);
+  }, [enabled, endActiveDrag, setAimState]);
 
   useEffect(() => {
     enablePointerShootRef.current = enablePointerShoot;
@@ -356,7 +429,15 @@ export function AimInteractionController({ enabled, enablePointerShoot = false }
         return;
       }
 
-      const clickableActivation = activateActive("clickable", "pointer");
+      const dragActivation = startCurrentDrag("pointer");
+
+      if (dragActivation) {
+        event.preventDefault();
+        canvas.setPointerCapture(event.pointerId);
+        return;
+      }
+
+      const clickableActivation = activateCurrent("clickable", "pointer");
 
       if (clickableActivation) {
         return;
@@ -369,12 +450,60 @@ export function AimInteractionController({ enabled, enablePointerShoot = false }
       });
     };
 
+    const handlePointerMove = (event: PointerEvent) => {
+      if (!enabledRef.current || !isInteractionDragActive()) {
+        return;
+      }
+
+      if (event.buttons === 0) {
+        endActiveDrag();
+        return;
+      }
+
+      event.preventDefault();
+
+      const dragObject = getActiveDragObject();
+      let point: [number, number, number] | undefined;
+
+      if (dragObject) {
+        const raycasterApi = raycaster as unknown as RaycasterLike;
+        raycasterApi.setFromCamera(CENTER_POINT, camera);
+        const intersection = raycasterApi.intersectObjects([dragObject], true)[0];
+        point = intersection ? getPointTuple(intersection.point) : undefined;
+      }
+
+      updateActiveDrag({ movementX: event.movementX, movementY: event.movementY, point });
+    };
+
+    const handlePointerUp = (event: PointerEvent) => {
+      if (canvas.hasPointerCapture(event.pointerId)) {
+        canvas.releasePointerCapture(event.pointerId);
+      }
+
+      endActiveDrag();
+    };
+
+    const handlePointerLockChange = () => {
+      if (document.pointerLockElement !== canvas) {
+        endActiveDrag();
+      }
+    };
+
     canvas.addEventListener("pointerdown", handlePointerDown);
+    document.addEventListener("pointermove", handlePointerMove);
+    document.addEventListener("pointerup", handlePointerUp);
+    document.addEventListener("pointercancel", handlePointerUp);
+    document.addEventListener("pointerlockchange", handlePointerLockChange);
 
     return () => {
+      endActiveDrag();
       canvas.removeEventListener("pointerdown", handlePointerDown);
+      document.removeEventListener("pointermove", handlePointerMove);
+      document.removeEventListener("pointerup", handlePointerUp);
+      document.removeEventListener("pointercancel", handlePointerUp);
+      document.removeEventListener("pointerlockchange", handlePointerLockChange);
     };
-  }, [activateActive, gl, notifyShot]);
+  }, [activateActive, activateCurrent, camera, endActiveDrag, getActiveDragObject, gl, notifyShot, raycaster, startCurrentDrag, updateActiveDrag]);
 
   useFrame(() => {
     if (!enabled) {

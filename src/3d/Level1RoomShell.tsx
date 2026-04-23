@@ -5,7 +5,6 @@ import { ControlRoomWallDisplays } from "./ControlRoomWallDisplays";
 import { ComputerStation } from "./ComputerStation";
 import { FreeRoamPresenceMarker } from "./FreeRoamPresenceMarker";
 import { LevelExitDoor } from "./LevelExitDoor";
-import { Level1RangeRoom } from "./Level1RangeRoom";
 import { Level1RecordingStudioRoom } from "./Level1RecordingStudioRoom";
 import { ShootingRangePrototype } from "./ShootingRangePrototype";
 import { SimBotRoamingMarker } from "./SimBotRoamingMarker";
@@ -17,6 +16,7 @@ import type { PhaseVisuals } from "./phaseVisuals";
 import type { LocalDawAudioEngineActions, LocalDawAudioEngineState } from "./useLocalDawAudioEngine";
 import type { LocalDawActions, LocalDawState } from "./useLocalDawState";
 import type { JukeboxConfig, JukeboxControlZoneConfig, JukeboxScreenColorRole, JukeboxScreenSurfaceConfig } from "./levels";
+import type { SoundCloudBoothState } from "./soundCloudBooth";
 import type { JukeboxActions, JukeboxDisplayState } from "../hooks/useSoundCloudPlayer";
 import type {
   CountdownDisplayState,
@@ -27,6 +27,7 @@ import type {
   SharedDawClipPublishPayload,
   SharedDawClipsState,
   SharedDawLiveSoundPayload,
+  SharedStudioGuitarState,
   SharedDawTransport,
   SharedDawTrackId,
 } from "../types/session";
@@ -37,6 +38,12 @@ const FREE_ROAM_PRESENCE_TTL_MS = 10_000;
 type JukeboxFeedback = {
   message: string;
   key: number;
+};
+type HeldStudioInstrument = "guitar" | null;
+type StudioGuitarRecordingStatus = {
+  caption: string;
+  isEnabled: boolean;
+  label: string;
 };
 
 function isSimRoamingDisabledByQuery() {
@@ -1502,6 +1509,7 @@ interface Level1RoomShellProps {
   localStationSource: "joined" | "temporary" | "emergency";
   jukeboxDisplay?: JukeboxDisplayState;
   jukeboxActions?: JukeboxActions;
+  soundCloudBooth?: SoundCloudBoothState;
   localDawState?: LocalDawState;
   localDawActions?: LocalDawActions;
   localDawAudioState?: LocalDawAudioEngineState;
@@ -1517,6 +1525,18 @@ interface Level1RoomShellProps {
   onPublishSharedDawClip?: (clip: SharedDawClipPublishPayload) => void;
   onClearSharedDawClip?: (trackId: SharedDawTrackId, sceneIndex: number) => void;
   onBroadcastDawLiveSound?: (sound: SharedDawLiveSoundPayload) => void;
+  studioGuitar?: SharedStudioGuitarState;
+  onPickupStudioGuitar?: () => void;
+  onDropStudioGuitar?: () => void;
+  heldStudioInstrument?: HeldStudioInstrument;
+  studioGuitarBankLabel?: string;
+  studioGuitarRecordingStatus?: StudioGuitarRecordingStatus;
+  onToggleStudioGuitarRecording?: () => void;
+  studioGuitarFeedbackKey?: number;
+  studioGuitarNoteIndex?: number;
+  studioGuitarNoteLabel?: string;
+  studioGuitarSlotIndex?: number;
+  showLayoutGrabBoxes?: boolean;
 }
 
 export function Level1RoomShell({
@@ -1535,6 +1555,7 @@ export function Level1RoomShell({
   localStationSource,
   jukeboxDisplay,
   jukeboxActions,
+  soundCloudBooth,
   localDawState,
   localDawActions,
   localDawAudioState,
@@ -1550,6 +1571,18 @@ export function Level1RoomShell({
   onPublishSharedDawClip,
   onClearSharedDawClip,
   onBroadcastDawLiveSound,
+  studioGuitar,
+  onPickupStudioGuitar,
+  onDropStudioGuitar,
+  heldStudioInstrument,
+  studioGuitarBankLabel,
+  studioGuitarRecordingStatus,
+  onToggleStudioGuitarRecording,
+  studioGuitarFeedbackKey,
+  studioGuitarNoteIndex,
+  studioGuitarNoteLabel,
+  studioGuitarSlotIndex,
+  showLayoutGrabBoxes = true,
 }: Level1RoomShellProps) {
   const { dimensions, exits, lighting, openings, stations, timerDisplay } = levelConfig;
   const activeControlRoomArea = levelConfig.areas?.find((area) => (
@@ -1764,6 +1797,19 @@ export function Level1RoomShell({
           onPublishSharedDawClip={onPublishSharedDawClip}
           onClearSharedDawClip={onClearSharedDawClip}
           onBroadcastDawLiveSound={onBroadcastDawLiveSound}
+          soundCloudBooth={soundCloudBooth}
+          studioGuitar={studioGuitar}
+          onPickupStudioGuitar={onPickupStudioGuitar}
+          onDropStudioGuitar={onDropStudioGuitar}
+          heldStudioInstrument={heldStudioInstrument}
+          studioGuitarBankLabel={studioGuitarBankLabel}
+          studioGuitarRecordingStatus={studioGuitarRecordingStatus}
+          onToggleStudioGuitarRecording={onToggleStudioGuitarRecording}
+          studioGuitarFeedbackKey={studioGuitarFeedbackKey}
+          studioGuitarNoteIndex={studioGuitarNoteIndex}
+          studioGuitarNoteLabel={studioGuitarNoteLabel}
+          studioGuitarSlotIndex={studioGuitarSlotIndex}
+          showLayoutGrabBoxes={showLayoutGrabBoxes}
         />
       ) : null}
 
@@ -1782,16 +1828,7 @@ export function Level1RoomShell({
       {exits?.map((exit) => (
         <LevelExitDoor key={exit.id} exit={exit} onActivateExit={onLevelExit} />
       ))}
-      {levelConfig.id === "level-1" && levelConfig.shootingRange ? (
-        <Level1RangeRoom
-          shootingRange={levelConfig.shootingRange}
-          rangeScoreboard={rangeScoreboard}
-          roundNumber={roundNumber}
-          localUserId={localUserId}
-          onSubmitRangeScore={onSubmitRangeScore}
-          phaseVisuals={phaseVisuals}
-        />
-      ) : levelConfig.shootingRange ? (
+      {levelConfig.shootingRange ? (
         <ShootingRangePrototype
           shootingRange={levelConfig.shootingRange}
           levelId={levelConfig.id}

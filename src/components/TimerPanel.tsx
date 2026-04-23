@@ -7,6 +7,7 @@ interface TimerPanelProps {
   state: DabSyncState;
   lobbyState: DerivedLobbyState;
   countdownDisplay: CountdownDisplayState;
+  readyHotkeyEnabled?: boolean;
   onStartReadyHold: () => void;
   onEndReadyHold: () => void;
   onSetTimerDuration: (durationSeconds: number) => void;
@@ -74,6 +75,7 @@ export function TimerPanel({
   state,
   lobbyState,
   countdownDisplay,
+  readyHotkeyEnabled = true,
   onStartReadyHold,
   onEndReadyHold,
   onSetTimerDuration,
@@ -86,6 +88,7 @@ export function TimerPanel({
   const syncReady = state.syncStatus.mode === "mock" || state.syncStatus.connection === "connected";
   const { isHolding, bindHoldButton } = useReadyHold({
     enabled: lobbyState.canHoldToReady && syncReady,
+    keyboardEnabled: readyHotkeyEnabled,
     onHoldStart: onStartReadyHold,
     onHoldEnd: onEndReadyHold,
   });
@@ -98,6 +101,7 @@ export function TimerPanel({
   const phaseLabel = state.session.phase === "completed" ? "Completed" : state.session.phase;
   const armedLabel =
     state.session.phase === "completed" ? "Complete" : lobbyState.isArmed ? "Armed" : state.session.phase === "precount" ? "Launch" : "Standby";
+  const countdownPrecisionDigits = state.session.phase === "countdown" ? state.timerConfig.countdownPrecisionDigits : 0;
 
   return (
     <section className={`panel timer-panel timer-shell phase-shell-${state.session.phase} ${isCelebrating ? "round-complete-burst" : ""}`}>
@@ -128,7 +132,7 @@ export function TimerPanel({
           <span />
         </div>
         <div className="timer-center">
-          <span className="timer-value">{countdownDisplay.headline}</span>
+          <span className={`timer-value timer-value-precision-${countdownPrecisionDigits}`}>{countdownDisplay.headline}</span>
           <span className="timer-subcopy">{countdownDisplay.subheadline}</span>
           {countdownDisplay.accentText ? <span className="timer-accent">{countdownDisplay.accentText}</span> : null}
         </div>

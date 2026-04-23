@@ -1,5 +1,4 @@
 import type { LevelConfig } from "./types";
-import { level2RangeConfig } from "./level2Range";
 
 export const level1Config = {
   id: "level-1",
@@ -97,7 +96,7 @@ export const level1Config = {
   collisionBounds: {
     room: {
       min: [-22.5, 0, -9],
-      max: [22.5, 4.5, 9],
+      max: [10, 4.5, 9],
     },
     blockers: [
       {
@@ -139,14 +138,14 @@ export const level1Config = {
       {
         id: "recording-studio-south-wall",
         label: "Recording Studio south wall",
-        min: [-22.5, 0, 2.62],
-        max: [-10.5, 4.5, 2.8],
+        min: [-22.5, 0, 8.82],
+        max: [-10.5, 4.5, 9],
       },
       {
         id: "recording-studio-west-wall",
         label: "Recording Studio west wall",
         min: [-22.5, 0, -8.8],
-        max: [-22.32, 4.5, 2.8],
+        max: [-22.32, 4.5, 9],
       },
       {
         id: "recording-studio-east-wall-lower",
@@ -158,79 +157,13 @@ export const level1Config = {
         id: "recording-studio-east-wall-upper",
         label: "Recording Studio east wall upper segment",
         min: [-10.68, 0, -3.4],
-        max: [-10.5, 4.5, 2.8],
+        max: [-10.5, 4.5, 9],
       },
       {
-        id: "control-room-east-wall-lower",
-        label: "Control room east wall lower segment",
+        id: "control-room-east-wall",
+        label: "Control room east wall",
         min: [9.9, 0, -9],
-        max: [10.1, 4.5, -1.2],
-      },
-      {
-        id: "control-room-east-wall-upper",
-        label: "Control room east wall upper segment",
-        min: [9.9, 0, 1.2],
         max: [10.1, 4.5, 9],
-      },
-      {
-        id: "connector-south-wall",
-        label: "Connector south wall",
-        min: [10.02, 0, -1.2],
-        max: [10.5, 4.5, -1.0],
-      },
-      {
-        id: "connector-north-wall",
-        label: "Connector north wall",
-        min: [10.02, 0, 1.0],
-        max: [10.5, 4.5, 1.2],
-      },
-      {
-        id: "range-west-wall-lower",
-        label: "Range west wall lower segment",
-        min: [10.35, 0, -9],
-        max: [10.55, 4.5, -1.2],
-      },
-      {
-        id: "range-west-wall-upper",
-        label: "Range west wall upper segment",
-        min: [10.35, 0, 1.2],
-        max: [10.55, 4.5, 9],
-      },
-      {
-        id: "range-north-wall",
-        label: "Range north wall",
-        min: [10.5, 0, -9],
-        max: [22.5, 4.5, -8.82],
-      },
-      {
-        id: "range-south-wall",
-        label: "Range south wall",
-        min: [10.5, 0, 8.82],
-        max: [22.5, 4.5, 9],
-      },
-      {
-        id: "range-east-wall",
-        label: "Range east wall",
-        min: [22.32, 0, -9],
-        max: [22.5, 4.5, 9],
-      },
-      {
-        id: "range-backstop",
-        label: "Range backstop",
-        min: [10.9, 0, -8.9],
-        max: [22.1, 2.6, -8.25],
-      },
-      {
-        id: "range-left-lane-divider",
-        label: "Range left lane divider",
-        min: [14.35, 0, -7.2],
-        max: [14.55, 1.2, 4.6],
-      },
-      {
-        id: "range-right-lane-divider",
-        label: "Range right lane divider",
-        min: [18.45, 0, -7.2],
-        max: [18.65, 1.2, 4.6],
       },
     ],
   },
@@ -257,6 +190,19 @@ export const level1Config = {
       intensity: 0.9,
     },
   ],
+  exits: [
+    {
+      id: "level-1-range-door",
+      label: "RANGE",
+      targetLevelId: "level-2-range",
+      position: [9.86, 1.2, 0],
+      rotation: [0, -Math.PI / 2, 0],
+      size: {
+        width: 1.55,
+        height: 2.15,
+      },
+    },
+  ],
   areas: [
     {
       id: "control-room",
@@ -268,20 +214,7 @@ export const level1Config = {
       },
       spawnPosition: [0, 1.7, 1.2],
       cameraTarget: [0, 1.45, -2.8],
-      connectedAreaIds: ["shooting-range", "recording-studio"],
-      status: "active",
-    },
-    {
-      id: "shooting-range",
-      label: "Shooting Range",
-      kind: "shooting-range",
-      bounds: {
-        min: [10.5, 0, -9],
-        max: [22.5, 4.5, 9],
-      },
-      spawnPosition: [16.5, 1.7, 6.4],
-      cameraTarget: [16.5, 1.5, -2.5],
-      connectedAreaIds: ["control-room"],
+      connectedAreaIds: ["recording-studio"],
       status: "active",
     },
     {
@@ -290,7 +223,7 @@ export const level1Config = {
       kind: "recording-studio",
       bounds: {
         min: [-22.5, 0, -8.8],
-        max: [-10.5, 4.5, 2.8],
+        max: [-10.5, 4.5, 9],
       },
       spawnPosition: [-12.8, 1.7, -4.6],
       cameraTarget: [-18, 1.45, -4.6],
@@ -299,23 +232,6 @@ export const level1Config = {
     },
   ],
   openings: [
-    {
-      id: "control-room-range-opening",
-      label: "Range Opening",
-      fromAreaId: "control-room",
-      toAreaId: "shooting-range",
-      position: [10.02, 1.2, 0],
-      rotation: [0, -Math.PI / 2, 0],
-      size: {
-        width: 2.4,
-        height: 2.2,
-      },
-      clearanceBounds: {
-        min: [9.95, 0, -1.2],
-        max: [10.55, 2.4, 1.2],
-      },
-      status: "active",
-    },
     {
       id: "control-room-recording-studio-opening",
       label: "Recording Studio Opening",
@@ -335,6 +251,51 @@ export const level1Config = {
     },
   ],
   traversalSurfaces: [
+    {
+      id: "recording-studio-dj-platform",
+      label: "Recording studio DJ platform",
+      kind: "platform",
+      areaId: "recording-studio",
+      bounds: {
+        min: [-22.15, 0, 3.35],
+        max: [-10.85, 1.36, 8.75],
+      },
+      floorHeight: 1.36,
+    },
+    {
+      id: "recording-studio-dj-left-ramp",
+      label: "Recording studio DJ left ramp",
+      kind: "ramp",
+      areaId: "recording-studio",
+      bounds: {
+        min: [-21.85, 0, 2.25],
+        max: [-18.55, 1.36, 3.35],
+      },
+      floorHeight: 1.36,
+      ramp: {
+        axis: "z",
+        lowEdge: "minZ",
+        lowFloorHeight: 0,
+        highFloorHeight: 1.36,
+      },
+    },
+    {
+      id: "recording-studio-dj-right-ramp",
+      label: "Recording studio DJ right ramp",
+      kind: "ramp",
+      areaId: "recording-studio",
+      bounds: {
+        min: [-14.45, 0, 2.25],
+        max: [-11.15, 1.36, 3.35],
+      },
+      floorHeight: 1.36,
+      ramp: {
+        axis: "z",
+        lowEdge: "minZ",
+        lowFloorHeight: 0,
+        highFloorHeight: 1.36,
+      },
+    },
     {
       id: "control-room-balcony-platform",
       label: "Control room balcony platform",
@@ -702,5 +663,4 @@ export const level1Config = {
       },
     ],
   },
-  shootingRange: level2RangeConfig.shootingRange,
 } satisfies LevelConfig;

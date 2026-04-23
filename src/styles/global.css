@@ -341,11 +341,391 @@ input {
   z-index: 71;
 }
 
+.three-d-shell-menu-toggle {
+  position: fixed;
+  top: 114px;
+  right: 18px;
+  z-index: 72;
+  min-width: 76px;
+  min-height: 38px;
+  border: 1px solid rgba(63, 233, 255, 0.34);
+  border-radius: 12px;
+  padding: 8px 14px;
+  background: rgba(5, 12, 24, 0.82);
+  color: #dffbff;
+  cursor: pointer;
+  box-shadow: 0 0 20px rgba(63, 233, 255, 0.12);
+  transition: transform 120ms ease, border-color 120ms ease;
+}
+
 .three-d-shell-skip:hover,
 .three-d-shell-exit:hover,
-.three-d-shell-panel-exit:hover {
+.three-d-shell-panel-exit:hover,
+.three-d-shell-menu-toggle:hover {
   transform: translateY(-1px);
   border-color: rgba(255, 138, 91, 0.82);
+}
+
+.three-d-shell-menu-toggle:hover {
+  border-color: rgba(63, 233, 255, 0.72);
+}
+
+.three-d-escape-menu-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 76;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+}
+
+.three-d-escape-menu-backdrop {
+  position: absolute;
+  inset: 0;
+  border: 0;
+  padding: 0;
+  background: rgba(2, 6, 12, 0.72);
+  backdrop-filter: blur(4px);
+  cursor: pointer;
+}
+
+.three-d-escape-menu-panel {
+  position: relative;
+  z-index: 1;
+  width: min(760px, calc(100vw - 24px));
+  max-height: min(640px, calc(100vh - 24px));
+  overflow: auto;
+  display: grid;
+  gap: 16px;
+  padding: 18px;
+  border: 1px solid rgba(87, 243, 255, 0.34);
+  border-radius: 12px;
+  background: rgba(5, 11, 20, 0.96);
+  color: #effcff;
+  box-shadow: 0 28px 64px rgba(0, 0, 0, 0.56), 0 0 30px rgba(63, 233, 255, 0.1);
+}
+
+.three-d-escape-menu-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  align-items: start;
+}
+
+.three-d-escape-menu-title-block {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.three-d-escape-menu-title-block h2,
+.three-d-escape-menu-copy h3 {
+  margin: 0;
+  font-family: "Courier New", monospace;
+  letter-spacing: 0.04em;
+}
+
+.three-d-escape-menu-title-block h2 {
+  font-size: 1.4rem;
+}
+
+.three-d-escape-menu-title-block span,
+.three-d-escape-menu-copy p {
+  color: #8ba0c7;
+}
+
+.three-d-escape-menu-eyebrow {
+  margin: 0;
+  color: #73ff4c;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  font-size: 0.72rem;
+}
+
+.three-d-escape-menu-close {
+  min-width: 40px;
+  min-height: 40px;
+  border: 1px solid rgba(87, 243, 255, 0.24);
+  border-radius: 12px;
+  padding: 0;
+  background: rgba(4, 10, 22, 0.86);
+  color: #dffbff;
+  font-size: 1.5rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.three-d-escape-menu-tabs {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.three-d-escape-menu-tab {
+  min-height: 42px;
+  border: 1px solid rgba(87, 243, 255, 0.18);
+  border-radius: 12px;
+  padding: 10px 12px;
+  background: rgba(4, 10, 22, 0.88);
+  color: #cfe7ff;
+  cursor: pointer;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-size: 0.76rem;
+  font-weight: 800;
+}
+
+.three-d-escape-menu-tab-active {
+  border-color: rgba(115, 255, 76, 0.36);
+  background: linear-gradient(135deg, rgba(115, 255, 76, 0.18), rgba(63, 233, 255, 0.08));
+  color: #f4ffea;
+  box-shadow: 0 0 18px rgba(115, 255, 76, 0.08);
+}
+
+.three-d-escape-menu-body {
+  display: grid;
+  gap: 16px;
+}
+
+.three-d-escape-menu-copy {
+  display: grid;
+  gap: 6px;
+}
+
+.three-d-escape-menu-copy h3 {
+  font-size: 1.1rem;
+}
+
+.three-d-escape-menu-copy p {
+  font-size: 0.94rem;
+}
+
+.three-d-escape-menu-grid {
+  display: grid;
+  gap: 10px;
+}
+
+.three-d-escape-menu-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 14px;
+  min-height: 52px;
+  padding: 12px 14px;
+  border: 1px solid rgba(87, 243, 255, 0.16);
+  border-radius: 12px;
+  background: rgba(8, 15, 28, 0.82);
+}
+
+.three-d-escape-menu-row span {
+  color: #8ba0c7;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 0.74rem;
+}
+
+.three-d-escape-menu-row strong {
+  color: #effcff;
+  font-size: 0.92rem;
+  text-align: right;
+}
+
+.three-d-escape-menu-stack {
+  display: grid;
+  gap: 10px;
+}
+
+.three-d-escape-menu-control-row,
+.three-d-escape-menu-toggle-row {
+  min-height: 46px;
+  display: grid;
+  gap: 10px;
+  align-items: center;
+  padding: 10px 12px;
+  border: 1px solid rgba(87, 243, 255, 0.16);
+  border-radius: 12px;
+  background: rgba(8, 15, 28, 0.82);
+}
+
+.three-d-escape-menu-control-row {
+  grid-template-columns: 132px minmax(0, 1fr) 64px;
+}
+
+.three-d-escape-menu-toggle-row {
+  grid-template-columns: auto minmax(0, 1fr);
+  cursor: pointer;
+}
+
+.three-d-escape-menu-control-row span,
+.three-d-escape-menu-toggle-row span {
+  color: #cfe7ff;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.three-d-escape-menu-control-row strong {
+  color: #d8ffbd;
+  font-family: "Courier New", monospace;
+  font-size: 0.86rem;
+  text-align: right;
+}
+
+.three-d-escape-menu-control-row input[type="range"] {
+  width: 100%;
+  accent-color: #73ff4c;
+}
+
+.three-d-escape-menu-toggle-row input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  accent-color: #73ff4c;
+}
+
+.three-d-escape-menu-avatar-grid {
+  display: grid;
+  grid-template-columns: minmax(180px, 0.42fr) minmax(0, 0.58fr);
+  gap: 12px;
+  align-items: stretch;
+}
+
+.three-d-escape-menu-avatar-preview {
+  min-height: 244px;
+  overflow: hidden;
+  border: 1px solid rgba(87, 243, 255, 0.18);
+  border-radius: 12px;
+  background:
+    linear-gradient(rgba(255, 255, 255, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.025) 1px, transparent 1px),
+    linear-gradient(150deg, rgba(8, 15, 28, 0.94), rgba(3, 8, 18, 0.96));
+  background-size: 100% 18px, 18px 100%, auto;
+}
+
+.three-d-escape-menu-avatar-control {
+  min-height: 46px;
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+  padding: 10px 12px;
+  border: 1px solid rgba(87, 243, 255, 0.16);
+  border-radius: 12px;
+  background: rgba(8, 15, 28, 0.82);
+}
+
+.three-d-escape-menu-avatar-control > span {
+  color: #cfe7ff;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.three-d-escape-menu-swatch-grid {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(24px, 1fr));
+  gap: 8px;
+  min-width: 0;
+}
+
+.three-d-escape-menu-swatch {
+  --avatar-swatch-color: #57f3ff;
+  min-width: 24px;
+  height: 28px;
+  border: 1px solid rgba(239, 252, 255, 0.2);
+  border-radius: 8px;
+  padding: 0;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.22), transparent 42%),
+    var(--avatar-swatch-color);
+  cursor: pointer;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.18);
+}
+
+.three-d-escape-menu-swatch-active {
+  border-color: rgba(115, 255, 76, 0.78);
+  box-shadow: 0 0 0 2px rgba(115, 255, 76, 0.16), 0 0 16px rgba(115, 255, 76, 0.1);
+}
+
+.three-d-escape-menu-segmented {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+  min-width: 0;
+}
+
+.three-d-escape-menu-segment {
+  min-height: 32px;
+  border: 1px solid rgba(87, 243, 255, 0.18);
+  border-radius: 8px;
+  padding: 6px 8px;
+  overflow: hidden;
+  background: rgba(4, 10, 22, 0.88);
+  color: #cfe7ff;
+  cursor: pointer;
+  font-size: 0.7rem;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.three-d-escape-menu-segment-active {
+  border-color: rgba(115, 255, 76, 0.48);
+  background: linear-gradient(135deg, rgba(115, 255, 76, 0.18), rgba(63, 233, 255, 0.08));
+  color: #f4ffea;
+}
+
+.three-d-escape-menu-action {
+  min-height: 40px;
+  border: 1px solid rgba(87, 243, 255, 0.2);
+  border-radius: 12px;
+  padding: 8px 12px;
+  background: rgba(4, 10, 22, 0.88);
+  color: #dffbff;
+  cursor: pointer;
+  font-weight: 800;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.three-d-escape-menu-action:hover:not(:disabled) {
+  transform: translateY(-1px);
+  border-color: rgba(87, 243, 255, 0.48);
+}
+
+.three-d-escape-menu-action:disabled {
+  cursor: not-allowed;
+  opacity: 0.48;
+}
+
+.three-d-escape-menu-button-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.three-d-escape-menu-button-grid-3 {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.three-d-escape-menu-note {
+  color: #ffd7cc;
+  font-size: 0.86rem;
+}
+
+.three-d-fps-counter {
+  position: fixed;
+  left: 22px;
+  top: 82px;
+  z-index: 72;
+  min-width: 74px;
+  border: 1px solid rgba(115, 255, 76, 0.34);
+  border-radius: 8px;
+  padding: 8px 10px;
+  background: rgba(5, 12, 24, 0.74);
+  color: #d8ffbd;
+  font-family: "Courier New", monospace;
+  font-size: 0.82rem;
+  pointer-events: none;
+  text-align: center;
 }
 
 .brand-lockup {
@@ -661,7 +1041,98 @@ h2 {
 .user-status {
   display: flex;
   align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
   gap: 14px;
+}
+
+.roll-name-button {
+  min-height: 34px;
+  border: 1px solid rgba(63, 233, 255, 0.32);
+  border-radius: 12px;
+  padding: 6px 10px;
+  background: rgba(10, 20, 34, 0.86);
+  color: #dffbff;
+  cursor: pointer;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0;
+  line-height: 1;
+  text-transform: uppercase;
+  transition: transform 120ms ease, border-color 120ms ease, box-shadow 120ms ease;
+}
+
+.roll-name-button:hover {
+  transform: translateY(-1px);
+  border-color: rgba(63, 233, 255, 0.58);
+  box-shadow: 0 0 12px rgba(63, 233, 255, 0.12);
+}
+
+.roll-name-wrapper {
+  position: relative;
+}
+
+.roll-name-menu {
+  position: fixed;
+  z-index: 120;
+  width: min(300px, calc(100vw - 24px));
+  max-height: min(340px, calc(100vh - 24px));
+  overflow: auto;
+  padding: 12px;
+  border: 1px solid rgba(63, 233, 255, 0.34);
+  border-radius: 14px;
+  background: rgba(5, 9, 16, 0.98);
+  box-shadow: 0 24px 58px rgba(0, 0, 0, 0.58), 0 0 24px rgba(63, 233, 255, 0.16);
+  scrollbar-color: rgba(63, 233, 255, 0.42) rgba(8, 15, 28, 0.86);
+  scrollbar-width: thin;
+}
+
+.roll-name-menu-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.roll-name-menu-close,
+.roll-name-option {
+  border: 1px solid rgba(87, 119, 180, 0.22);
+  background: rgba(10, 20, 34, 0.86);
+  color: #dffbff;
+  cursor: pointer;
+}
+
+.roll-name-menu-close {
+  width: 28px;
+  height: 28px;
+  border-radius: 9px;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.roll-name-option {
+  display: block;
+  width: 100%;
+  min-height: 36px;
+  margin-top: 6px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  font-weight: 800;
+  letter-spacing: 0;
+  text-align: left;
+}
+
+.roll-name-option:hover,
+.roll-name-menu-close:hover {
+  border-color: rgba(63, 233, 255, 0.58);
+  background: rgba(20, 42, 66, 0.92);
+}
+
+.roll-name-empty {
+  margin: 8px 0 2px;
+  color: var(--text-dim);
+  font-size: 0.88rem;
 }
 
 .ready-bars {
@@ -775,6 +1246,26 @@ h2 {
   line-height: 1;
   color: var(--cyan);
   text-shadow: 0 0 26px rgba(63, 233, 255, 0.42);
+}
+
+.timer-value-precision-1 {
+  font-size: 8rem;
+}
+
+.timer-value-precision-2 {
+  font-size: 7rem;
+}
+
+.timer-value-precision-3 {
+  font-size: 6rem;
+}
+
+.timer-value-precision-4 {
+  font-size: 5.2rem;
+}
+
+.timer-value-precision-5 {
+  font-size: 4.6rem;
 }
 
 .timer-subcopy {
@@ -1149,6 +1640,132 @@ h2 {
   gap: 18px;
 }
 
+.soundcloud-panel-note {
+  margin: 0;
+  color: var(--text-dim);
+  font-size: 0.94rem;
+}
+
+.soundcloud-dj-table {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 0.72fr) minmax(0, 1fr);
+  grid-template-areas: "deck-a mixer deck-b";
+  gap: 16px;
+  align-items: stretch;
+}
+
+.soundcloud-deck-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.soundcloud-deck {
+  min-width: 0;
+}
+
+.soundcloud-deck-a {
+  grid-area: deck-a;
+}
+
+.soundcloud-deck-b {
+  grid-area: deck-b;
+}
+
+.soundcloud-deck .soundcloud-player {
+  height: 100%;
+}
+
+.soundcloud-mixer-panel {
+  grid-area: mixer;
+  display: grid;
+  align-content: start;
+  gap: 12px;
+  padding: 16px 18px;
+  border: 1px solid rgba(87, 243, 255, 0.2);
+  border-radius: 18px;
+  background: rgba(4, 10, 22, 0.72);
+}
+
+.soundcloud-mixer-heading,
+.soundcloud-deck-heading {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  justify-content: space-between;
+  min-width: 0;
+}
+
+.soundcloud-mixer-heading > div,
+.soundcloud-deck-heading > div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.soundcloud-mixer-heading strong,
+.soundcloud-deck-heading strong {
+  color: #f2fbff;
+  line-height: 1.15;
+  overflow-wrap: anywhere;
+}
+
+.soundcloud-mixer-heading > span,
+.soundcloud-deck-status {
+  flex: 0 0 auto;
+  min-height: 28px;
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid rgba(87, 243, 255, 0.18);
+  border-radius: 999px;
+  padding: 4px 9px;
+  background: rgba(3, 8, 18, 0.66);
+  color: #dffbff;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.soundcloud-deck-status-playing {
+  border-color: rgba(99, 255, 180, 0.28);
+  color: #c9ffe2;
+}
+
+.soundcloud-mixer-readout {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+
+.soundcloud-mixer-readout span {
+  min-height: 30px;
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid rgba(87, 243, 255, 0.18);
+  border-radius: 999px;
+  padding: 5px 10px;
+  background: rgba(3, 8, 18, 0.66);
+  color: #dffbff;
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.soundcloud-mixer-slider-row {
+  display: grid;
+  grid-template-columns: auto minmax(180px, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+}
+
+.soundcloud-mixer-slider {
+  width: 100%;
+  accent-color: var(--cyan);
+}
+
 .soundcloud-player {
   display: grid;
   grid-template-columns: minmax(112px, 148px) 1fr;
@@ -1160,6 +1777,14 @@ h2 {
     linear-gradient(135deg, rgba(63, 233, 255, 0.1), transparent 38%),
     linear-gradient(150deg, rgba(6, 13, 26, 0.98), rgba(10, 18, 34, 0.94));
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 18px 42px rgba(0, 0, 0, 0.24);
+}
+
+.soundcloud-dj-table .soundcloud-player {
+  grid-template-columns: 1fr;
+}
+
+.soundcloud-dj-table .soundcloud-artwork {
+  width: min(100%, 148px);
 }
 
 .soundcloud-error-state {
@@ -1191,15 +1816,16 @@ h2 {
 
 .soundcloud-player-main {
   display: grid;
+  align-content: start;
   gap: 14px;
   min-width: 0;
 }
 
 .soundcloud-track-row {
-  display: flex;
+  display: grid;
   gap: 14px;
   align-items: flex-start;
-  justify-content: space-between;
+  min-width: 0;
 }
 
 .soundcloud-track-copy {
@@ -1218,6 +1844,13 @@ h2 {
 .soundcloud-track-copy span,
 .soundcloud-player-note {
   color: var(--text-dim);
+}
+
+.soundcloud-track-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
 }
 
 .soundcloud-waveform-row {
@@ -1418,6 +2051,191 @@ h2 {
 .soundcloud-control-button:disabled {
   cursor: not-allowed;
   opacity: 0.48;
+}
+
+.soundcloud-cue-strip {
+  display: grid;
+  gap: 10px;
+  padding: 12px 14px;
+  border: 1px solid rgba(87, 243, 255, 0.18);
+  border-radius: 16px;
+  background: rgba(3, 8, 18, 0.7);
+}
+
+.soundcloud-cue-strip-header {
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+  min-width: 0;
+}
+
+.soundcloud-cue-strip-feedback {
+  min-width: 0;
+  color: #b5c7e6;
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.soundcloud-cue-strip-blocked .soundcloud-cue-strip-feedback {
+  color: #ffd7cc;
+}
+
+.soundcloud-cue-set-button {
+  min-width: 118px;
+}
+
+.soundcloud-cue-set-button-active {
+  border-color: rgba(115, 255, 76, 0.42);
+  background: linear-gradient(135deg, rgba(115, 255, 76, 0.18), rgba(99, 255, 180, 0.12));
+  box-shadow: 0 0 16px rgba(115, 255, 76, 0.1);
+}
+
+.soundcloud-cue-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.soundcloud-cue-pad {
+  min-height: 54px;
+  display: grid;
+  align-content: center;
+  justify-items: start;
+  gap: 2px;
+  padding: 8px 10px;
+  border: 1px solid rgba(87, 243, 255, 0.2);
+  border-radius: 12px;
+  background: rgba(4, 10, 22, 0.86);
+  color: #eaffff;
+  text-align: left;
+  cursor: pointer;
+  transition: transform 120ms ease, border-color 120ms ease, box-shadow 120ms ease, background 120ms ease;
+}
+
+.soundcloud-cue-pad:hover {
+  transform: translateY(-1px);
+  border-color: rgba(87, 243, 255, 0.4);
+  box-shadow: 0 0 12px rgba(63, 233, 255, 0.08);
+}
+
+.soundcloud-cue-pad:focus-visible,
+.soundcloud-control-button:focus-visible,
+.soundcloud-open-link:focus-visible,
+.soundcloud-select:focus-visible,
+.soundcloud-volume-slider:focus-visible,
+.soundcloud-mixer-slider:focus-visible {
+  outline: 2px solid rgba(99, 255, 180, 0.52);
+  outline-offset: 2px;
+}
+
+.soundcloud-cue-pad-empty {
+  border-color: rgba(87, 119, 180, 0.22);
+  background: rgba(4, 10, 22, 0.78);
+  color: #b7c5de;
+}
+
+.soundcloud-cue-pad-saved {
+  border-color: rgba(115, 255, 76, 0.34);
+  background: linear-gradient(135deg, rgba(115, 255, 76, 0.1), rgba(4, 10, 22, 0.92));
+}
+
+.soundcloud-cue-pad-setting {
+  box-shadow: inset 0 0 0 1px rgba(115, 255, 76, 0.08);
+}
+
+.soundcloud-cue-pad-editing {
+  box-shadow: inset 0 0 0 1px rgba(63, 233, 255, 0.08);
+}
+
+.soundcloud-cue-pad-selected {
+  border-color: rgba(63, 233, 255, 0.58);
+  background: linear-gradient(135deg, rgba(63, 233, 255, 0.16), rgba(4, 10, 22, 0.92));
+  box-shadow: 0 0 18px rgba(63, 233, 255, 0.12);
+}
+
+.soundcloud-cue-pad-blocked,
+.soundcloud-cue-pad:disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
+  transform: none;
+  box-shadow: none;
+}
+
+.soundcloud-cue-pad-id {
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #84a0c6;
+}
+
+.soundcloud-cue-pad-label {
+  min-width: 0;
+  font-size: 0.82rem;
+  font-weight: 800;
+  letter-spacing: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.soundcloud-cue-pad-saved .soundcloud-cue-pad-label {
+  color: #d8ffbd;
+}
+
+.soundcloud-cue-pad-empty .soundcloud-cue-pad-label {
+  color: #b7c5de;
+}
+
+.soundcloud-cue-pad-blocked .soundcloud-cue-pad-label {
+  color: #ffd7cc;
+}
+
+.soundcloud-seek-strip {
+  display: grid;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid rgba(87, 243, 255, 0.16);
+  border-radius: 12px;
+  background: rgba(3, 8, 18, 0.6);
+}
+
+.soundcloud-seek-strip-editing {
+  border-color: rgba(115, 255, 76, 0.28);
+  background: rgba(6, 18, 16, 0.62);
+}
+
+.soundcloud-seek-strip-disabled {
+  opacity: 0.72;
+}
+
+.soundcloud-seek-strip-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  color: #9ab1d2;
+  font-size: 0.68rem;
+  font-weight: 900;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.soundcloud-seek-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(42px, 1fr));
+  gap: 6px;
+}
+
+.soundcloud-seek-button {
+  min-width: 0;
+  padding-inline: 7px;
+  font-size: 0.68rem;
 }
 
 .soundcloud-player-note,
@@ -1684,6 +2502,33 @@ h2 {
   accent-color: #3fe9ff;
 }
 
+.admin-stepper-panel {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  justify-content: space-between;
+  color: #dce8ff;
+}
+
+.admin-stepper-panel p:not(.meta-label) {
+  color: var(--text-dim);
+  font-size: 0.92rem;
+}
+
+.admin-stepper-controls {
+  display: flex;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+
+.admin-stepper-button {
+  min-width: 48px;
+  min-height: 44px;
+  padding: 8px 12px;
+  font-size: 1.3rem;
+  line-height: 1;
+}
+
 .admin-control-heading {
   display: flex;
   justify-content: space-between;
@@ -1792,12 +2637,32 @@ h2 {
     grid-template-columns: 1fr;
   }
 
+  .soundcloud-dj-table {
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      "deck-a"
+      "mixer"
+      "deck-b";
+  }
+
+  .soundcloud-dj-table .soundcloud-player {
+    grid-template-columns: minmax(112px, 148px) 1fr;
+  }
+
+  .soundcloud-cue-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
   .hold-button {
     grid-template-columns: 110px 1fr 120px;
   }
 }
 
 @media (max-width: 900px) {
+  .soundcloud-deck-grid {
+    grid-template-columns: 1fr;
+  }
+
   .app-header {
     flex-direction: column;
     align-items: stretch;
@@ -1883,6 +2748,26 @@ h2 {
     font-size: 4.4rem;
   }
 
+  .timer-value-precision-1 {
+    font-size: 4rem;
+  }
+
+  .timer-value-precision-2 {
+    font-size: 3.4rem;
+  }
+
+  .timer-value-precision-3 {
+    font-size: 3rem;
+  }
+
+  .timer-value-precision-4 {
+    font-size: 2.65rem;
+  }
+
+  .timer-value-precision-5 {
+    font-size: 2.35rem;
+  }
+
   .hold-button {
     grid-template-columns: 1fr;
     justify-items: center;
@@ -1919,18 +2804,33 @@ h2 {
     grid-template-columns: 1fr;
   }
 
+  .soundcloud-dj-table .soundcloud-player {
+    grid-template-columns: 1fr;
+  }
+
   .soundcloud-artwork {
     width: min(100%, 180px);
   }
 
-  .soundcloud-track-row,
+  .soundcloud-cue-strip-header {
+    grid-template-columns: 1fr;
+  }
+
+  .soundcloud-cue-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .soundcloud-seek-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .soundcloud-cue-set-button {
+    width: 100%;
+  }
+
   .soundcloud-controls,
   .soundcloud-actions {
     align-items: stretch;
-  }
-
-  .soundcloud-track-row {
-    flex-direction: column;
   }
 
   .soundcloud-actions {
@@ -1939,5 +2839,39 @@ h2 {
 
   .soundcloud-control-button {
     flex: 1;
+  }
+
+  .three-d-escape-menu-header {
+    flex-direction: column;
+  }
+
+  .three-d-escape-menu-tabs {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .three-d-escape-menu-row {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .three-d-escape-menu-row strong {
+    text-align: left;
+  }
+
+  .three-d-escape-menu-avatar-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .three-d-escape-menu-avatar-preview {
+    min-height: 210px;
+  }
+
+  .three-d-escape-menu-control-row,
+  .three-d-escape-menu-avatar-control {
+    grid-template-columns: 1fr;
+  }
+
+  .three-d-escape-menu-swatch-grid {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
   }
 }

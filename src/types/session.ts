@@ -24,6 +24,7 @@ export interface LocalProfile {
 export interface TimerConfig {
   durationSeconds: number;
   preCountSeconds: number;
+  countdownPrecisionDigits: number;
   allowLateJoinSpectators: boolean;
   lateJoinersJoinReady: boolean;
   autoJoinOnLoad: boolean;
@@ -210,6 +211,13 @@ export interface SharedDawLiveSoundEvent extends SharedDawLiveSoundPayload {
   revision: number;
 }
 
+export interface SharedStudioGuitarState {
+  holderUserId: string | null;
+  updatedAt: string;
+  updatedByUserId: string | null;
+  revision: number;
+}
+
 export interface SyncStatus {
   mode: SyncTransportMode;
   connection: SyncConnectionState;
@@ -229,6 +237,7 @@ export interface SessionSnapshot {
   dawTransport: SharedDawTransport;
   dawClips: SharedDawClipsState;
   dawLiveSound: SharedDawLiveSoundEvent | null;
+  studioGuitar: SharedStudioGuitarState;
 }
 
 export interface DabSyncState extends SessionSnapshot {
@@ -265,6 +274,8 @@ export interface CountdownDisplayState {
 
 export type SessionEvent =
   | { type: "join_session" }
+  | { type: "roll_display_name"; rollKey: string }
+  | { type: "select_display_name"; displayName: string }
   | { type: "ready_hold_start" }
   | { type: "ready_hold_end" }
   | { type: "set_timer_duration"; durationSeconds: number }
@@ -278,6 +289,7 @@ export type SessionEvent =
   | { type: "admin_clear_test_participants" }
   | { type: "admin_set_late_joiners_join_ready"; enabled: boolean }
   | { type: "admin_set_auto_join_on_load"; enabled: boolean }
+  | { type: "admin_set_countdown_precision_digits"; digits: number }
   | { type: "range_score_submit"; result: RangeScoreSubmission }
   | { type: "free_roam_presence_update"; presence: FreeRoamPresenceUpdate }
   | { type: "free_roam_presence_clear" }
@@ -286,4 +298,6 @@ export type SessionEvent =
   | { type: "daw_transport_stop" }
   | { type: "daw_clip_publish"; clip: SharedDawClipPublishPayload }
   | { type: "daw_clip_clear"; trackId: SharedDawTrackId; sceneIndex: number }
-  | { type: "daw_live_sound"; sound: SharedDawLiveSoundPayload };
+  | { type: "daw_live_sound"; sound: SharedDawLiveSoundPayload }
+  | { type: "studio_guitar_pickup" }
+  | { type: "studio_guitar_drop" };

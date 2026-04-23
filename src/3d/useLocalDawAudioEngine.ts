@@ -125,7 +125,7 @@ export interface LocalDawAudioEngineActions {
   cleanup: () => void;
 }
 
-const MAX_MASTER_VOLUME = 0.5;
+const MAX_MASTER_VOLUME = 1.5;
 const MIN_FM_FREQUENCY = 55;
 const MAX_FM_FREQUENCY = 1760;
 const MIN_FM_RATIO = 0.25;
@@ -204,7 +204,7 @@ const INITIAL_REVERB_EFFECT_PATCH: LocalDawReverbEffectPatch = {
   decaySeconds: 0.8,
   wetMix: 0,
 };
-const ENGINE_START_MASTER_VOLUME = 0.18;
+const ENGINE_START_MASTER_VOLUME = 0.36;
 const INITIAL_AUDIO_ENGINE_STATE: LocalDawAudioEngineState = {
   status: "idle",
   isInitialized: false,

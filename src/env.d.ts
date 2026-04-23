@@ -15,6 +15,7 @@ interface ImportMeta {
 
 interface SoundCloudWidgetSound {
   artwork_url?: string | null;
+  bpm?: number | null;
   duration?: number;
   metadata_artist?: string | null;
   title?: string;

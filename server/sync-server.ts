@@ -1,6 +1,17 @@
 import { createServer } from "node:http";
+import { readFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { WebSocketServer } from "ws";
 import { advanceSessionTime, createSessionSnapshot, reduceSessionEvent } from "../src/lib/lobby/sessionState";
+import {
+  FALLBACK_GENERATED_PROFILE_NAMES,
+  getAvatarSeedFromName,
+  getGeneratedProfileNameForUser,
+  getRolledGeneratedProfileNameForUser,
+  normalizeGeneratedProfileNames,
+  parseGeneratedProfileNames,
+} from "../src/lib/session/generatedNamesCore";
 import type { LocalProfile, SessionEvent, SessionSnapshot } from "../src/types/session";
 
 type ClientMessage =
@@ -19,8 +30,21 @@ interface SessionRoom {
 }
 
 const port = Number(process.env.PORT ?? 8787);
+const serverDirname = dirname(fileURLToPath(import.meta.url));
+const generatedNamesPath = resolve(serverDirname, "../src/data/generatedNames.txt");
 const rooms = new Map<string, SessionRoom>();
 const socketToRoomId = new Map<import("ws").WebSocket, string>();
+
+function readGeneratedNamePool() {
+  try {
+    const names = parseGeneratedProfileNames(readFileSync(generatedNamesPath, "utf8"));
+    return names.length > 0 ? names : FALLBACK_GENERATED_PROFILE_NAMES;
+  } catch {
+    return FALLBACK_GENERATED_PROFILE_NAMES;
+  }
+}
+
+const generatedNamePool = readGeneratedNamePool();
 
 function createRoom(sessionId: string): SessionRoom {
   return {
@@ -50,6 +74,69 @@ function getRoom(sessionId: string) {
   return existingRoom;
 }
 
+function createProfileWithDisplayName(localProfile: LocalProfile, displayName: string): LocalProfile {
+  return {
+    ...localProfile,
+    displayName,
+    avatarSeed: getAvatarSeedFromName(displayName),
+  };
+}
+
+function getExistingProfile(localProfile: LocalProfile, existingUser?: SessionSnapshot["users"][number]): LocalProfile {
+  if (!existingUser) {
+    return localProfile;
+  }
+
+  return {
+    ...localProfile,
+    displayName: existingUser.displayName,
+    avatarSeed: existingUser.avatarSeed,
+    avatarUrl: existingUser.avatarUrl,
+  };
+}
+
+function selectGeneratedProfile(room: SessionRoom, localProfile: LocalProfile, requestedName: string): LocalProfile | null {
+  const normalizedName = normalizeGeneratedProfileNames([requestedName])[0];
+
+  if (!normalizedName) {
+    return null;
+  }
+
+  const canonicalName = generatedNamePool.find((name) => name.toLowerCase() === normalizedName.toLowerCase());
+
+  if (!canonicalName) {
+    return null;
+  }
+
+  const isTaken = room.snapshot.users.some((user) => (
+    user.id !== localProfile.id &&
+    user.displayName.trim().toLowerCase() === canonicalName.toLowerCase()
+  ));
+
+  return isTaken ? null : createProfileWithDisplayName(localProfile, canonicalName);
+}
+
+function assignGeneratedProfile(room: SessionRoom, localProfile: LocalProfile, event?: SessionEvent): LocalProfile {
+  const existingUser = room.snapshot.users.find((user) => user.id === localProfile.id);
+
+  if (event?.type === "select_display_name") {
+    return selectGeneratedProfile(room, localProfile, event.displayName) ?? getExistingProfile(localProfile, existingUser);
+  }
+
+  if (existingUser && event?.type !== "roll_display_name") {
+    return getExistingProfile(localProfile, existingUser);
+  }
+
+  const takenNames = room.snapshot.users
+    .filter((user) => user.id !== localProfile.id)
+    .map((user) => user.displayName);
+  const displayName = event?.type === "roll_display_name"
+    ? getRolledGeneratedProfileNameForUser(localProfile.id, takenNames, existingUser?.displayName ?? localProfile.displayName, event.rollKey, generatedNamePool)
+    : getGeneratedProfileNameForUser(localProfile.id, takenNames, generatedNamePool);
+
+  return createProfileWithDisplayName(localProfile, displayName);
+}
+
 function send(socket: import("ws").WebSocket, payload: ServerMessage) {
   if (socket.readyState === socket.OPEN) {
     socket.send(JSON.stringify(payload));
@@ -75,9 +162,17 @@ function broadcast(sessionId: string) {
 }
 
 const httpServer = createServer((request, response) => {
-  if (request.url === "/health") {
+  const pathname = request.url ? new URL(request.url, "http://localhost").pathname : "/";
+
+  if (pathname === "/health") {
     response.writeHead(200, { "Content-Type": "application/json" });
     response.end(JSON.stringify({ ok: true, service: "sync-sesh-sync" }));
+    return;
+  }
+
+  if (pathname === "/sync/generated-names" || pathname === "/generated-names") {
+    response.writeHead(200, { "Content-Type": "application/json" });
+    response.end(JSON.stringify({ names: generatedNamePool }));
     return;
   }
 
@@ -116,7 +211,12 @@ wsServer.on("connection", (socket) => {
 
     if (payload.type === "event") {
       const room = getRoom(payload.sessionId);
-      room.snapshot = reduceSessionEvent(room.snapshot, payload.event, payload.localProfile, Date.now());
+      const assignedProfile = assignGeneratedProfile(
+        room,
+        payload.localProfile,
+        payload.event,
+      );
+      room.snapshot = reduceSessionEvent(room.snapshot, payload.event, assignedProfile, Date.now());
       broadcast(payload.sessionId);
       return;
     }
