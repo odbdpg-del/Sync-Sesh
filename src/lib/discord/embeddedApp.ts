@@ -143,6 +143,15 @@ async function fetchCurrentGuildMember(accessToken: string, guildId?: string): P
   return (await response.json()) as DiscordGuildMemberLike;
 }
 
+async function fetchParticipantIdentity(sdk: DiscordSDK, userId: string): Promise<DiscordUserLike | undefined> {
+  try {
+    const { participants } = await sdk.commands.getInstanceConnectedParticipants();
+    return participants.find((participant) => participant.id === userId);
+  } catch {
+    return undefined;
+  }
+}
+
 async function resolveDiscordIdentity(
   sdk: DiscordSDK,
   clientId: string,
@@ -163,6 +172,14 @@ async function resolveDiscordIdentity(
 
   let currentUser: DiscordUserLike = auth.user;
   let currentGuildMember = await fetchCurrentGuildMember(accessToken, sdk.guildId ?? undefined);
+  const participantIdentity = await fetchParticipantIdentity(sdk, auth.user.id);
+
+  if (participantIdentity) {
+    currentUser = {
+      ...auth.user,
+      ...participantIdentity,
+    };
+  }
 
   const pushProfileUpdate = () => {
     const localProfile = buildProfileFromDiscordIdentity(currentUser, currentGuildMember);

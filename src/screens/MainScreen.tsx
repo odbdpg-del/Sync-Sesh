@@ -109,6 +109,14 @@ export function MainScreen() {
         </div>
       ) : null}
 
+      {sdkState.enabled && (sdkState.authError || sdkState.identitySource === "local") ? (
+        <div className="panel sync-banner sync-banner-alert discord-identity-banner">
+          <strong>Discord identity unavailable.</strong>{" "}
+          {sdkState.authError ??
+            "The activity is running, but Discord name/avatar resolution fell back to a local profile."}
+        </div>
+      ) : null}
+
       <div className="content-grid">
         <LobbyPanel session={state.session} users={state.users} lobbyState={lobbyState} onJoinSession={handleJoinSession} />
         <TimerPanel
