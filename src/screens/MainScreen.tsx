@@ -5,12 +5,19 @@ import { LobbyPanel } from "../components/LobbyPanel";
 import { SoundCloudPanel } from "../components/SoundCloudPanel";
 import { StatusFooter } from "../components/StatusFooter";
 import { TimerPanel } from "../components/TimerPanel";
-import type { SoundCloudBoothConsoleEvent, SoundCloudBoothConsoleEventInput, SoundCloudBoothState } from "../3d/soundCloudBooth";
+import type {
+  SoundCloudBoothConsoleEvent,
+  SoundCloudBoothConsoleEventInput,
+  SoundCloudBoothGridController,
+  SoundCloudBoothGridPadId,
+  SoundCloudBoothState,
+} from "../3d/soundCloudBooth";
 import { useAdminPanelHotkey } from "../hooks/useAdminPanelHotkey";
 import { useAppViewportControls } from "../hooks/useAppViewportControls";
 import { useCountdownDisplay } from "../hooks/useCountdownDisplay";
 import { useDabSyncSession } from "../hooks/useDabSyncSession";
 import { useSecretCodeUnlock } from "../hooks/useSecretCodeUnlock";
+import { useSoundCloudGridController } from "../hooks/useSoundCloudGridController";
 import { useSoundCloudPlayer, type SoundCloudAcceptedBpmState } from "../hooks/useSoundCloudPlayer";
 import { useSoundEffects } from "../hooks/useSoundEffects";
 
@@ -123,6 +130,21 @@ function getSoundCloudBoothConsoleTrackLabel(title: string, fallback: string) {
   return title.trim() || fallback;
 }
 
+function formatSoundCloudGridTime(milliseconds: number) {
+  if (!Number.isFinite(milliseconds) || milliseconds <= 0) {
+    return "0:00";
+  }
+
+  const totalSeconds = Math.floor(milliseconds / 1000);
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes}:${seconds.toString().padStart(2, "0")}`;
+}
+
+function formatSoundCloudGridBurstLength(milliseconds: number) {
+  return milliseconds >= 1000 ? `${milliseconds / 1000}S` : `${milliseconds}MS`;
+}
+
 export function MainScreen() {
   const [isRenderingSpikeOpen, setIsRenderingSpikeOpen] = useState(hasRenderingSpikeParam);
   const [isThreeDModeOpen, setIsThreeDModeOpen] = useState(false);
@@ -185,6 +207,26 @@ export function MainScreen() {
     initialPlaylistId: "spaceships-1",
     initialVolume: 70,
   });
+  const soundCloudGridA = useSoundCloudGridController({
+    deckId: "A",
+    playlistSourceUrl: soundCloudDeckA.state.selectedPlaylist.sourceUrl,
+    currentTrackUrl: soundCloudDeckA.jukeboxDisplay.currentTrackUrl,
+    currentTrackIndex: soundCloudDeckA.jukeboxDisplay.currentTrackIndex,
+    currentTrackTitle: soundCloudDeckA.jukeboxDisplay.currentTrackTitle,
+    playbackDuration: soundCloudDeckA.jukeboxDisplay.playbackDuration,
+    waveformBars: soundCloudDeckA.jukeboxDisplay.waveformBars,
+    isWidgetReady: soundCloudDeckA.jukeboxDisplay.isWidgetReady,
+  });
+  const soundCloudGridB = useSoundCloudGridController({
+    deckId: "B",
+    playlistSourceUrl: soundCloudDeckB.state.selectedPlaylist.sourceUrl,
+    currentTrackUrl: soundCloudDeckB.jukeboxDisplay.currentTrackUrl,
+    currentTrackIndex: soundCloudDeckB.jukeboxDisplay.currentTrackIndex,
+    currentTrackTitle: soundCloudDeckB.jukeboxDisplay.currentTrackTitle,
+    playbackDuration: soundCloudDeckB.jukeboxDisplay.playbackDuration,
+    waveformBars: soundCloudDeckB.jukeboxDisplay.waveformBars,
+    isWidgetReady: soundCloudDeckB.jukeboxDisplay.isWidgetReady,
+  });
   const soundCloudCrossfadeLevels = useMemo(() => getSoundCloudCrossfadeLevels(soundCloudCrossfader), [soundCloudCrossfader]);
   const setDeckAOutputLevel = soundCloudDeckA.actions.setOutputLevel;
   const setDeckBOutputLevel = soundCloudDeckB.actions.setOutputLevel;
@@ -199,6 +241,151 @@ export function MainScreen() {
       return [nextEvent, ...current].slice(0, SOUNDCLOUD_BOOTH_CONSOLE_EVENT_LIMIT);
     });
   }, []);
+  const createLoggedSoundCloudGridController = useCallback((grid: SoundCloudBoothGridController): SoundCloudBoothGridController => {
+    const getGridModeLabel = () => (grid.state.padMode === "continuous" ? "CONT" : grid.state.padMode === "timeline" ? "TIME" : "RAND");
+    const getNextGridModeLabel = () => (grid.state.padMode === "random" ? "TIME" : grid.state.padMode === "timeline" ? "CONT" : "RAND");
+    const getPadDetail = (padId: SoundCloudBoothGridPadId) => {
+      const pad = grid.state.pads.find((candidate) => candidate.id === padId);
+      const burstLengthLabel = formatSoundCloudGridBurstLength(grid.state.burstLengthMs);
+
+      if (!pad) {
+        return `${padId} ROLL GRID`;
+      }
+
+      if (grid.state.activeTrackKey && pad.trackKey !== grid.state.activeTrackKey) {
+        return `${padId} STALE PAD`;
+      }
+
+      return `${padId} ${formatSoundCloudGridTime(pad.positionMs)} ${burstLengthLabel}`;
+    };
+
+    return {
+      ...grid,
+      actions: {
+        ...grid.actions,
+        rollPads: () => {
+          pushSoundCloudBoothConsoleEvent({
+            kind: grid.state.isLocked || !grid.state.activeTrackKey ? "error" : "grid",
+            deckId: grid.state.deckId,
+            label: grid.state.isLocked ? "GRID LOCK" : "GRID ROLL",
+            detail: grid.state.isLocked ? "ROLL" : grid.state.activeTrackKey ? `${getGridModeLabel()} 64` : "LOAD TRACK",
+          });
+          grid.actions.rollPads();
+        },
+        triggerPad: (padId) => {
+          const pad = grid.state.pads.find((candidate) => candidate.id === padId);
+          const isStalePad = Boolean(pad && grid.state.activeTrackKey && pad.trackKey !== grid.state.activeTrackKey);
+
+          pushSoundCloudBoothConsoleEvent({
+            kind: !pad || isStalePad ? "error" : "grid",
+            deckId: grid.state.deckId,
+            label: grid.state.isMuted ? "GRID MUTE" : "GRID PAD",
+            detail: getPadDetail(padId),
+          });
+          grid.actions.triggerPad(padId);
+        },
+        triggerTestBurst: () => {
+          pushSoundCloudBoothConsoleEvent({
+            kind: grid.state.isMuted || !grid.state.isAuxWidgetReady ? "error" : "grid",
+            deckId: grid.state.deckId,
+            label: grid.state.isMuted ? "GRID MUTE" : "GRID TEST",
+            detail: formatSoundCloudGridBurstLength(grid.state.burstLengthMs),
+          });
+          grid.actions.triggerTestBurst();
+        },
+        stepBurstLength: (direction) => {
+          pushSoundCloudBoothConsoleEvent({
+            kind: grid.state.isLocked ? "error" : "grid",
+            deckId: grid.state.deckId,
+            label: grid.state.isLocked ? "GRID LOCK" : "GRID LEN",
+            detail: grid.state.isLocked
+              ? (direction < 0 ? "LEN-" : "LEN+")
+              : `${direction < 0 ? "-" : "+"} ${formatSoundCloudGridBurstLength(grid.state.burstLengthMs)}`,
+          });
+          grid.actions.stepBurstLength(direction);
+        },
+        stepSampleClamp: (clamp, direction) => {
+          pushSoundCloudBoothConsoleEvent({
+            kind: grid.state.isLocked || grid.state.padMode !== "timeline" ? "error" : "grid",
+            deckId: grid.state.deckId,
+            label: grid.state.isLocked ? "GRID LOCK" : "GRID CLAMP",
+            detail: grid.state.isLocked
+              ? `${clamp === "start" ? "S" : "E"}${direction < 0 ? "-" : "+"}`
+              : grid.state.padMode !== "timeline"
+                ? "TIME MODE"
+                : `${clamp === "start" ? "START" : "END"} ${direction < 0 ? "-" : "+"}`,
+          });
+          grid.actions.stepSampleClamp(clamp, direction);
+        },
+        stepSampleWindow: (direction) => {
+          pushSoundCloudBoothConsoleEvent({
+            kind: grid.state.isLocked || grid.state.padMode === "random" ? "error" : "grid",
+            deckId: grid.state.deckId,
+            label: grid.state.isLocked ? "GRID LOCK" : "GRID CLAMP",
+            detail: grid.state.isLocked ? (direction < 0 ? "CL-" : "CL+") : grid.state.padMode === "random" ? "TIME/CONT" : (direction < 0 ? "CL-" : "CL+"),
+          });
+          grid.actions.stepSampleWindow(direction);
+        },
+        stepVolume: (direction) => {
+          pushSoundCloudBoothConsoleEvent({
+            kind: grid.state.isLocked ? "error" : "grid",
+            deckId: grid.state.deckId,
+            label: grid.state.isLocked ? "GRID LOCK" : "GRID VOL",
+            detail: grid.state.isLocked ? (direction < 0 ? "VOL-" : "VOL+") : `${direction < 0 ? "-" : "+"} ${grid.state.volume}%`,
+          });
+          grid.actions.stepVolume(direction);
+        },
+        togglePadMode: () => {
+          pushSoundCloudBoothConsoleEvent({
+            kind: grid.state.isLocked || !grid.state.activeTrackKey ? "error" : "grid",
+            deckId: grid.state.deckId,
+            label: grid.state.isLocked ? "GRID LOCK" : "GRID MODE",
+            detail: grid.state.isLocked
+              ? "MODE"
+              : grid.state.activeTrackKey
+                ? getNextGridModeLabel()
+                : "LOAD TRACK",
+          });
+          grid.actions.togglePadMode();
+        },
+        toggleMute: () => {
+          pushSoundCloudBoothConsoleEvent({
+            kind: "grid",
+            deckId: grid.state.deckId,
+            label: "GRID MUTE",
+            detail: grid.state.isMuted ? "OFF" : "ON",
+          });
+          grid.actions.toggleMute();
+        },
+        toggleLock: () => {
+          pushSoundCloudBoothConsoleEvent({
+            kind: "grid",
+            deckId: grid.state.deckId,
+            label: "GRID LOCK",
+            detail: grid.state.isLocked ? "OFF" : "ON",
+          });
+          grid.actions.toggleLock();
+        },
+        syncAuxWidgetToDeck: () => {
+          pushSoundCloudBoothConsoleEvent({
+            kind: grid.state.isAuxWidgetReady && grid.state.activeTrackKey ? "grid" : "error",
+            deckId: grid.state.deckId,
+            label: "GRID SYNC",
+            detail: grid.state.isAuxWidgetReady ? (grid.state.activeTrackKey ? "REQUESTED" : "LOAD TRACK") : "GRID LOADING",
+          });
+          grid.actions.syncAuxWidgetToDeck();
+        },
+      },
+    };
+  }, [pushSoundCloudBoothConsoleEvent]);
+  const loggedSoundCloudGridA = useMemo(
+    () => createLoggedSoundCloudGridController(soundCloudGridA),
+    [createLoggedSoundCloudGridController, soundCloudGridA],
+  );
+  const loggedSoundCloudGridB = useMemo(
+    () => createLoggedSoundCloudGridController(soundCloudGridB),
+    [createLoggedSoundCloudGridController, soundCloudGridB],
+  );
   const toggleSoundCloudDeckMute = useCallback((deckId: SoundCloudDeckId) => {
     setSoundCloudDeckMuted((current) => ({
       ...current,
@@ -367,6 +554,10 @@ export function MainScreen() {
         onSyncToOtherDeck: () => syncSoundCloudDeck("B"),
       },
     ],
+    gridControllers: {
+      A: loggedSoundCloudGridA,
+      B: loggedSoundCloudGridB,
+    },
     mixer: {
       crossfader: soundCloudCrossfader,
       masterVolume: soundCloudMasterVolume,
@@ -403,6 +594,8 @@ export function MainScreen() {
     soundCloudDeckB.bpmActions,
     soundCloudDeckB.state.effectiveVolume,
     soundCloudDeckB.state.volume,
+    loggedSoundCloudGridA,
+    loggedSoundCloudGridB,
     soundCloudMasterVolume,
     syncSoundCloudDeck,
     toggleSoundCloudDeckMute,
@@ -525,6 +718,10 @@ export function MainScreen() {
           { id: "A", label: "Deck A", player: soundCloudDeckA },
           { id: "B", label: "Deck B", player: soundCloudDeckB },
         ]}
+        gridControllers={{
+          A: loggedSoundCloudGridA,
+          B: loggedSoundCloudGridB,
+        }}
         mixer={{
           crossfader: soundCloudCrossfader,
           masterVolume: soundCloudMasterVolume,

@@ -6,11 +6,20 @@ import type {
   SoundCloudHotCueState,
   SoundCloudSeekActions,
 } from "../hooks/useSoundCloudPlayer";
+import type {
+  SoundCloudGridController,
+  SoundCloudGridControllerActions,
+  SoundCloudGridControllerState,
+  SoundCloudGridDeckId,
+  SoundCloudGridPad,
+  SoundCloudGridPadId,
+} from "../hooks/useSoundCloudGridController";
 
 export type SoundCloudBoothDeckId = "A" | "B";
 export type SoundCloudBoothConsoleEventKind =
   | "deck"
   | "mixer"
+  | "grid"
   | "cue"
   | "bpm"
   | "seek"
@@ -47,6 +56,13 @@ export interface SoundCloudBoothDeck {
   onSyncToOtherDeck?: () => string | void;
 }
 
+export type SoundCloudBoothGridDeckId = SoundCloudGridDeckId;
+export type SoundCloudBoothGridPadId = SoundCloudGridPadId;
+export type SoundCloudBoothGridPad = SoundCloudGridPad;
+export type SoundCloudBoothGridControllerState = SoundCloudGridControllerState;
+export type SoundCloudBoothGridControllerActions = SoundCloudGridControllerActions;
+export type SoundCloudBoothGridController = SoundCloudGridController;
+
 export interface SoundCloudBoothMixer {
   crossfader: number;
   masterVolume: number;
@@ -58,6 +74,7 @@ export interface SoundCloudBoothMixer {
 
 export interface SoundCloudBoothState {
   decks: [SoundCloudBoothDeck, SoundCloudBoothDeck];
+  gridControllers: Record<SoundCloudBoothGridDeckId, SoundCloudBoothGridController>;
   mixer: SoundCloudBoothMixer;
   consoleEvents?: SoundCloudBoothConsoleEvent[];
   onPushConsoleEvent?: (event: SoundCloudBoothConsoleEventInput) => void;

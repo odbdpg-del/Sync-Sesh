@@ -95,6 +95,8 @@
 - Verify BPM labels distinguish accepted metadata, accepted waveform, accepted length, manual trim, and unloaded state.
 - Verify Deck A/B mute, sync, and BPM tool buttons are readable, reachable, and do not overlap existing DJ controls.
 - Verify Deck B's Sync, Play, Mute/Open, and Shuffle buttons mirror Deck A's correct row layout instead of drifting toward the center.
+- Verify Deck A/B Sync buttons sit farther outward than the Play/Mute/Shuffle row while remaining reachable.
+- Verify Deck B's BPM buttons are mirrored outward and no longer overlap the Deck B cue pad section.
 - Verify a track with no SoundCloud BPM can show `BPM WAVE` after waveform analysis when confidence is high enough.
 - Verify tracks with low-confidence waveform analysis show `BPM --` until the user accepts another BPM method or manually trims BPM.
 - Aim at Deck A/B `META`, `WAVE`, and `LEN` BPM buttons and verify the deck monitor accepts that BPM source or shows useful feedback such as `NO META`, `NO WAVE`, or `NO LENGTH`.
@@ -148,6 +150,21 @@
 - Verify the old Deck A/B Vol - and Vol + controls still work as fallback.
 - Verify held fader controls do not block Play, Shuffle, seek, cue, crate, or station move interactions.
 - Verify the same held fader controls behave safely in first-person, top-down player camera, and top-down freecam.
+- Verify Grid Controller A and Grid Controller B appear as movable screen-style controller slabs near the SoundCloud DJ booth.
+- Verify each grid controller screen shows a settings strip, all 64 `A1` through `H8` pad cells, deck id, status, pad count, burst length, volume, mute, and lock state.
+- Verify unavailable grid pads appear dim/blocked and do not trigger audio.
+- Load a track on Deck A and verify Grid A rolls 64 random pad positions for that track.
+- Load a track on Deck B and verify Grid B rolls 64 random pad positions for that track.
+- Aim at Grid A `ROLL`, `LEN-`, `LEN+`, `VOL-`, `VOL+`, `MUTE`, `LOCK`, and `TEST`; verify each action updates the grid state and adds concise booth console feedback.
+- Repeat the settings strip check for Grid B.
+- Aim at several Grid A pad cells and verify each triggers a short monophonic burst through the auxiliary Grid A SoundCloud widget while Deck A's main playback continues.
+- Aim at several Grid B pad cells and verify each triggers a short monophonic burst through the auxiliary Grid B SoundCloud widget while Deck B's main playback continues.
+- Rapidly hit two pads on the same grid and verify the newer burst steals/restarts the previous burst instead of overlapping.
+- Verify Grid A's screen flash follows the last triggered Grid A pad and Grid B's screen flash follows the last triggered Grid B pad.
+- Use the studio layout movement flow to pick up, rotate, place, and reset Grid A independently of the DJ booth.
+- Use the studio layout movement flow to pick up, rotate, place, and reset Grid B independently of the DJ booth.
+- Move Grid A and verify it still controls Deck A only; move Grid B and verify it still controls Deck B only.
+- Verify grid controller movement hitboxes do not block core deck buttons, faders, monitor waveform controls, crate rows, or booth console interactions.
 
 ### Exit, Fallback, And Stability
 

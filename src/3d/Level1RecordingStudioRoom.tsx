@@ -7,6 +7,8 @@ import type {
   SoundCloudBoothConsoleEvent,
   SoundCloudBoothConsoleEventInput,
   SoundCloudBoothDeck,
+  SoundCloudBoothGridController,
+  SoundCloudBoothGridPadId,
   SoundCloudBoothMixer,
   SoundCloudBoothState,
 } from "./soundCloudBooth";
@@ -82,6 +84,9 @@ type StudioRoleId = "daw" | "piano-midi" | "drum-kit" | "looper" | "dj" | "instr
 type StudioLayoutStationId =
   | "daw"
   | "dj"
+  | "deck-a-crate"
+  | "grid-a"
+  | "grid-b"
   | "drums"
   | "piano"
   | "audio-interface"
@@ -362,6 +367,12 @@ interface StudioDjControlSpec {
   onActivate: () => void;
 }
 
+interface StudioSoundCloudGridControllerProps {
+  accentColor: string;
+  grid: SoundCloudBoothGridController;
+  position: Vec3;
+}
+
 interface StudioSoundCloudDragFaderProps {
   accentColor: string;
   id: string;
@@ -485,6 +496,27 @@ const STUDIO_DJ_PLATFORM_RIGHT_RAMP_POSITION: Vec3 = [-12.8, 0.68, 2.8];
 const STUDIO_SOUNDCLOUD_DJ_POSITION: Vec3 = [-16.5, STUDIO_DJ_PLATFORM_FLOOR_Y, 6.05];
 const STUDIO_SOUNDCLOUD_DJ_ROTATION: Vec3 = [0, 0, 0];
 const STUDIO_SOUNDCLOUD_DJ_DESK_SIZE: Vec3 = [2.82, 0.52, 1.58];
+const STUDIO_SOUNDCLOUD_CRATE_DEFAULT_X = 1.88;
+const STUDIO_SOUNDCLOUD_CRATE_DEFAULT_Y = 0.742;
+const STUDIO_SOUNDCLOUD_CRATE_DEFAULT_Z = 1.72;
+const STUDIO_SOUNDCLOUD_DECK_A_CRATE_POSITION: Vec3 = [
+  STUDIO_SOUNDCLOUD_DJ_POSITION[0] - STUDIO_SOUNDCLOUD_CRATE_DEFAULT_X,
+  STUDIO_SOUNDCLOUD_DJ_POSITION[1] + STUDIO_SOUNDCLOUD_CRATE_DEFAULT_Y,
+  STUDIO_SOUNDCLOUD_DJ_POSITION[2] + STUDIO_SOUNDCLOUD_CRATE_DEFAULT_Z,
+];
+const STUDIO_SOUNDCLOUD_GRID_CONTROLLER_DEFAULT_OFFSET_X = 2.22;
+const STUDIO_SOUNDCLOUD_GRID_CONTROLLER_DEFAULT_Y = 0.622;
+const STUDIO_SOUNDCLOUD_GRID_CONTROLLER_DEFAULT_Z = 0.42;
+const STUDIO_SOUNDCLOUD_GRID_A_POSITION: Vec3 = [
+  STUDIO_SOUNDCLOUD_DJ_POSITION[0] - STUDIO_SOUNDCLOUD_GRID_CONTROLLER_DEFAULT_OFFSET_X,
+  STUDIO_SOUNDCLOUD_DJ_POSITION[1] + STUDIO_SOUNDCLOUD_GRID_CONTROLLER_DEFAULT_Y,
+  STUDIO_SOUNDCLOUD_DJ_POSITION[2] + STUDIO_SOUNDCLOUD_GRID_CONTROLLER_DEFAULT_Z,
+];
+const STUDIO_SOUNDCLOUD_GRID_B_POSITION: Vec3 = [
+  STUDIO_SOUNDCLOUD_DJ_POSITION[0] + STUDIO_SOUNDCLOUD_GRID_CONTROLLER_DEFAULT_OFFSET_X,
+  STUDIO_SOUNDCLOUD_DJ_POSITION[1] + STUDIO_SOUNDCLOUD_GRID_CONTROLLER_DEFAULT_Y,
+  STUDIO_SOUNDCLOUD_DJ_POSITION[2] + STUDIO_SOUNDCLOUD_GRID_CONTROLLER_DEFAULT_Z,
+];
 const STUDIO_DAW_POSITION: Vec3 = [-21.25, 0, -4.6];
 const STUDIO_DAW_ROTATION: Vec3 = [0, Math.PI / 2, 0];
 const STUDIO_LOOPER_POSITION: Vec3 = [-17.0, 0, -8.1];
@@ -569,6 +601,36 @@ const STUDIO_LAYOUT_STATION_SPECS: Record<StudioLayoutStationId, StudioLayoutSta
     hitboxOffset: [0, 0.82, 0],
     followDistance: 3.4,
     floorHeight: STUDIO_DJ_PLATFORM_FLOOR_Y,
+    defaultFloorLock: false,
+  },
+  "deck-a-crate": {
+    id: "deck-a-crate",
+    label: "Deck A Crate",
+    defaultTransform: { position: STUDIO_SOUNDCLOUD_DECK_A_CRATE_POSITION, rotation: STUDIO_SOUNDCLOUD_DJ_ROTATION },
+    hitboxSize: [1.82, 0.46, 0.88],
+    hitboxOffset: [0, 0.14, 0],
+    followDistance: 2.8,
+    floorHeight: STUDIO_SOUNDCLOUD_DECK_A_CRATE_POSITION[1],
+    defaultFloorLock: false,
+  },
+  "grid-a": {
+    id: "grid-a",
+    label: "Grid A",
+    defaultTransform: { position: STUDIO_SOUNDCLOUD_GRID_A_POSITION, rotation: STUDIO_SOUNDCLOUD_DJ_ROTATION },
+    hitboxSize: [1.5, 0.5, 1.45],
+    hitboxOffset: [0, 0.2, 0],
+    followDistance: 2.8,
+    floorHeight: STUDIO_SOUNDCLOUD_GRID_A_POSITION[1],
+    defaultFloorLock: false,
+  },
+  "grid-b": {
+    id: "grid-b",
+    label: "Grid B",
+    defaultTransform: { position: STUDIO_SOUNDCLOUD_GRID_B_POSITION, rotation: STUDIO_SOUNDCLOUD_DJ_ROTATION },
+    hitboxSize: [1.5, 0.5, 1.45],
+    hitboxOffset: [0, 0.2, 0],
+    followDistance: 2.8,
+    floorHeight: STUDIO_SOUNDCLOUD_GRID_B_POSITION[1],
     defaultFloorLock: false,
   },
   "monitor-studio-status": {
@@ -4889,6 +4951,14 @@ interface StudioSoundCloudReadoutCanvasSpec {
   title: string;
 }
 
+interface StudioSoundCloudGridScreenCanvasSpec {
+  accentColor: string;
+  burstLengthLabel: string;
+  feedbackLabel: string;
+  padCountLabel: string;
+  state: SoundCloudBoothGridController["state"];
+}
+
 const STUDIO_SOUNDCLOUD_TABLE_SURFACE_SIZE: Vec3 = [3.1, 0.022, 1.78];
 const STUDIO_SOUNDCLOUD_TABLE_EDGE_HEIGHT = 0.34;
 const STUDIO_SOUNDCLOUD_TABLE_EDGE_THICKNESS = 0.08;
@@ -4981,11 +5051,48 @@ const STUDIO_SOUNDCLOUD_LOWER_RAIL_SIZE: Vec3 = [0.88, 0.014, 0.03];
 const STUDIO_SOUNDCLOUD_CRATE_VISIBLE_ROWS = 5;
 const STUDIO_SOUNDCLOUD_CRATE_SCREEN_SIZE: Vec3 = [1.62, 0.055, 0.72];
 const STUDIO_SOUNDCLOUD_CRATE_PLANE_SIZE: [number, number] = [1.46, 0.56];
-const STUDIO_SOUNDCLOUD_CRATE_SCREEN_Z = 1.72;
-const STUDIO_SOUNDCLOUD_CRATE_SCREEN_X = 1.88;
-const STUDIO_SOUNDCLOUD_CRATE_SCREEN_Y = 0.742;
+const STUDIO_SOUNDCLOUD_CRATE_SCREEN_Z = STUDIO_SOUNDCLOUD_CRATE_DEFAULT_Z;
+const STUDIO_SOUNDCLOUD_CRATE_SCREEN_X = STUDIO_SOUNDCLOUD_CRATE_DEFAULT_X;
+const STUDIO_SOUNDCLOUD_CRATE_SCREEN_Y = STUDIO_SOUNDCLOUD_CRATE_DEFAULT_Y;
 const STUDIO_SOUNDCLOUD_CRATE_ROW_HIT_SIZE: Vec3 = [1.28, 0.035, 0.066];
-const STUDIO_SOUNDCLOUD_CRATE_SCROLL_HIT_SIZE: Vec3 = [0.28, 0.035, 0.078];
+const STUDIO_SOUNDCLOUD_CRATE_SCROLL_HIT_SIZE: Vec3 = [0.2, 0.035, 0.07];
+const STUDIO_SOUNDCLOUD_CRATE_SCROLL_UP_POSITION: Vec3 = [-0.11, STUDIO_SOUNDCLOUD_CRATE_SCREEN_SIZE[1] / 2 + 0.028, 0.218];
+const STUDIO_SOUNDCLOUD_CRATE_SCROLL_DOWN_POSITION: Vec3 = [0.11, STUDIO_SOUNDCLOUD_CRATE_SCREEN_SIZE[1] / 2 + 0.028, 0.218];
+const STUDIO_SOUNDCLOUD_GRID_ROWS = ["A", "B", "C", "D", "E", "F", "G", "H"] as const;
+const STUDIO_SOUNDCLOUD_GRID_COLUMNS = ["1", "2", "3", "4", "5", "6", "7", "8"] as const;
+const STUDIO_SOUNDCLOUD_GRID_PAD_IDS = STUDIO_SOUNDCLOUD_GRID_ROWS.flatMap((row) =>
+  STUDIO_SOUNDCLOUD_GRID_COLUMNS.map((column) => `${row}${column}` as SoundCloudBoothGridPadId),
+);
+const STUDIO_SOUNDCLOUD_GRID_CONTROLLER_SIZE: Vec3 = [1.26, 0.072, 1.28];
+const STUDIO_SOUNDCLOUD_GRID_SCREEN_SIZE: [number, number] = [1.14, 1.16];
+const STUDIO_SOUNDCLOUD_GRID_SCREEN_BACKING_SIZE: Vec3 = [1.18, 0.018, 1.2];
+const STUDIO_SOUNDCLOUD_GRID_SETTING_BUTTON_SIZE: Vec3 = [0.108, 0.024, 0.076];
+const STUDIO_SOUNDCLOUD_GRID_PAD_BUTTON_SIZE: Vec3 = [0.116, 0.024, 0.08];
+const STUDIO_SOUNDCLOUD_GRID_SETTING_PITCH_X = 0.118;
+const STUDIO_SOUNDCLOUD_GRID_PAD_PITCH_X = 0.128;
+const STUDIO_SOUNDCLOUD_GRID_PAD_PITCH_Z = 0.086;
+const STUDIO_SOUNDCLOUD_GRID_SETTING_Z = -0.381;
+const STUDIO_SOUNDCLOUD_GRID_PAD_START_Z = -0.276;
+const STUDIO_SOUNDCLOUD_GRID_HIT_TARGET_Y_OFFSET = 0.038;
+const STUDIO_SOUNDCLOUD_GRID_WAVEFORM_HIT_WIDTH = (500 / 1024) * STUDIO_SOUNDCLOUD_GRID_SCREEN_SIZE[0];
+const STUDIO_SOUNDCLOUD_GRID_WAVEFORM_HIT_DEPTH = (50 / 1024) * STUDIO_SOUNDCLOUD_GRID_SCREEN_SIZE[1];
+const STUDIO_SOUNDCLOUD_GRID_WAVEFORM_HIT_CENTER_X = (((304 + 250) / 1024) - 0.5) * STUDIO_SOUNDCLOUD_GRID_SCREEN_SIZE[0];
+const STUDIO_SOUNDCLOUD_GRID_WAVEFORM_HIT_CENTER_Z = (((46 + 25) / 1024) - 0.5) * STUDIO_SOUNDCLOUD_GRID_SCREEN_SIZE[1];
+const STUDIO_SOUNDCLOUD_GRID_CLAMP_HIT_SIZE: Vec3 = [0.11, 0.03, Math.max(0.13, STUDIO_SOUNDCLOUD_GRID_WAVEFORM_HIT_DEPTH * 1.8)];
+const STUDIO_SOUNDCLOUD_GRID_WAVEFORM_BUTTON_CANVAS_SIZE = 38;
+const STUDIO_SOUNDCLOUD_GRID_WAVEFORM_BUTTON_SIZE: Vec3 = [
+  (STUDIO_SOUNDCLOUD_GRID_WAVEFORM_BUTTON_CANVAS_SIZE / 1024) * STUDIO_SOUNDCLOUD_GRID_SCREEN_SIZE[0],
+  0.024,
+  (STUDIO_SOUNDCLOUD_GRID_WAVEFORM_BUTTON_CANVAS_SIZE / 1024) * STUDIO_SOUNDCLOUD_GRID_SCREEN_SIZE[1],
+];
+
+function mapStudioSoundCloudGridScreenPointToLocal(canvasX: number, canvasY: number): Vec3 {
+  return [
+    ((canvasX / 1024) - 0.5) * STUDIO_SOUNDCLOUD_GRID_SCREEN_SIZE[0],
+    STUDIO_SOUNDCLOUD_GRID_CONTROLLER_SIZE[1] / 2 + STUDIO_SOUNDCLOUD_GRID_HIT_TARGET_Y_OFFSET,
+    ((canvasY / 1024) - 0.5) * STUDIO_SOUNDCLOUD_GRID_SCREEN_SIZE[1],
+  ];
+}
 
 function createStudioSoundCloudReadoutCanvas({
   accentColor,
@@ -5049,6 +5156,402 @@ function createStudioSoundCloudReadoutCanvas({
   context.globalAlpha = 1;
 
   return canvas;
+}
+
+function drawStudioSoundCloudGridWaveform({
+  accentColor,
+  context,
+  state,
+  x,
+  y,
+  width,
+  height,
+}: {
+  accentColor: string;
+  context: CanvasRenderingContext2D;
+  state: SoundCloudBoothGridController["state"];
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}) {
+  const duration = Number.isFinite(state.playbackDuration) && state.playbackDuration > 0 ? state.playbackDuration : 0;
+  const latestStart = duration > 0 ? Math.max(0, duration - state.burstLengthMs) : 0;
+  const startClampRatio = duration > 0 ? clampNumber(state.sampleStartMs / duration, 0, 1) : 0;
+  const endClampRatio = duration > 0 ? clampNumber(state.sampleEndMs / duration, 0, 1) : 0;
+  const hasClampWindow = state.padMode === "timeline" || state.padMode === "continuous";
+  const waveformBars = state.waveformBars.length > 0 ? state.waveformBars : [0.22, 0.5, 0.32, 0.66, 0.42, 0.72, 0.34, 0.58];
+
+  context.fillStyle = "rgba(5, 9, 20, 0.78)";
+  context.fillRect(x, y, width, height);
+  context.strokeStyle = accentColor;
+  context.globalAlpha = 0.48;
+  context.lineWidth = 3;
+  context.strokeRect(x, y, width, height);
+  context.globalAlpha = 1;
+
+  const innerX = x + 12;
+  const innerY = y + 8;
+  const innerW = width - 24;
+  const innerH = height - 16;
+  const barCount = Math.min(96, waveformBars.length);
+  const stride = innerW / Math.max(1, barCount);
+
+  context.fillStyle = accentColor;
+  context.globalAlpha = 0.22;
+  for (let index = 0; index < barCount; index += 1) {
+    const sampleIndex = Math.floor((index / Math.max(1, barCount - 1)) * (waveformBars.length - 1));
+    const barLevel = clampNumber(waveformBars[sampleIndex] ?? 0.2, 0.08, 1);
+    const barHeight = Math.max(3, innerH * barLevel);
+    const barX = innerX + index * stride;
+    context.fillRect(barX, innerY + (innerH - barHeight) / 2, Math.max(1, stride * 0.52), barHeight);
+  }
+  context.globalAlpha = 1;
+
+  if (duration > 0 && hasClampWindow) {
+    const startX = innerX + innerW * startClampRatio;
+    const endX = innerX + innerW * endClampRatio;
+
+    context.fillStyle = "rgba(248, 211, 106, 0.1)";
+    context.fillRect(startX, innerY, Math.max(0, endX - startX), innerH);
+    context.fillStyle = "rgba(255, 110, 150, 0.08)";
+    context.fillRect(innerX, innerY, Math.max(0, startX - innerX), innerH);
+    context.fillRect(endX, innerY, Math.max(0, innerX + innerW - endX), innerH);
+
+    [
+      { label: "START", clampX: startX },
+      { label: "END", clampX: endX },
+    ].forEach((clamp) => {
+      context.strokeStyle = "#f8d36a";
+      context.globalAlpha = 0.88;
+      context.lineWidth = 4;
+      context.beginPath();
+      context.moveTo(clamp.clampX, y + 3);
+      context.lineTo(clamp.clampX, y + height - 3);
+      context.stroke();
+
+      context.fillStyle = "#f8d36a";
+      context.globalAlpha = 0.92;
+      context.beginPath();
+      context.moveTo(clamp.clampX, y + 2);
+      context.lineTo(clamp.clampX - 8, y + 13);
+      context.lineTo(clamp.clampX + 8, y + 13);
+      context.closePath();
+      context.fill();
+
+      context.font = "800 11px monospace";
+      context.textAlign = clamp.label === "START" ? "left" : "right";
+      context.fillText(clamp.label, clamp.clampX + (clamp.label === "START" ? 7 : -7), y + height - 8);
+    });
+    context.globalAlpha = 1;
+  }
+
+  state.pads.forEach((pad, index) => {
+    if (duration <= 0) {
+      return;
+    }
+
+    const padRatio = clampNumber(pad.positionMs / duration, 0, 1);
+    const markerX = innerX + innerW * padRatio;
+    const isLastTriggered = state.lastTriggeredPadId === pad.id;
+
+    context.strokeStyle = isLastTriggered ? "#f8d36a" : hasClampWindow ? "#c9fbff" : accentColor;
+    context.globalAlpha = isLastTriggered ? 0.95 : hasClampWindow ? 0.34 : 0.28;
+    context.lineWidth = isLastTriggered ? 4 : 2;
+    context.beginPath();
+    context.moveTo(markerX, innerY - 2);
+    context.lineTo(markerX, innerY + innerH + 2);
+    context.stroke();
+
+    if (index === 0 || index === state.pads.length - 1 || isLastTriggered) {
+      context.fillStyle = isLastTriggered ? "#f8d36a" : "#e9fbff";
+      context.globalAlpha = isLastTriggered ? 0.96 : 0.62;
+      context.font = "800 10px monospace";
+      context.textAlign = index === state.pads.length - 1 ? "right" : "left";
+      context.fillText(pad.id, markerX + (index === state.pads.length - 1 ? -4 : 4), innerY + 10);
+    }
+  });
+  context.globalAlpha = 1;
+
+  context.fillStyle = hasClampWindow ? "#f8d36a" : "#a9bdc9";
+  context.globalAlpha = 0.8;
+  context.font = "800 12px monospace";
+  context.textAlign = "center";
+  const clampLabel = `CLAMP ${formatSoundCloudDeckTime(state.sampleStartMs)} TO ${formatSoundCloudDeckTime(state.sampleEndMs || latestStart)}`;
+  context.fillText(state.padMode === "continuous" ? `CONT ${clampLabel}` : state.padMode === "timeline" ? clampLabel : "RANDOM SLICES", x + width / 2, y + 12);
+  context.globalAlpha = 1;
+}
+
+function drawStudioSoundCloudGridWaveformButton(
+  context: CanvasRenderingContext2D,
+  label: string,
+  centerX: number,
+  centerY: number,
+  accentColor: string,
+  isEnabled: boolean,
+) {
+  const size = STUDIO_SOUNDCLOUD_GRID_WAVEFORM_BUTTON_CANVAS_SIZE;
+  const x = centerX - size / 2;
+  const y = centerY - size / 2;
+
+  context.fillStyle = isEnabled ? "rgba(87, 243, 255, 0.16)" : "rgba(111, 134, 163, 0.08)";
+  context.fillRect(x, y, size, size);
+  context.strokeStyle = isEnabled ? accentColor : "#3b4b60";
+  context.globalAlpha = isEnabled ? 0.74 : 0.42;
+  context.lineWidth = 3;
+  context.strokeRect(x, y, size, size);
+  context.globalAlpha = 1;
+  context.fillStyle = isEnabled ? "#e9fbff" : "#6f86a3";
+  context.textAlign = "center";
+  context.font = "900 18px monospace";
+  context.fillText(label, centerX, centerY + 1);
+}
+
+function createStudioSoundCloudGridScreenCanvas({
+  accentColor,
+  burstLengthLabel,
+  feedbackLabel,
+  padCountLabel,
+  state,
+}: StudioSoundCloudGridScreenCanvasSpec) {
+  const canvas = document.createElement("canvas");
+  canvas.width = 1024;
+  canvas.height = 1024;
+
+  const context = canvas.getContext("2d");
+
+  if (!context) {
+    return canvas;
+  }
+
+  const padsById = new Map(state.pads.map((pad) => [pad.id, pad]));
+  const isReady = state.isAuxWidgetReady && state.pads.length > 0;
+  const screenGlow = state.isBurstPlaying ? 0.82 : isReady ? 0.58 : 0.34;
+  const modeLabel = state.padMode === "continuous" ? "CONT" : state.padMode === "timeline" ? "TIME" : "RAND";
+  const settingLabels = ["ROLL", modeLabel, "LEN-", "LEN+", "VOL-", "VOL+", "MUTE", "LOCK", "TEST"];
+
+  context.fillStyle = "#050914";
+  context.fillRect(0, 0, canvas.width, canvas.height);
+
+  const gradient = context.createLinearGradient(0, 0, canvas.width, canvas.height);
+  gradient.addColorStop(0, "rgba(87, 243, 255, 0.12)");
+  gradient.addColorStop(0.46, "rgba(5, 9, 20, 0.08)");
+  gradient.addColorStop(1, "rgba(246, 79, 255, 0.12)");
+  context.fillStyle = gradient;
+  context.fillRect(0, 0, canvas.width, canvas.height);
+
+  context.strokeStyle = accentColor;
+  context.globalAlpha = screenGlow;
+  context.lineWidth = 10;
+  context.strokeRect(24, 24, canvas.width - 48, canvas.height - 48);
+  context.globalAlpha = 1;
+
+  context.textAlign = "left";
+  context.textBaseline = "middle";
+  context.fillStyle = accentColor;
+  context.font = "900 42px monospace";
+  context.fillText(`GRID ${state.deckId}`, 54, 72);
+
+  context.textAlign = "right";
+  context.fillStyle = state.isBurstPlaying ? "#f8d36a" : "#e9fbff";
+  context.globalAlpha = state.isBurstPlaying ? 0.94 : 0.74;
+  context.font = "800 24px monospace";
+  context.fillText(state.isBurstPlaying ? "BURST PLAYING" : isReady ? "READY" : "BLOCKED", 970, 72);
+  context.globalAlpha = 1;
+
+  drawStudioSoundCloudGridWaveform({
+    accentColor,
+    context,
+    state,
+    x: 304,
+    y: 46,
+    width: 500,
+    height: 50,
+  });
+
+  const canNudgeClamps = !state.isLocked && state.playbackDuration > state.burstLengthMs;
+  if (state.padMode === "continuous") {
+    drawStudioSoundCloudGridWaveformButton(context, "CL-", 266, 72, accentColor, canNudgeClamps);
+    drawStudioSoundCloudGridWaveformButton(context, "CL+", 842, 72, accentColor, canNudgeClamps);
+  } else if (state.padMode === "timeline") {
+    drawStudioSoundCloudGridWaveformButton(context, "S-", 230, 72, accentColor, canNudgeClamps);
+    drawStudioSoundCloudGridWaveformButton(context, "S+", 272, 72, accentColor, canNudgeClamps);
+    drawStudioSoundCloudGridWaveformButton(context, "E-", 836, 72, accentColor, canNudgeClamps);
+    drawStudioSoundCloudGridWaveformButton(context, "E+", 878, 72, accentColor, canNudgeClamps);
+  }
+
+  context.textAlign = "left";
+  context.fillStyle = "#a9bdc9";
+  context.globalAlpha = 0.72;
+  context.font = "700 22px monospace";
+  context.fillText(trimStudioSoundCloudText(feedbackLabel, 46).toUpperCase(), 54, 112);
+  context.globalAlpha = 1;
+
+  const settingX = 54;
+  const settingY = 146;
+  const settingGap = 10;
+  const settingW = (canvas.width - settingX * 2 - settingGap * (settingLabels.length - 1)) / settingLabels.length;
+  const settingH = 60;
+  settingLabels.forEach((label, index) => {
+    const x = settingX + index * (settingW + settingGap);
+    const isActive = (label === modeLabel && state.padMode !== "random") || (label === "MUTE" && state.isMuted) || (label === "LOCK" && state.isLocked) || (label === "TEST" && state.isBurstPlaying);
+    const isBlocked = state.isLocked && !["MUTE", "LOCK", "TEST"].includes(label);
+
+    context.fillStyle = isActive ? "rgba(248, 211, 106, 0.22)" : isBlocked ? "rgba(111, 134, 163, 0.08)" : "rgba(87, 243, 255, 0.12)";
+    context.fillRect(x, settingY, settingW, settingH);
+    context.strokeStyle = isActive ? "#f8d36a" : isBlocked ? "#3b4b60" : accentColor;
+    context.globalAlpha = isBlocked ? 0.42 : 0.7;
+    context.lineWidth = 3;
+    context.strokeRect(x, settingY, settingW, settingH);
+    context.globalAlpha = 1;
+    context.fillStyle = isBlocked ? "#6f86a3" : isActive ? "#f8d36a" : "#e9fbff";
+    context.textAlign = "center";
+    context.font = "900 24px monospace";
+    context.fillText(label, x + settingW / 2, settingY + settingH / 2);
+  });
+
+  const gridX = 54;
+  const gridY = 234;
+  const cellGap = 8;
+  const cellW = (canvas.width - gridX * 2 - cellGap * 7) / 8;
+  const cellH = 68;
+  STUDIO_SOUNDCLOUD_GRID_PAD_IDS.forEach((padId, index) => {
+    const pad = padsById.get(padId);
+    const rowIndex = Math.floor(index / STUDIO_SOUNDCLOUD_GRID_COLUMNS.length);
+    const columnIndex = index % STUDIO_SOUNDCLOUD_GRID_COLUMNS.length;
+    const x = gridX + columnIndex * (cellW + cellGap);
+    const y = gridY + rowIndex * (cellH + cellGap);
+    const isLastTriggered = state.lastTriggeredPadId === padId;
+    const isFlashing = isLastTriggered && state.isBurstPlaying;
+
+    context.fillStyle = pad
+      ? isFlashing
+        ? "rgba(248, 211, 106, 0.34)"
+        : isLastTriggered
+          ? "rgba(87, 243, 255, 0.22)"
+          : "rgba(87, 243, 255, 0.1)"
+      : "rgba(111, 134, 163, 0.08)";
+    context.fillRect(x, y, cellW, cellH);
+
+    context.strokeStyle = pad ? (isFlashing ? "#f8d36a" : accentColor) : "#334256";
+    context.globalAlpha = pad ? (isLastTriggered ? 0.9 : 0.54) : 0.35;
+    context.lineWidth = isLastTriggered ? 5 : 3;
+    context.strokeRect(x, y, cellW, cellH);
+    context.globalAlpha = 1;
+
+    context.fillStyle = pad ? (isFlashing ? "#f8d36a" : "#e9fbff") : "#53657c";
+    context.textAlign = "center";
+    context.font = "900 26px monospace";
+    context.fillText(padId, x + cellW / 2, y + cellH / 2 - 7);
+
+    context.fillStyle = pad ? "#a9bdc9" : "#53657c";
+    context.globalAlpha = pad ? 0.72 : 0.48;
+    context.font = "700 15px monospace";
+    context.fillText(pad ? formatSoundCloudDeckTime(pad.positionMs) : "BLOCK", x + cellW / 2, y + cellH / 2 + 18);
+    context.globalAlpha = 1;
+  });
+
+  const readoutY = 884;
+  context.fillStyle = "rgba(5, 9, 20, 0.78)";
+  context.fillRect(54, readoutY, canvas.width - 108, 86);
+  context.strokeStyle = accentColor;
+  context.globalAlpha = 0.46;
+  context.lineWidth = 3;
+  context.strokeRect(54, readoutY, canvas.width - 108, 86);
+  context.globalAlpha = 1;
+
+  context.textAlign = "left";
+  context.fillStyle = "#e9fbff";
+  context.font = "800 23px monospace";
+  context.fillText(`DECK ${state.deckId} | ${trimStudioSoundCloudText(feedbackLabel, 34).toUpperCase()}`, 78, readoutY + 29);
+  context.fillStyle = accentColor;
+  context.font = "800 21px monospace";
+  context.fillText(`PADS ${padCountLabel} | ${modeLabel} | LEN ${burstLengthLabel} | VOL ${Math.round(state.volume)}`, 78, readoutY + 61);
+
+  context.textAlign = "right";
+  context.fillStyle = state.isMuted || state.isLocked ? "#f8d36a" : "#a9bdc9";
+  context.font = "800 21px monospace";
+  context.fillText(`${state.isMuted ? "MUTE" : "OPEN"} | ${state.isLocked ? "LOCK" : "UNLOCK"}`, 946, readoutY + 61);
+
+  return canvas;
+}
+
+function StudioSoundCloudGridClampHandle({
+  accentColor,
+  clamp,
+  grid,
+}: {
+  accentColor: string;
+  clamp: "start" | "end";
+  grid: SoundCloudBoothGridController;
+}) {
+  const handleRef = useRef<React.ElementRef<"mesh">>(null);
+  const clampPositionRef = useRef(0);
+  const isDraggingRef = useRef(false);
+  const { actions, state } = grid;
+  const duration = Number.isFinite(state.playbackDuration) && state.playbackDuration > 0 ? state.playbackDuration : 0;
+  const latestStart = duration > 0 ? Math.max(0, duration - state.burstLengthMs) : 0;
+  const clampPositionMs = clamp === "start" ? state.sampleStartMs : state.sampleEndMs || latestStart;
+  const clampRatio = duration > 0 ? clampNumber(clampPositionMs / duration, 0, 1) : 0;
+  const clampX = STUDIO_SOUNDCLOUD_GRID_WAVEFORM_HIT_CENTER_X - STUDIO_SOUNDCLOUD_GRID_WAVEFORM_HIT_WIDTH / 2 + clampRatio * STUDIO_SOUNDCLOUD_GRID_WAVEFORM_HIT_WIDTH;
+  const enabled = (state.padMode === "timeline" || state.padMode === "continuous") && duration > state.burstLengthMs;
+
+  useEffect(() => {
+    if (!isDraggingRef.current) {
+      clampPositionRef.current = clampPositionMs;
+    }
+  }, [clampPositionMs]);
+
+  const moveClampByPixels = useCallback((movementX: number) => {
+    if (duration <= 0) {
+      return;
+    }
+
+    const effectiveMovementX = Math.abs(movementX) < 0.2 ? 0 : clampNumber(movementX, -18, 18);
+    const pixelsForFullStrip = 500;
+    const nextPosition = clampNumber(clampPositionRef.current + effectiveMovementX * (duration / pixelsForFullStrip), 0, duration);
+
+    clampPositionRef.current = nextPosition;
+    actions.setSampleClamp(clamp, nextPosition);
+  }, [actions, clamp, duration]);
+
+  useRegisterInteractable(useMemo(() => ({
+    id: `soundcloud-grid-${state.deckId.toLowerCase()}-${clamp}-clamp`,
+    label: `${state.deckId} Grid ${clamp === "start" ? "Start" : "End"} Clamp`,
+    objectRef: handleRef,
+    modes: ["draggable" as const],
+    enabled,
+    onDragStart: () => {
+      isDraggingRef.current = true;
+      clampPositionRef.current = clampPositionMs;
+    },
+    onDragMove: ({ movementX }) => {
+      moveClampByPixels(movementX);
+    },
+    onDragEnd: () => {
+      isDraggingRef.current = false;
+    },
+  }), [
+    clamp,
+    clampPositionMs,
+    enabled,
+    moveClampByPixels,
+    state.deckId,
+  ]));
+
+  return (
+    <mesh
+      ref={handleRef}
+      position={[
+        clampX,
+        STUDIO_SOUNDCLOUD_GRID_CONTROLLER_SIZE[1] / 2 + STUDIO_SOUNDCLOUD_GRID_HIT_TARGET_Y_OFFSET,
+        STUDIO_SOUNDCLOUD_GRID_WAVEFORM_HIT_CENTER_Z,
+      ]}
+    >
+      <boxGeometry args={STUDIO_SOUNDCLOUD_GRID_CLAMP_HIT_SIZE} />
+      <meshBasicMaterial args={[{ color: accentColor, depthWrite: false, transparent: true, opacity: enabled ? 0.08 : 0, toneMapped: false }]} />
+    </mesh>
+  );
 }
 
 function StudioSoundCloudSpinningPlatter({
@@ -5780,26 +6283,26 @@ function createStudioSoundCloudCrateCanvas({
     context.globalAlpha = 1;
   }
 
-  const controlX = canvas.width - 112;
+  const scrollButtonY = 432;
   [
-    { label: "UP", y: 158, active: effectiveOffset > 0 },
-    { label: "DOWN", y: 374, active: effectiveOffset < maxOffset },
+    { label: "UP", x: canvas.width / 2 - 70, active: effectiveOffset > 0 },
+    { label: "DOWN", x: canvas.width / 2 + 70, active: effectiveOffset < maxOffset },
   ].forEach((control) => {
     context.fillStyle = control.active ? accentColor : "#314256";
     context.globalAlpha = control.active ? 0.32 : 0.22;
-    context.fillRect(controlX - 54, control.y - 25, 92, 44);
+    context.fillRect(control.x - 54, scrollButtonY - 22, 108, 40);
     context.globalAlpha = control.active ? 0.92 : 0.52;
     context.fillStyle = "#e9fbff";
     context.font = "900 20px monospace";
     context.textAlign = "center";
-    context.fillText(control.label, controlX - 8, control.y - 2);
+    context.fillText(control.label, control.x, scrollButtonY - 1);
   });
 
   context.textAlign = "center";
   context.fillStyle = "#a9bdc9";
   context.globalAlpha = 0.66;
   context.font = "700 18px monospace";
-  context.fillText("CLICK ROW TO LOAD | CLICK UP/DOWN TO SCROLL", canvas.width / 2, 470);
+  context.fillText("CLICK ROW TO LOAD | SCROLL BUTTONS BELOW ROWS", canvas.width / 2, 480);
   context.globalAlpha = 1;
 
   return canvas;
@@ -5893,7 +6396,7 @@ function StudioSoundCloudCrateBrowser({
         caption={`${deck.label} Crate Scroll Up`}
         enabled={effectiveOffset > 0}
         id={`studio-soundcloud-crate-${deck.id.toLowerCase()}-up`}
-        position={[0.63, STUDIO_SOUNDCLOUD_CRATE_SCREEN_SIZE[1] / 2 + 0.028, -0.2]}
+        position={STUDIO_SOUNDCLOUD_CRATE_SCROLL_UP_POSITION}
         size={STUDIO_SOUNDCLOUD_CRATE_SCROLL_HIT_SIZE}
         onActivate={() => onSetScrollOffset(deck.id, Math.max(0, effectiveOffset - 1))}
       />
@@ -5902,7 +6405,7 @@ function StudioSoundCloudCrateBrowser({
         caption={`${deck.label} Crate Scroll Down`}
         enabled={effectiveOffset < maxOffset}
         id={`studio-soundcloud-crate-${deck.id.toLowerCase()}-down`}
-        position={[0.63, STUDIO_SOUNDCLOUD_CRATE_SCREEN_SIZE[1] / 2 + 0.028, 0.2]}
+        position={STUDIO_SOUNDCLOUD_CRATE_SCROLL_DOWN_POSITION}
         size={STUDIO_SOUNDCLOUD_CRATE_SCROLL_HIT_SIZE}
         onActivate={() => onSetScrollOffset(deck.id, Math.min(maxOffset, effectiveOffset + 1))}
       />
@@ -5926,6 +6429,330 @@ function StudioSoundCloudCrateBrowser({
           }}
         />
       ))}
+    </group>
+  );
+}
+
+function StudioSoundCloudDeckCrateStation({
+  deck,
+  onPushConsoleEvent,
+  phaseVisuals,
+  position,
+}: {
+  deck: SoundCloudBoothDeck;
+  onPushConsoleEvent?: (event: SoundCloudBoothConsoleEventInput) => void;
+  phaseVisuals: PhaseVisuals;
+  position: Vec3;
+}) {
+  const [scrollOffset, setScrollOffset] = useState(0);
+  const handleSetScrollOffset = useCallback((_deckId: SoundCloudBoothDeck["id"], offset: number) => {
+    setScrollOffset(offset);
+  }, []);
+
+  return (
+    <StudioSoundCloudCrateBrowser
+      deck={deck}
+      onPushConsoleEvent={onPushConsoleEvent}
+      onSetScrollOffset={handleSetScrollOffset}
+      phaseVisuals={phaseVisuals}
+      position={position}
+      scrollOffset={scrollOffset}
+    />
+  );
+}
+
+function getSoundCloudGridBurstLengthLabel(milliseconds: number) {
+  return milliseconds >= 1000 ? `${milliseconds / 1000}S` : `${milliseconds}MS`;
+}
+
+function StudioSoundCloudGridController({
+  accentColor,
+  grid,
+  position,
+}: StudioSoundCloudGridControllerProps) {
+  const { actions, state } = grid;
+  const controllerRef = useRef<React.ElementRef<"group">>(null);
+  const padsById = useMemo(() => new Map(state.pads.map((pad) => [pad.id, pad])), [state.pads]);
+  const feedbackLabel = state.lastActionLabel ?? state.statusLabel;
+  const burstLengthLabel = getSoundCloudGridBurstLengthLabel(state.burstLengthMs);
+  const padCountLabel = `${state.pads.length}/64`;
+  const isReady = state.isAuxWidgetReady && state.pads.length > 0;
+  const padScreenSignature = useMemo(() => (
+    state.pads.map((pad) => `${pad.id}:${Math.round(pad.positionMs)}`).join("|")
+  ), [state.pads]);
+  const screenCanvas = useMemo(() => createStudioSoundCloudGridScreenCanvas({
+    accentColor,
+    burstLengthLabel,
+    feedbackLabel,
+    padCountLabel,
+    state,
+  }), [
+    accentColor,
+    burstLengthLabel,
+    feedbackLabel,
+    padCountLabel,
+    state,
+  ]);
+  const settingControls = useMemo<StudioDjControlSpec[]>(() => {
+    const modeLabel = state.padMode === "continuous" ? "CONT" : state.padMode === "timeline" ? "TIME" : "RAND";
+    const modeCaption = state.padMode === "continuous" ? "MODE CONTINUOUS" : state.padMode === "timeline" ? "MODE TIMELINE" : "MODE RANDOM";
+    const controls = [
+      {
+        id: "roll",
+        label: "ROLL",
+        caption: state.isLocked ? "LOCK" : "ROLL GRID",
+        enabled: !state.isLocked,
+        isActive: false,
+        onActivate: actions.rollPads,
+      },
+      {
+        id: "mode",
+        label: modeLabel,
+        caption: state.isLocked ? "LOCK" : modeCaption,
+        enabled: !state.isLocked,
+        isActive: state.padMode !== "random",
+        onActivate: actions.togglePadMode,
+      },
+      {
+        id: "len-down",
+        label: "LEN-",
+        caption: `LEN ${burstLengthLabel}`,
+        enabled: !state.isLocked,
+        isActive: false,
+        onActivate: () => actions.stepBurstLength(-1),
+      },
+      {
+        id: "len-up",
+        label: "LEN+",
+        caption: `LEN ${burstLengthLabel}`,
+        enabled: !state.isLocked,
+        isActive: false,
+        onActivate: () => actions.stepBurstLength(1),
+      },
+      {
+        id: "vol-down",
+        label: "VOL-",
+        caption: `VOL ${Math.round(state.volume)}`,
+        enabled: !state.isLocked,
+        isActive: false,
+        onActivate: () => actions.stepVolume(-1),
+      },
+      {
+        id: "vol-up",
+        label: "VOL+",
+        caption: `VOL ${Math.round(state.volume)}`,
+        enabled: !state.isLocked,
+        isActive: false,
+        onActivate: () => actions.stepVolume(1),
+      },
+      {
+        id: "mute",
+        label: "MUTE",
+        caption: state.isMuted ? "MUTE ON" : "MUTE OFF",
+        enabled: true,
+        isActive: state.isMuted,
+        onActivate: actions.toggleMute,
+      },
+      {
+        id: "lock",
+        label: "LOCK",
+        caption: state.isLocked ? "LOCK ON" : "LOCK OFF",
+        enabled: true,
+        isActive: state.isLocked,
+        onActivate: actions.toggleLock,
+      },
+      {
+        id: "test",
+        label: "TEST",
+        caption: state.isAuxWidgetReady ? "TEST BURST" : "GRID LOAD",
+        enabled: state.isAuxWidgetReady,
+        isActive: state.isBurstPlaying,
+        onActivate: actions.triggerTestBurst,
+      },
+    ];
+
+    const centerOffset = (controls.length - 1) / 2;
+
+    return controls.map((control, index) => ({
+      id: `soundcloud-grid-${state.deckId.toLowerCase()}-${control.id}`,
+      label: control.label,
+      caption: control.caption,
+      captionFontSize: 18,
+      position: [
+        (index - centerOffset) * STUDIO_SOUNDCLOUD_GRID_SETTING_PITCH_X,
+        STUDIO_SOUNDCLOUD_GRID_CONTROLLER_SIZE[1] / 2 + STUDIO_SOUNDCLOUD_GRID_HIT_TARGET_Y_OFFSET,
+        STUDIO_SOUNDCLOUD_GRID_SETTING_Z,
+      ] as Vec3,
+      size: STUDIO_SOUNDCLOUD_GRID_SETTING_BUTTON_SIZE,
+      accentColor: control.isActive ? "#f8d36a" : accentColor,
+      enabled: control.enabled,
+      isActive: control.isActive,
+      onActivate: control.onActivate,
+    }));
+  }, [
+    accentColor,
+    actions,
+    burstLengthLabel,
+    state.deckId,
+    state.isAuxWidgetReady,
+    state.isBurstPlaying,
+    state.isLocked,
+    state.isMuted,
+    state.padMode,
+    state.volume,
+  ]);
+  const waveformNudgeControls = useMemo<StudioDjControlSpec[]>(() => {
+    const canNudgeClamps = !state.isLocked && state.playbackDuration > state.burstLengthMs;
+    const controlBase = {
+      captionFontSize: 16,
+      size: STUDIO_SOUNDCLOUD_GRID_WAVEFORM_BUTTON_SIZE,
+      accentColor,
+      enabled: canNudgeClamps,
+      isActive: false,
+    };
+
+    if (state.padMode === "continuous") {
+      return [
+        {
+          ...controlBase,
+          id: `soundcloud-grid-${state.deckId.toLowerCase()}-cont-clamp-down`,
+          label: "CL-",
+          caption: "CLAMP -",
+          position: mapStudioSoundCloudGridScreenPointToLocal(266, 72),
+          onActivate: () => actions.stepSampleWindow(-1),
+        },
+        {
+          ...controlBase,
+          id: `soundcloud-grid-${state.deckId.toLowerCase()}-cont-clamp-up`,
+          label: "CL+",
+          caption: "CLAMP +",
+          position: mapStudioSoundCloudGridScreenPointToLocal(842, 72),
+          onActivate: () => actions.stepSampleWindow(1),
+        },
+      ];
+    }
+
+    if (state.padMode === "timeline") {
+      return [
+        {
+          ...controlBase,
+          id: `soundcloud-grid-${state.deckId.toLowerCase()}-start-clamp-down`,
+          label: "S-",
+          caption: "START -",
+          position: mapStudioSoundCloudGridScreenPointToLocal(230, 72),
+          onActivate: () => actions.stepSampleClamp("start", -1),
+        },
+        {
+          ...controlBase,
+          id: `soundcloud-grid-${state.deckId.toLowerCase()}-start-clamp-up`,
+          label: "S+",
+          caption: "START +",
+          position: mapStudioSoundCloudGridScreenPointToLocal(272, 72),
+          onActivate: () => actions.stepSampleClamp("start", 1),
+        },
+        {
+          ...controlBase,
+          id: `soundcloud-grid-${state.deckId.toLowerCase()}-end-clamp-down`,
+          label: "E-",
+          caption: "END -",
+          position: mapStudioSoundCloudGridScreenPointToLocal(836, 72),
+          onActivate: () => actions.stepSampleClamp("end", -1),
+        },
+        {
+          ...controlBase,
+          id: `soundcloud-grid-${state.deckId.toLowerCase()}-end-clamp-up`,
+          label: "E+",
+          caption: "END +",
+          position: mapStudioSoundCloudGridScreenPointToLocal(878, 72),
+          onActivate: () => actions.stepSampleClamp("end", 1),
+        },
+      ];
+    }
+
+    return [];
+  }, [
+    accentColor,
+    actions,
+    state.burstLengthMs,
+    state.deckId,
+    state.isLocked,
+    state.padMode,
+    state.playbackDuration,
+  ]);
+
+  return (
+    <group ref={controllerRef} position={position}>
+      <mesh>
+        <boxGeometry args={STUDIO_SOUNDCLOUD_GRID_CONTROLLER_SIZE} />
+        <meshStandardMaterial args={[{
+          color: "#0a1322",
+          emissive: accentColor,
+          emissiveIntensity: state.isBurstPlaying ? 0.18 : isReady ? 0.09 : 0.04,
+          roughness: 0.78,
+          metalness: 0.08,
+        }]} />
+      </mesh>
+      <mesh position={[0, STUDIO_SOUNDCLOUD_GRID_CONTROLLER_SIZE[1] / 2 + 0.003, 0]}>
+        <boxGeometry args={[STUDIO_SOUNDCLOUD_GRID_CONTROLLER_SIZE[0] + 0.045, 0.008, STUDIO_SOUNDCLOUD_GRID_CONTROLLER_SIZE[2] + 0.045]} />
+        <meshBasicMaterial args={[{ color: accentColor, transparent: true, opacity: state.isBurstPlaying ? 0.16 : 0.07, toneMapped: false }]} />
+      </mesh>
+      <mesh position={[0, STUDIO_SOUNDCLOUD_GRID_CONTROLLER_SIZE[1] / 2 + 0.012, 0]}>
+        <boxGeometry args={STUDIO_SOUNDCLOUD_GRID_SCREEN_BACKING_SIZE} />
+        <meshBasicMaterial args={[{ color: "#050914", transparent: true, opacity: 0.92, toneMapped: false }]} />
+      </mesh>
+      <mesh position={[0, STUDIO_SOUNDCLOUD_GRID_CONTROLLER_SIZE[1] / 2 + 0.026, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+        <planeGeometry args={STUDIO_SOUNDCLOUD_GRID_SCREEN_SIZE} />
+        <meshBasicMaterial args={[{ transparent: true, opacity: 0.92, toneMapped: false }]}>
+          <canvasTexture key={`studio-soundcloud-grid-screen-${state.deckId}-${feedbackLabel}-${padCountLabel}-${state.padMode}-${Math.round(state.playbackDuration)}-${Math.round(state.sampleStartMs)}-${Math.round(state.sampleEndMs)}-${state.waveformBars.length}-${state.waveformBars[0] ?? 0}-${burstLengthLabel}-${state.volume}-${state.isMuted ? "mute" : "open"}-${state.isLocked ? "lock" : "unlock"}-${state.lastTriggeredPadId ?? "none"}-${state.isBurstPlaying ? "burst" : "idle"}-${padScreenSignature}`} attach="map" args={[screenCanvas]} />
+        </meshBasicMaterial>
+      </mesh>
+      <StudioSoundCloudGridClampHandle
+        accentColor={accentColor}
+        clamp="start"
+        grid={grid}
+      />
+      <StudioSoundCloudGridClampHandle
+        accentColor={accentColor}
+        clamp="end"
+        grid={grid}
+      />
+      {settingControls.map((control) => (
+        <StudioSoundCloudInvisibleButton key={control.id} control={control} />
+      ))}
+      {waveformNudgeControls.map((control) => (
+        <StudioSoundCloudInvisibleButton key={control.id} control={control} />
+      ))}
+      {STUDIO_SOUNDCLOUD_GRID_PAD_IDS.map((padId, index) => {
+        const pad = padsById.get(padId);
+        const rowIndex = Math.floor(index / STUDIO_SOUNDCLOUD_GRID_COLUMNS.length);
+        const columnIndex = index % STUDIO_SOUNDCLOUD_GRID_COLUMNS.length;
+
+        return (
+          <StudioSoundCloudInvisibleButton
+            key={`soundcloud-grid-${state.deckId}-${padId}`}
+            control={{
+              id: `soundcloud-grid-${state.deckId.toLowerCase()}-pad-${padId.toLowerCase()}`,
+              label: padId,
+              caption: pad ? `${state.deckId} Grid Pad ${padId}` : `${state.deckId} Grid Pad ${padId} Blocked`,
+              captionFontSize: 18,
+              position: [
+                (columnIndex - 3.5) * STUDIO_SOUNDCLOUD_GRID_PAD_PITCH_X,
+                STUDIO_SOUNDCLOUD_GRID_CONTROLLER_SIZE[1] / 2 + STUDIO_SOUNDCLOUD_GRID_HIT_TARGET_Y_OFFSET,
+                STUDIO_SOUNDCLOUD_GRID_PAD_START_Z + rowIndex * STUDIO_SOUNDCLOUD_GRID_PAD_PITCH_Z,
+              ],
+              size: STUDIO_SOUNDCLOUD_GRID_PAD_BUTTON_SIZE,
+              accentColor,
+              enabled: Boolean(pad),
+              isActive: state.lastTriggeredPadId === padId,
+              onActivate: () => {
+                if (pad) {
+                  actions.triggerPad(pad.id);
+                }
+              },
+            }}
+          />
+        );
+      })}
     </group>
   );
 }
@@ -5975,11 +6802,11 @@ function StudioSoundCloudDjControls({
       const accentColor = getSoundCloudDeckAccent(deck, phaseVisuals);
       const isBpmToolEnabled = deck.display.isWidgetReady && Boolean(deck.display.currentTrackUrl) && deck.display.playbackDuration > 0;
       const deckButtonMirror = deckIndex === 0 ? 1 : -1;
-      const syncButtonX = -0.4;
+      const syncButtonX = -0.58;
       const playButtonX = -0.2;
       const muteButtonX = 0;
       const shuffleButtonX = 0.2;
-      const bpmToolCenterX = -0.18;
+      const bpmToolCenterX = -0.18 * deckButtonMirror;
       const bpmToolZ = STUDIO_SOUNDCLOUD_DECK_BPM_BUTTON_Z - STUDIO_SOUNDCLOUD_DECK_BPM_BUTTON_ROW_OFFSET_Z;
       const bpmXOffsets = [-0.18, 0, 0.18] as const;
 
@@ -6639,14 +7466,6 @@ function StudioSoundCloudDjControls({
           />
         );
       })}
-      <StudioSoundCloudCrateBrowser
-        deck={deckA}
-        onPushConsoleEvent={soundCloudBooth.onPushConsoleEvent}
-        onSetScrollOffset={handleSetCrateScrollOffset}
-        phaseVisuals={phaseVisuals}
-        position={[-STUDIO_SOUNDCLOUD_CRATE_SCREEN_X, STUDIO_SOUNDCLOUD_CRATE_SCREEN_Y, STUDIO_SOUNDCLOUD_CRATE_SCREEN_Z]}
-        scrollOffset={crateScrollOffsets.A}
-      />
       <StudioSoundCloudCrateBrowser
         deck={deckB}
         onPushConsoleEvent={soundCloudBooth.onPushConsoleEvent}
@@ -10952,6 +11771,34 @@ export function Level1RecordingStudioRoom({
           </>
         )}
       </StudioLayoutStationGroup>
+      {soundCloudBooth ? (
+        <StudioLayoutStationGroup stationId="deck-a-crate" transform={layoutState["deck-a-crate"]} isMoving={movingLayoutStationId === "deck-a-crate"} isTargeted={activeLayoutStationId === "deck-a-crate"} showGrabBox={showLayoutGrabBoxes}>
+          <StudioSoundCloudDeckCrateStation
+            deck={soundCloudBooth.decks[0]}
+            onPushConsoleEvent={soundCloudBooth.onPushConsoleEvent}
+            phaseVisuals={phaseVisuals}
+            position={STUDIO_SOUNDCLOUD_DECK_A_CRATE_POSITION}
+          />
+        </StudioLayoutStationGroup>
+      ) : null}
+      {soundCloudBooth ? (
+        <>
+          <StudioLayoutStationGroup stationId="grid-a" transform={layoutState["grid-a"]} isMoving={movingLayoutStationId === "grid-a"} isTargeted={activeLayoutStationId === "grid-a"} showGrabBox={showLayoutGrabBoxes}>
+            <StudioSoundCloudGridController
+              accentColor={phaseVisuals.gridPrimary}
+              grid={soundCloudBooth.gridControllers.A}
+              position={STUDIO_SOUNDCLOUD_GRID_A_POSITION}
+            />
+          </StudioLayoutStationGroup>
+          <StudioLayoutStationGroup stationId="grid-b" transform={layoutState["grid-b"]} isMoving={movingLayoutStationId === "grid-b"} isTargeted={activeLayoutStationId === "grid-b"} showGrabBox={showLayoutGrabBoxes}>
+            <StudioSoundCloudGridController
+              accentColor={phaseVisuals.timerAccent}
+              grid={soundCloudBooth.gridControllers.B}
+              position={STUDIO_SOUNDCLOUD_GRID_B_POSITION}
+            />
+          </StudioLayoutStationGroup>
+        </>
+      ) : null}
       <StudioRackShell accentColor={phaseVisuals.gridPrimary} label="Instrument Rack" position={[-20.1, 0, -8.32]} />
       <StudioBassMachineControls
         localDawState={localDawState}

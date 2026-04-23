@@ -1,8 +1,9 @@
 import { useEffect, useRef, type CSSProperties, type MouseEvent, type UIEvent } from "react";
 import { FloatingWindow } from "./FloatingWindow";
+import type { SoundCloudGridController, SoundCloudGridDeckId, SoundCloudGridPadId } from "../hooks/useSoundCloudGridController";
 import type { SoundCloudPlayerController } from "../hooks/useSoundCloudPlayer";
 
-type SoundCloudDeckId = "A" | "B";
+type SoundCloudDeckId = SoundCloudGridDeckId;
 
 interface SoundCloudDeckPanelConfig {
   id: SoundCloudDeckId;
@@ -12,6 +13,7 @@ interface SoundCloudDeckPanelConfig {
 
 interface SoundCloudPanelProps {
   decks: SoundCloudDeckPanelConfig[];
+  gridControllers: Record<SoundCloudDeckId, SoundCloudGridController>;
   mixer: SoundCloudMixerState;
   mixerReadout: SoundCloudMixerReadout;
   onSetCrossfader: (value: number) => void;
@@ -72,6 +74,9 @@ interface SoundCloudSeekStripProps {
 }
 
 const SOUNDCLOUD_SEEK_STEPS = [0.01, 0.1, 1, 10, 30] as const;
+const SOUNDCLOUD_GRID_ROWS = ["A", "B", "C", "D", "E", "F", "G", "H"] as const;
+const SOUNDCLOUD_GRID_COLUMNS = ["1", "2", "3", "4", "5", "6", "7", "8"] as const;
+const SOUNDCLOUD_GRID_PAD_IDS = SOUNDCLOUD_GRID_ROWS.flatMap((row) => SOUNDCLOUD_GRID_COLUMNS.map((column) => `${row}${column}` as SoundCloudGridPadId));
 
 function isDiscordProxyHost() {
   return window.location.host.includes("discordsays.com") || window.location.host.includes("discordsez.com");
@@ -106,6 +111,10 @@ function formatSeekButtonLabel(seconds: number) {
   }
 
   return seconds.toString();
+}
+
+function formatBurstLength(milliseconds: number) {
+  return milliseconds >= 1000 ? `${milliseconds / 1000}s` : `${milliseconds}ms`;
 }
 
 function formatSeekAriaLabel(deltaSeconds: number, isEditingCue: boolean, selectedCueId: string | null) {
@@ -232,6 +241,125 @@ function SoundCloudSeekStrip({ deckLabel, disabled, isEditingCue, selectedCueId,
           </button>
         ))}
       </div>
+    </div>
+  );
+}
+
+function SoundCloudGridFeasibilityControl({ deckLabel, grid }: { deckLabel: string; grid: SoundCloudGridController }) {
+  const { state, actions } = grid;
+  const padsById = new Map(state.pads.map((pad) => [pad.id, pad]));
+  const feedbackLabel = state.lastActionLabel ?? state.statusLabel;
+  const hasPads = state.pads.length > 0;
+  const modeButtonLabel = state.padMode === "continuous" ? "Cont" : state.padMode === "timeline" ? "Time" : "Rand";
+  const modeReadoutLabel = state.padMode === "continuous" ? "CONT" : state.padMode === "timeline" ? "TIME" : "RAND";
+
+  return (
+    <div
+      className={`soundcloud-grid-feasibility soundcloud-grid-controller ${state.isBurstPlaying ? "soundcloud-grid-feasibility-bursting" : ""} ${state.isLocked ? "soundcloud-grid-controller-locked" : ""}`}
+    >
+      <div className="soundcloud-grid-controller-heading">
+        <div>
+          <p className="meta-label">Grid controller</p>
+          <strong>Grid {state.deckId}</strong>
+        </div>
+        <span className={state.isAuxWidgetReady ? "soundcloud-grid-status-ready" : ""} aria-live="polite">
+          {state.statusLabel}
+        </span>
+      </div>
+
+      <div className="soundcloud-grid-settings-row" aria-label={`${deckLabel} grid controller settings`}>
+        <button type="button" className="soundcloud-control-button soundcloud-grid-setting-button" onClick={actions.rollPads} disabled={state.isLocked}>
+          Roll
+        </button>
+        <button
+          type="button"
+          className={`soundcloud-control-button soundcloud-grid-setting-button soundcloud-grid-mode-button ${state.padMode !== "random" ? "soundcloud-grid-mode-button-active" : ""}`}
+          onClick={actions.togglePadMode}
+          disabled={state.isLocked}
+          aria-pressed={state.padMode !== "random"}
+        >
+          {modeButtonLabel}
+        </button>
+        <button type="button" className="soundcloud-control-button soundcloud-grid-setting-button" onClick={() => actions.stepBurstLength(-1)} disabled={state.isLocked}>
+          Len-
+        </button>
+        <button type="button" className="soundcloud-control-button soundcloud-grid-setting-button" onClick={() => actions.stepBurstLength(1)} disabled={state.isLocked}>
+          Len+
+        </button>
+        <button type="button" className="soundcloud-control-button soundcloud-grid-setting-button" onClick={() => actions.stepSampleWindow(-1)} disabled={state.isLocked || state.padMode === "random"}>
+          Cl-
+        </button>
+        <button type="button" className="soundcloud-control-button soundcloud-grid-setting-button" onClick={() => actions.stepSampleWindow(1)} disabled={state.isLocked || state.padMode === "random"}>
+          Cl+
+        </button>
+        <button type="button" className="soundcloud-control-button soundcloud-grid-setting-button" onClick={() => actions.stepVolume(-1)} disabled={state.isLocked}>
+          Vol-
+        </button>
+        <button type="button" className="soundcloud-control-button soundcloud-grid-setting-button" onClick={() => actions.stepVolume(1)} disabled={state.isLocked}>
+          Vol+
+        </button>
+        <button
+          type="button"
+          className={`soundcloud-control-button soundcloud-grid-setting-button soundcloud-grid-mute-button ${state.isMuted ? "soundcloud-grid-mute-button-active" : ""}`}
+          onClick={actions.toggleMute}
+          aria-pressed={state.isMuted}
+        >
+          Mute
+        </button>
+        <button
+          type="button"
+          className={`soundcloud-control-button soundcloud-grid-setting-button soundcloud-grid-lock-button ${state.isLocked ? "soundcloud-grid-lock-button-active" : ""}`}
+          onClick={actions.toggleLock}
+          aria-pressed={state.isLocked}
+        >
+          Lock
+        </button>
+        <button
+          type="button"
+          className="soundcloud-control-button soundcloud-grid-setting-button soundcloud-grid-burst-button"
+          onClick={actions.triggerTestBurst}
+          disabled={!state.isAuxWidgetReady}
+        >
+          Test
+        </button>
+      </div>
+
+      <div className={`soundcloud-grid-pad-matrix ${hasPads ? "" : "soundcloud-grid-pad-matrix-empty"}`} aria-label={`${deckLabel} 8 by 8 grid pads`}>
+        {SOUNDCLOUD_GRID_PAD_IDS.map((padId) => {
+          const pad = padsById.get(padId);
+          const isLastTriggered = state.lastTriggeredPadId === padId;
+          const padLabel = pad ? formatTime(pad.positionMs) : feedbackLabel;
+
+          return (
+            <button
+              key={padId}
+              type="button"
+              className={`soundcloud-grid-pad ${pad ? "soundcloud-grid-pad-ready" : "soundcloud-grid-pad-blocked"} ${isLastTriggered ? "soundcloud-grid-pad-last" : ""}`}
+              onClick={() => {
+                if (pad) {
+                  actions.triggerPad(pad.id);
+                }
+              }}
+              disabled={!pad}
+              aria-label={`${deckLabel} grid pad ${padId}${pad ? ` at ${formatTime(pad.positionMs)}` : ` blocked: ${feedbackLabel}`}`}
+            >
+              <span className="soundcloud-grid-pad-id">{padId}</span>
+              <span className="soundcloud-grid-pad-time">{padLabel}</span>
+            </button>
+          );
+        })}
+      </div>
+
+      <div className="soundcloud-grid-readout-row" aria-label={`${deckLabel} grid readouts`}>
+        <span className="soundcloud-grid-readout">ACT {feedbackLabel}</span>
+        <span className="soundcloud-grid-readout">LEN {formatBurstLength(state.burstLengthMs)}</span>
+        <span className="soundcloud-grid-readout">VOL {state.volume}%</span>
+        <span className="soundcloud-grid-readout">MODE {modeReadoutLabel}</span>
+        <span className="soundcloud-grid-readout">PAD {state.pads.length}/64</span>
+        <span className={`soundcloud-grid-readout ${state.isMuted ? "soundcloud-grid-readout-warn" : ""}`}>{state.isMuted ? "MUTE ON" : "MUTE OFF"}</span>
+        <span className={`soundcloud-grid-readout ${state.isLocked ? "soundcloud-grid-readout-warn" : ""}`}>{state.isLocked ? "LOCK ON" : "LOCK OFF"}</span>
+      </div>
+
     </div>
   );
 }
@@ -400,7 +528,7 @@ function SoundCloudWaveformView({ waveformBars, progress, position, duration, di
   );
 }
 
-function SoundCloudDeckCard({ deck, side }: { deck: SoundCloudDeckPanelConfig; side: SoundCloudDeckSide }) {
+function SoundCloudDeckCard({ deck, side, grid }: { deck: SoundCloudDeckPanelConfig; side: SoundCloudDeckSide; grid: SoundCloudGridController }) {
   const { iframeRef, state, actions, hotCueState, hotCueActions } = deck.player;
   const sideLabel = side === "left" ? "Left deck" : "Right deck";
   const isCueBlocked = !hotCueState.activeTrackKey || state.playbackDuration <= 0 || !state.isWidgetReady;
@@ -480,6 +608,8 @@ function SoundCloudDeckCard({ deck, side }: { deck: SoundCloudDeckPanelConfig; s
             onNudgeCue={hotCueActions.nudgeSelectedCue}
           />
 
+          <SoundCloudGridFeasibilityControl deckLabel={deck.label} grid={grid} />
+
           <div className="soundcloud-controls">
             <label className="soundcloud-select-wrap">
               <span className="meta-label">Playlist</span>
@@ -545,6 +675,22 @@ function SoundCloudDeckCard({ deck, side }: { deck: SoundCloudDeckPanelConfig; s
         />
       </div>
 
+      <div className="soundcloud-aux-widget-shell" aria-hidden="true">
+        <iframe
+          key={`${deck.id}-grid-${grid.state.auxWidgetSrc}`}
+          ref={(element) => {
+            grid.iframeRef.current = element;
+          }}
+          title={`${deck.label} hidden grid burst player`}
+          className="soundcloud-widget-frame"
+          allow="autoplay"
+          scrolling="no"
+          frameBorder="no"
+          tabIndex={-1}
+          src={grid.state.auxWidgetSrc}
+        />
+      </div>
+
       <FloatingWindow
         title={`${deck.label} Waveform`}
         isOpen={state.isWaveformWindowOpen}
@@ -574,7 +720,7 @@ function SoundCloudDeckCard({ deck, side }: { deck: SoundCloudDeckPanelConfig; s
   );
 }
 
-export function SoundCloudPanel({ decks, mixer, mixerReadout, onSetCrossfader, onSetMasterVolume }: SoundCloudPanelProps) {
+export function SoundCloudPanel({ decks, gridControllers, mixer, mixerReadout, onSetCrossfader, onSetMasterVolume }: SoundCloudPanelProps) {
   const totalTracks = decks.reduce((sum, deck) => sum + deck.player.state.trackCount, 0);
   const activeCount = decks.filter((deck) => deck.player.state.isPlaying).length;
   const deckA = decks.find((deck) => deck.id === "A") ?? decks[0];
@@ -601,9 +747,9 @@ export function SoundCloudPanel({ decks, mixer, mixerReadout, onSetCrossfader, o
       <p className="soundcloud-panel-note">{localAudioNote}</p>
 
       <div className="soundcloud-dj-table">
-        {deckA ? <SoundCloudDeckCard deck={deckA} side="left" /> : null}
+        {deckA ? <SoundCloudDeckCard deck={deckA} side="left" grid={gridControllers[deckA.id]} /> : null}
         <SoundCloudMixerPanel mixer={mixer} readout={mixerReadout} onSetCrossfader={onSetCrossfader} onSetMasterVolume={onSetMasterVolume} />
-        {deckB ? <SoundCloudDeckCard deck={deckB} side="right" /> : null}
+        {deckB ? <SoundCloudDeckCard deck={deckB} side="right" grid={gridControllers[deckB.id]} /> : null}
       </div>
     </section>
   );

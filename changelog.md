@@ -8,6 +8,114 @@ Entries must be in reverse chronological order. New entries go at the top, above
 
 Use a level-two heading for every entry so the editor can fold each change.
 
+## [0112] - 2026-04-23 01:12 - `DJ-branch / Waveform Clamp Nudge Controls`
+
+- Summary: Moved the 3D continuous clamp nudge controls out of the grid settings row and up beside the waveform, and added timeline-only `S-`/`S+` and `E-`/`E+` waveform buttons for independently nudging the start and end clamps.
+- Areas touched: `src/hooks/useSoundCloudGridController.ts`, `src/screens/MainScreen.tsx`, `src/3d/Level1RecordingStudioRoom.tsx`.
+- Verification: `npm.cmd run build` passed with the existing Vite large chunk warning.
+
+## [0102] - 2026-04-23 01:02 - `DJ-branch / Grid Clamp Nudge Buttons`
+
+- Summary: Added Grid A/B `CL-` and `CL+` controls in the 2D and 3D grid controller settings rows so timeline/continuous clamp windows can be nudged in fine burst-length-based steps without dragging.
+- Areas touched: `src/hooks/useSoundCloudGridController.ts`, `src/components/SoundCloudPanel.tsx`, `src/screens/MainScreen.tsx`, `src/3d/Level1RecordingStudioRoom.tsx`.
+- Verification: `npm.cmd run build` passed with the existing Vite large chunk warning.
+
+## [0053] - 2026-04-23 00:53 - `DJ-branch / Grid Clamp Drag Stabilizer`
+
+- Summary: Stabilized Grid A/B waveform clamp dragging by switching clamp movement to pointer-delta-only dragging during the active gesture, with dead-zone filtering and per-frame movement clamping to prevent raycast hit jitter from snapping the bar left and right.
+- Areas touched: `src/3d/Level1RecordingStudioRoom.tsx`.
+- Verification: `npm.cmd run build` passed with the existing Vite large chunk warning.
+
+## [0046] - 2026-04-23 00:46 - `DJ-branch / Grid Continuous Chop Mode`
+
+- Summary: Added a third Grid A/B pad mode, `CONT`, that maps the 64 pads into burst-length-spaced chops inside a fixed-width waveform window and lets the clamps move that whole window across the track.
+- Areas touched: `src/hooks/useSoundCloudGridController.ts`, `src/components/SoundCloudPanel.tsx`, `src/screens/MainScreen.tsx`, `src/3d/Level1RecordingStudioRoom.tsx`.
+- Verification: `npm.cmd run build` passed with the existing Vite large chunk warning.
+
+## [0039] - 2026-04-23 00:39 - `DJ-branch / Grid Clamp Drag Reliability`
+
+- Summary: Enlarged the Grid A/B timeline clamp hit targets and added movement-based drag fallback so clamps continue moving even when the ray leaves the narrow waveform handle during a click-hold drag.
+- Areas touched: `src/3d/Level1RecordingStudioRoom.tsx`.
+- Verification: `npm.cmd run build` passed with the existing Vite large chunk warning.
+
+## [0033] - 2026-04-23 00:33 - `DJ-branch / Movable Grid Timeline Clamps`
+
+- Summary: Made the Grid A/B timeline waveform start and end clamps draggable in 3D, storing clamp ranges per grid controller and regenerating timeline pads inside the selected sampling window.
+- Areas touched: `src/hooks/useSoundCloudGridController.ts`, `src/3d/Level1RecordingStudioRoom.tsx`.
+- Verification: `npm.cmd run build` passed with the existing Vite large chunk warning.
+
+## [0025] - 2026-04-23 00:25 - `DJ-branch / Grid Aux Autoplay Guard`
+
+- Summary: Added a burst-arm playback guard to hidden grid SoundCloud widgets so refresh/sync autoplay is immediately paused while intentional pad bursts still play for their configured length.
+- Areas touched: `src/hooks/useSoundCloudGridController.ts`.
+- Verification: `npm.cmd run build` passed with the existing Vite large chunk warning.
+
+## [0018] - 2026-04-23 00:18 - `DJ-branch / Grid Controller Waveform Map`
+
+- Summary: Added a top waveform map to the 3D grid controller screen, marking all 64 burst slice positions in random mode and showing timeline mode's start/end sampling clamps.
+- Areas touched: `src/hooks/useSoundCloudGridController.ts`, `src/screens/MainScreen.tsx`, `src/3d/Level1RecordingStudioRoom.tsx`.
+- Verification: `npm.cmd run build` passed with the existing Vite large chunk warning.
+
+## [0011] - 2026-04-23 00:11 - `DJ-branch / Grid Controller Timeline Mode`
+
+- Summary: Added a per-grid `RAND/TIME` mode toggle so pad bursts can either scatter randomly or map A1 through H8 evenly across the current deck track, with lock-aware controls and console logging.
+- Areas touched: `src/hooks/useSoundCloudGridController.ts`, `src/components/SoundCloudPanel.tsx`, `src/styles/global.css`, `src/screens/MainScreen.tsx`, `src/3d/Level1RecordingStudioRoom.tsx`.
+- Verification: `npm.cmd run build` passed with the existing Vite large chunk warning.
+
+## [2359] - 2026-04-22 23:59 - `DJ-branch / Movable Deck A Crate`
+
+- Summary: Made the Deck A SoundCloud crate browser an independent movable layout station while preserving crate row loading, scrolling, and booth console load-request logging.
+- Areas touched: `src/3d/Level1RecordingStudioRoom.tsx`.
+- Verification: `npm.cmd run build` passed with the existing Vite large chunk warning. Manual move/place/reset checks are still pending.
+
+## [2332] - 2026-04-22 23:32 - `DJ-branch / Vision 23 Grid Controller QA Pass`
+
+- Summary: Completed Vision 23 active work by tuning grid controller screen hit targets, preserving the screen-first movable controller design, and adding manual QA coverage for Grid A/B bursts, settings, movement, reset, and deck binding.
+- Areas touched: `src/3d/Level1RecordingStudioRoom.tsx`, `docs/3d/3dvision23-soundcloud-grid-controllers.md`, `docs/3d/manual-test-checklist.md`.
+- Verification: `npm.cmd run build` passed with the existing Vite large chunk warning. Live first-person/audio QA remains a manual checklist item.
+
+## [2324] - 2026-04-22 23:24 - `DJ-branch / Vision 23 Movable Grid Controllers`
+
+- Summary: Continued Vision 23 by making Grid A and Grid B independent movable layout stations while preserving their fixed deck bindings and screen-controller interactions.
+- Areas touched: `src/3d/Level1RecordingStudioRoom.tsx`, `docs/3d/3dvision23-soundcloud-grid-controllers.md`.
+- Verification: `npm.cmd run build` passed with the existing Vite large chunk warning. Manual movement/audio checks are still pending.
+
+## [2316] - 2026-04-22 23:16 - `DJ-branch / Vision 23 Grid Controller Screen Hardware`
+
+- Summary: Continued Vision 23 by rendering fixed Grid A/B controller hardware in the 3D SoundCloud booth as screen-first slabs, with one canvas-drawn settings/pad surface and aligned invisible hit zones for playable cells.
+- Areas touched: `src/3d/Level1RecordingStudioRoom.tsx`, `docs/3d/3dvision23-soundcloud-grid-controllers.md`.
+- Verification: `npm.cmd run build` passed with the existing Vite large chunk warning. Manual first-person/browser checks are still pending.
+
+## [2304] - 2026-04-22 23:04 - `DJ-branch / Vision 23 Grid Booth Boundary`
+
+- Summary: Continued Vision 23 by adding Grid A/B controller surfaces to the SoundCloud booth state boundary and wrapping grid actions with concise booth console logging.
+- Areas touched: `src/3d/soundCloudBooth.ts`, `src/screens/MainScreen.tsx`, `docs/3d/3dvision23-soundcloud-grid-controllers.md`.
+- Verification: `npm.cmd run build` passed with the existing Vite large chunk warning.
+
+## [2255] - 2026-04-22 22:55 - `DJ-branch / Vision 23 2D Grid Controller`
+
+- Summary: Continued Vision 23 by expanding the SoundCloud grid feasibility strip into a compact 2D Grid A/B controller with a settings row, full 8x8 pad matrix, pad burst triggers, last-pad highlighting, and grid readouts.
+- Areas touched: `src/components/SoundCloudPanel.tsx`, `src/styles/global.css`, `docs/3d/3dvision23-soundcloud-grid-controllers.md`.
+- Verification: `npm.cmd run build` passed with the existing Vite large chunk warning. Manual browser/audio checks are still pending.
+
+## [2246] - 2026-04-22 22:46 - `DJ-branch / Vision 23 Pad Burst Hook`
+
+- Summary: Continued Vision 23 by adding monophonic `triggerPad` burst playback to the SoundCloud grid controller hook, using stored random pad timestamps, stale-pad guards, voice-stealing burst timers, and last-triggered pad state.
+- Areas touched: `src/hooks/useSoundCloudGridController.ts`, `docs/3d/3dvision23-soundcloud-grid-controllers.md`.
+- Verification: `npm.cmd run build` passed with the existing Vite large chunk warning.
+
+## [2238] - 2026-04-22 22:38 - `DJ-branch / Vision 23 Grid Pad State`
+
+- Summary: Continued Vision 23 by adding the local 64-pad grid controller state model, random roll generation, track-keyed pad maps, lock behavior, and burst-length-aware pad regeneration behind the SoundCloud grid controller hook.
+- Areas touched: `src/hooks/useSoundCloudGridController.ts`, `docs/3d/3dvision23-soundcloud-grid-controllers.md`.
+- Verification: `npm.cmd run build` passed with the existing Vite large chunk warning.
+
+## [2228] - 2026-04-22 22:28 - `DJ-branch / Vision 23 Grid Controller Aux Feasibility`
+
+- Summary: Started Vision 23 by adding one hidden auxiliary SoundCloud grid controller widget per deck, with compact 2D feasibility controls for test bursts, burst length, independent grid volume, and grid mute.
+- Areas touched: `src/hooks/useSoundCloudGridController.ts`, `src/components/SoundCloudPanel.tsx`, `src/screens/MainScreen.tsx`, `src/styles/global.css`, `docs/3d/3dvision23-soundcloud-grid-controllers.md`.
+- Verification: `npm.cmd run build` passed with the existing Vite large chunk warning. Manual browser/audio checks for auxiliary burst behavior are still pending.
+
 ## [2027] - 2026-04-22 20:27 - `DJ-branch / Vision 22 SoundCloud Booth Console`
 
 - Summary: Completed Vision 22 by adding a local SoundCloud booth console event model, bounded event queue, direct/passive DJ booth logging, and a live `BOOTH CONSOLE` section in the shared in-world deck monitor.
@@ -20,6 +128,8 @@ Use a level-two heading for every entry so the editor can fold each change.
 - Follow-up: Added on-monitor SoundCloud waveform resolution `-` / `+` buttons that change monitor waveform density from `x1` to `x4`.
 - Follow-up: Replaced the visible 3D waveform resolution button boxes with invisible hit targets over the screen-drawn controls.
 - Follow-up: Mirrored Deck B's main SoundCloud button row so Sync, Play, Mute/Open, and Shuffle match Deck A's intended symmetry.
+- Follow-up: Pushed Deck A/B Sync buttons farther outward from the Play/Mute/Shuffle row.
+- Follow-up: Mirrored Deck B's BPM tool cluster outward so it no longer overlaps the Deck B cue pad section.
 - Verification: `npm.cmd run build` passed with the existing Vite large chunk warning.
 
 ## [2012] - 2026-04-22 20:12 - `DJ-branch / Restore SoundCloud Booth Purple`
