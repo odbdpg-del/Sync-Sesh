@@ -1,6 +1,6 @@
 import { DiscordSDK, patchUrlMappings } from "@discord/embedded-app-sdk";
 import type { LocalProfile } from "../../types/session";
-import { getDiscordAvatarUrl, getDiscordDisplayName } from "./user";
+import { buildDiscordLocalProfile, type DiscordGuildMemberLike, type DiscordUserLike } from "./user";
 import { buildAvatarSeed, getLocalProfile, persistLocalProfile } from "../session/localProfile";
 
 export interface EmbeddedAppState {
@@ -10,6 +10,9 @@ export interface EmbeddedAppState {
   guildId?: string;
   instanceId?: string;
   localProfile?: LocalProfile;
+  identitySource?: "discord" | "local";
+  authError?: string;
+  cleanup?: () => void;
 }
 
 const DEFAULT_SYNC_PROXY_TARGET = "sync-sesh-sync.onrender.com";
@@ -55,74 +58,183 @@ function patchActivityUrlMappings() {
     return;
   }
 
-  patchUrlMappings([{ prefix: "/sync", target: resolveSyncProxyTarget() }, ...STATIC_ACTIVITY_URL_MAPPINGS]);
+  patchUrlMappings([
+    { prefix: "/sync", target: resolveSyncProxyTarget() },
+    { prefix: "/api", target: resolveSyncProxyTarget() },
+    ...STATIC_ACTIVITY_URL_MAPPINGS,
+  ]);
   hasPatchedActivityUrlMappings = true;
 }
 
-async function resolveDiscordLocalProfile(sdk: DiscordSDK): Promise<LocalProfile | undefined> {
-  let authenticatedUserProfile: LocalProfile | undefined;
+const DISCORD_IDENTITY_SCOPES = ["identify", "guilds.members.read"] as const;
 
-  try {
-    const auth = await sdk.commands.authenticate({});
-    authenticatedUserProfile = {
-      id: auth.user.id,
-      displayName: getDiscordDisplayName(auth.user),
-      avatarSeed: buildAvatarSeed(getDiscordDisplayName(auth.user)),
-      avatarUrl: getDiscordAvatarUrl(auth.user),
-    };
-  } catch {
-    authenticatedUserProfile = undefined;
-  }
-
-  try {
-    const { participants } = await sdk.commands.getInstanceConnectedParticipants();
-    const matchingParticipant =
-      authenticatedUserProfile
-        ? participants.find((participant) => participant.id === authenticatedUserProfile?.id)
-        : participants.length === 1
-          ? participants[0]
-          : undefined;
-
-    if (matchingParticipant) {
-      return {
-        id: matchingParticipant.id,
-        displayName: getDiscordDisplayName(matchingParticipant),
-        avatarSeed: buildAvatarSeed(getDiscordDisplayName(matchingParticipant)),
-        avatarUrl: getDiscordAvatarUrl(matchingParticipant),
-      };
-    }
-  } catch {
-    // Fall through to the authenticated profile or local fallback.
-  }
-
-  if (authenticatedUserProfile) {
-    return authenticatedUserProfile;
-  }
-
-  return undefined;
+interface DiscordTokenExchangeResponse {
+  access_token: string;
 }
 
-export async function initializeEmbeddedApp(): Promise<EmbeddedAppState> {
+interface InitializeEmbeddedAppOptions {
+  onProfileUpdate?: (localProfile: LocalProfile) => void;
+}
+
+function buildProfileFromDiscordIdentity(user: DiscordUserLike, guildMember?: DiscordGuildMemberLike): LocalProfile {
+  return buildDiscordLocalProfile(user, {
+    guildMember,
+    avatarSeedBuilder: buildAvatarSeed,
+  });
+}
+
+async function exchangeDiscordAuthCode(code: string): Promise<string> {
+  const response = await fetch("/api/discord/token", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ code }),
+  });
+
+  const payload = (await response.json().catch(() => null)) as { error?: string } & Partial<DiscordTokenExchangeResponse> | null;
+
+  if (!response.ok || !payload?.access_token) {
+    throw new Error(payload?.error ?? "Discord token exchange failed.");
+  }
+
+  return payload.access_token;
+}
+
+async function fetchCurrentGuildMember(accessToken: string, guildId?: string): Promise<DiscordGuildMemberLike | undefined> {
+  if (!guildId) {
+    return undefined;
+  }
+
+  const response = await fetch(`https://discord.com/api/v10/users/@me/guilds/${guildId}/member`, {
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json",
+    },
+  });
+
+  if (!response.ok) {
+    return undefined;
+  }
+
+  return (await response.json()) as DiscordGuildMemberLike;
+}
+
+async function resolveDiscordIdentity(
+  sdk: DiscordSDK,
+  clientId: string,
+  onProfileUpdate?: (localProfile: LocalProfile) => void,
+): Promise<{ localProfile: LocalProfile; cleanup: () => void }> {
+  const { code } = await sdk.commands.authorize({
+    client_id: clientId,
+    response_type: "code",
+    state: "",
+    prompt: "none",
+    scope: [...DISCORD_IDENTITY_SCOPES],
+  });
+
+  const accessToken = await exchangeDiscordAuthCode(code);
+  const auth = await sdk.commands.authenticate({
+    access_token: accessToken,
+  });
+
+  let currentUser: DiscordUserLike = auth.user;
+  let currentGuildMember = await fetchCurrentGuildMember(accessToken, sdk.guildId ?? undefined);
+
+  const pushProfileUpdate = () => {
+    const localProfile = buildProfileFromDiscordIdentity(currentUser, currentGuildMember);
+    persistLocalProfile(localProfile);
+    onProfileUpdate?.(localProfile);
+    return localProfile;
+  };
+
+  const initialProfile = pushProfileUpdate();
+  const unsubscribeHandlers: Array<() => void> = [];
+  const handleCurrentUserUpdate = (user: DiscordUserLike) => {
+    currentUser = user;
+    pushProfileUpdate();
+  };
+
+  try {
+    await sdk.subscribe("CURRENT_USER_UPDATE", handleCurrentUserUpdate);
+    unsubscribeHandlers.push(() => {
+      void sdk.unsubscribe("CURRENT_USER_UPDATE", handleCurrentUserUpdate);
+    });
+  } catch {
+    // Keep the initial authenticated user profile.
+  }
+
+  if (sdk.guildId) {
+    const handleCurrentGuildMemberUpdate = (member: DiscordGuildMemberLike) => {
+      if (member.user_id !== currentUser.id) {
+        return;
+      }
+
+      currentGuildMember = member;
+      pushProfileUpdate();
+    };
+
+    try {
+      await sdk.subscribe("CURRENT_GUILD_MEMBER_UPDATE", handleCurrentGuildMemberUpdate, { guild_id: sdk.guildId });
+      unsubscribeHandlers.push(() => {
+        void sdk.unsubscribe("CURRENT_GUILD_MEMBER_UPDATE", handleCurrentGuildMemberUpdate, { guild_id: sdk.guildId! });
+      });
+    } catch {
+      // The user profile still works even if guild-member updates are unavailable.
+    }
+  }
+
+  return {
+    localProfile: initialProfile,
+    cleanup: () => {
+      for (const unsubscribe of unsubscribeHandlers) {
+        unsubscribe();
+      }
+    },
+  };
+}
+
+export async function initializeEmbeddedApp(options: InitializeEmbeddedAppOptions = {}): Promise<EmbeddedAppState> {
   const clientId = import.meta.env.VITE_DISCORD_CLIENT_ID;
   const enabled = import.meta.env.VITE_ENABLE_DISCORD_SDK === "true";
+  const fallbackLocalProfile = getLocalProfile();
 
   if (!enabled || !clientId) {
-    return { enabled: false, localProfile: getLocalProfile() };
+    return { enabled: false, localProfile: fallbackLocalProfile, identitySource: "local" };
   }
 
   patchActivityUrlMappings();
 
   const sdk = new DiscordSDK(clientId);
   await sdk.ready();
-  const localProfile = (await resolveDiscordLocalProfile(sdk)) ?? getLocalProfile();
-  persistLocalProfile(localProfile);
 
-  return {
-    enabled: true,
-    sdk,
-    channelId: sdk.channelId ?? undefined,
-    guildId: sdk.guildId ?? undefined,
-    instanceId: sdk.instanceId ?? undefined,
-    localProfile,
-  };
+  try {
+    const { localProfile, cleanup } = await resolveDiscordIdentity(sdk, clientId, options.onProfileUpdate);
+
+    return {
+      enabled: true,
+      sdk,
+      channelId: sdk.channelId ?? undefined,
+      guildId: sdk.guildId ?? undefined,
+      instanceId: sdk.instanceId ?? undefined,
+      localProfile,
+      identitySource: "discord",
+      cleanup,
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Discord identity setup failed.";
+    console.error("Discord identity setup failed.", error);
+    persistLocalProfile(fallbackLocalProfile);
+
+    return {
+      enabled: true,
+      sdk,
+      channelId: sdk.channelId ?? undefined,
+      guildId: sdk.guildId ?? undefined,
+      instanceId: sdk.instanceId ?? undefined,
+      localProfile: fallbackLocalProfile,
+      identitySource: "local",
+      authError: message,
+    };
+  }
 }

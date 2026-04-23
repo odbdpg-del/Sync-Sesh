@@ -1,3 +1,5 @@
+import type { LocalProfile } from "../../types/session";
+
 export interface DiscordUserLike {
   id: string;
   username?: string | null;
@@ -5,6 +7,13 @@ export interface DiscordUserLike {
   nick?: string | null;
   nickname?: string | null;
   discriminator?: string | null;
+  avatar?: string | null;
+}
+
+export interface DiscordGuildMemberLike {
+  user_id: string;
+  guild_id: string;
+  nick?: string | null;
   avatar?: string | null;
 }
 
@@ -58,4 +67,34 @@ export function getDiscordAvatarUrl(user: DiscordUserLike, size = 128): string {
   }
 
   return getDiscordDefaultAvatarUrl(user);
+}
+
+export function getDiscordGuildMemberAvatarUrl(member: DiscordGuildMemberLike, size = 128): string | undefined {
+  if (!member.avatar) {
+    return undefined;
+  }
+
+  const ext = member.avatar.startsWith("a_") ? "gif" : "png";
+  return `https://cdn.discordapp.com/guilds/${member.guild_id}/users/${member.user_id}/avatars/${member.avatar}.${ext}?size=${size}`;
+}
+
+export function buildDiscordLocalProfile(
+  user: DiscordUserLike,
+  options?: {
+    guildMember?: DiscordGuildMemberLike;
+    avatarSeedBuilder?: (displayName: string) => string;
+  },
+): LocalProfile {
+  const displayName = getDiscordDisplayName({
+    ...user,
+    nick: options?.guildMember?.nick ?? user.nick,
+  });
+  const avatarUrl = options?.guildMember ? getDiscordGuildMemberAvatarUrl(options.guildMember) : undefined;
+
+  return {
+    id: user.id,
+    displayName,
+    avatarSeed: options?.avatarSeedBuilder?.(displayName) ?? "DX",
+    avatarUrl: avatarUrl ?? getDiscordAvatarUrl(user),
+  };
 }

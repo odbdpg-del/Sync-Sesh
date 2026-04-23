@@ -12,9 +12,41 @@ export function useDabSyncSession() {
 
   useEffect(() => {
     const unsubscribe = syncClient.subscribe(setState);
+    let disposed = false;
+    let embeddedCleanup: (() => void) | undefined;
 
-    void initializeEmbeddedApp()
+    void initializeEmbeddedApp({
+      onProfileUpdate: (localProfile) => {
+        if (disposed) {
+          return;
+        }
+
+        const previousLocalProfile = syncClient.getSnapshot().localProfile;
+        const profileChanged =
+          previousLocalProfile.id !== localProfile.id ||
+          previousLocalProfile.displayName !== localProfile.displayName ||
+          previousLocalProfile.avatarUrl !== localProfile.avatarUrl ||
+          previousLocalProfile.avatarSeed !== localProfile.avatarSeed;
+
+        if (!profileChanged) {
+          return;
+        }
+
+        syncClient.setLocalProfile(localProfile);
+        setSdkState((current) => ({ ...current, localProfile, identitySource: "discord", authError: undefined }));
+
+        if (syncClient.getSnapshot().users.some((user) => user.id === localProfile.id)) {
+          syncClient.send({ type: "join_session" });
+        }
+      },
+    })
       .then((nextSdkState) => {
+        if (disposed) {
+          nextSdkState.cleanup?.();
+          return;
+        }
+
+        embeddedCleanup = nextSdkState.cleanup;
         setSdkState(nextSdkState);
 
         if (nextSdkState.localProfile) {
@@ -24,11 +56,17 @@ export function useDabSyncSession() {
         return syncClient.connect();
       })
       .catch(() => {
-        setSdkState({ enabled: false });
+        if (disposed) {
+          return;
+        }
+
+        setSdkState({ enabled: false, identitySource: "local" });
         void syncClient.connect();
       });
 
     return () => {
+      disposed = true;
+      embeddedCleanup?.();
       unsubscribe();
       syncClient.disconnect();
     };

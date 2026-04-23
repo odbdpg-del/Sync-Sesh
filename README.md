@@ -19,6 +19,8 @@ For multi-client local sync testing:
 ```bash
 VITE_ENABLE_DISCORD_SDK=false
 VITE_DISCORD_CLIENT_ID=your_discord_application_id
+DISCORD_CLIENT_SECRET=your_discord_client_secret
+DISCORD_REDIRECT_URI=https://127.0.0.1
 VITE_SYNC_MODE=mock
 VITE_SYNC_SERVER_URL=ws://localhost:8787
 VITE_SYNC_SESSION_ID=dabsync-room
@@ -26,6 +28,8 @@ VITE_SYNC_SESSION_ID=dabsync-room
 
 Notes:
 - `VITE_ENABLE_DISCORD_SDK` defaults to `false` for browser-only local work.
+- `DISCORD_CLIENT_SECRET` is read only by the sync server for OAuth token exchange. Do not expose it publicly.
+- `DISCORD_REDIRECT_URI` should match the placeholder Redirect URI configured in the Discord Developer Portal. Discord’s Activity guide uses `https://127.0.0.1`.
 - Set `VITE_SYNC_MODE=ws` to use the local WebSocket sync server.
 - `VITE_SYNC_SESSION_ID` lets multiple browser windows join the same room.
 

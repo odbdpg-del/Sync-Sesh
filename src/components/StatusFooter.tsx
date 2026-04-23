@@ -35,6 +35,9 @@ export function StatusFooter({ syncStatus, sdkState }: StatusFooterProps) {
         SDK: <strong>{sdkState.enabled ? "embedded" : "mock browser mode"}</strong>
       </span>
       <span>
+        Identity: <strong>{sdkState.identitySource === "discord" ? "discord" : "local fallback"}</strong>
+      </span>
+      <span>
         Latency: <strong>{syncStatus.latencyMs !== undefined ? `${syncStatus.latencyMs}ms` : "n/a"}</strong>
       </span>
       <span>
@@ -43,6 +46,11 @@ export function StatusFooter({ syncStatus, sdkState }: StatusFooterProps) {
       <span>
         Status: <strong>{getSyncSummary(syncStatus)}</strong>
       </span>
+      {sdkState.authError ? (
+        <span>
+          Discord auth: <strong>{sdkState.authError}</strong>
+        </span>
+      ) : null}
     </footer>
   );
 }
