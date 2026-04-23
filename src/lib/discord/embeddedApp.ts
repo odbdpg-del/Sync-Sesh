@@ -66,6 +66,25 @@ function patchActivityUrlMappings() {
   hasPatchedActivityUrlMappings = true;
 }
 
+function resolveDiscordAuthEndpoint() {
+  const configuredUrl = import.meta.env.VITE_SYNC_SERVER_URL;
+
+  if (!configuredUrl || configuredUrl === "auto") {
+    return "/api/discord/token";
+  }
+
+  try {
+    const parsed = new URL(configuredUrl);
+    parsed.protocol = parsed.protocol === "wss:" ? "https:" : "http:";
+    parsed.pathname = "/api/discord/token";
+    parsed.search = "";
+    parsed.hash = "";
+    return parsed.toString();
+  } catch {
+    return "/api/discord/token";
+  }
+}
+
 const DISCORD_IDENTITY_SCOPES = ["identify", "guilds.members.read"] as const;
 
 interface DiscordTokenExchangeResponse {
@@ -84,7 +103,7 @@ function buildProfileFromDiscordIdentity(user: DiscordUserLike, guildMember?: Di
 }
 
 async function exchangeDiscordAuthCode(code: string): Promise<string> {
-  const response = await fetch("/api/discord/token", {
+  const response = await fetch(resolveDiscordAuthEndpoint(), {
     method: "POST",
     headers: {
       "Content-Type": "application/json",

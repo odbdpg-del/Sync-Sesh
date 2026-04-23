@@ -32,6 +32,7 @@ Notes:
 - `DISCORD_REDIRECT_URI` should match the placeholder Redirect URI configured in the Discord Developer Portal. Discord’s Activity guide uses `https://127.0.0.1`.
 - Set `VITE_SYNC_MODE=ws` to use the local WebSocket sync server.
 - `VITE_SYNC_SESSION_ID` lets multiple browser windows join the same room.
+- In hosted environments, the frontend now derives the Discord token-exchange endpoint from `VITE_SYNC_SERVER_URL`, so your deployed sync server should be the service that exposes `/api/discord/token`.
 
 ## GitHub Pages legal pages
 

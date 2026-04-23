@@ -122,7 +122,12 @@ function broadcast(sessionId: string) {
 }
 
 function sendJson(response: import("node:http").ServerResponse, statusCode: number, payload: Record<string, unknown>) {
-  response.writeHead(statusCode, { "Content-Type": "application/json; charset=utf-8" });
+  response.writeHead(statusCode, {
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Headers": "Content-Type",
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
+    "Content-Type": "application/json; charset=utf-8",
+  });
   response.end(JSON.stringify(payload));
 }
 
@@ -205,6 +210,16 @@ async function handleDiscordTokenExchange(request: import("node:http").IncomingM
 }
 
 const httpServer = createServer((request, response) => {
+  if (request.method === "OPTIONS" && request.url === "/api/discord/token") {
+    response.writeHead(204, {
+      "Access-Control-Allow-Origin": "*",
+      "Access-Control-Allow-Headers": "Content-Type",
+      "Access-Control-Allow-Methods": "POST, OPTIONS",
+    });
+    response.end();
+    return;
+  }
+
   if (request.url === "/health") {
     response.writeHead(200, { "Content-Type": "application/json" });
     response.end(JSON.stringify({ ok: true, service: "sync-sesh-sync" }));
