@@ -190,13 +190,24 @@ async function handleDiscordTokenExchange(request: import("node:http").IncomingM
   const payload = (await tokenResponse.json().catch(() => null)) as Record<string, unknown> | null;
 
   if (!tokenResponse.ok || typeof payload?.access_token !== "string") {
+    const discordError =
+      typeof payload?.error === "string" ? payload.error : "unknown_error";
+    const discordErrorDescription =
+      typeof payload?.error_description === "string" ? payload.error_description : undefined;
+    const responseError =
+      discordErrorDescription ?? (typeof payload?.message === "string" ? payload.message : undefined) ?? discordError;
+
+    console.error("Discord token exchange failed.", {
+      status: tokenResponse.status,
+      error: discordError,
+      error_description: discordErrorDescription,
+      redirect_uri: discordRedirectUri,
+      has_client_id: Boolean(discordClientId),
+      has_client_secret: Boolean(discordClientSecret),
+    });
+
     sendJson(response, 502, {
-      error:
-        typeof payload?.error_description === "string"
-          ? payload.error_description
-          : typeof payload?.error === "string"
-            ? payload.error
-            : "Discord token exchange failed.",
+      error: `Discord token exchange failed: ${responseError}`,
     });
     return;
   }
