@@ -36,10 +36,6 @@ const STATIC_ACTIVITY_URL_MAPPINGS = [
 
 let hasPatchedActivityUrlMappings = false;
 
-function isDiscordProxyHost() {
-  return window.location.host.includes("discordsays.com") || window.location.host.includes("discordsez.com");
-}
-
 function resolveSyncProxyTarget() {
   const configuredUrl = import.meta.env.VITE_SYNC_SERVER_URL;
 
@@ -75,7 +71,7 @@ function patchActivityUrlMappings() {
 function resolveDiscordAuthEndpoint() {
   const configuredUrl = import.meta.env.VITE_SYNC_SERVER_URL;
 
-  if (!configuredUrl || configuredUrl === "auto" || isDiscordProxyHost()) {
+  if (!configuredUrl || configuredUrl === "auto") {
     return "/api/discord/token";
   }
 
