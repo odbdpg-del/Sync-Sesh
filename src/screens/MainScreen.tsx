@@ -117,6 +117,12 @@ export function MainScreen() {
         </div>
       ) : null}
 
+      {!sdkState.enabled && sdkState.startupError ? (
+        <div className="panel sync-banner sync-banner-alert discord-identity-banner">
+          <strong>Discord SDK startup failed.</strong> {sdkState.startupError}
+        </div>
+      ) : null}
+
       <div className="content-grid">
         <LobbyPanel session={state.session} users={state.users} lobbyState={lobbyState} onJoinSession={handleJoinSession} />
         <TimerPanel

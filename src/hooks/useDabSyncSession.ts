@@ -60,7 +60,12 @@ export function useDabSyncSession() {
           return;
         }
 
-        setSdkState({ enabled: false, identitySource: "local" });
+        setSdkState({
+          enabled: false,
+          identitySource: "local",
+          startupStage: "sdk_init",
+          startupError: "Discord startup failed before initialization completed.",
+        });
         void syncClient.connect();
       });
 

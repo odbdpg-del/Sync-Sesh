@@ -12,6 +12,8 @@ export interface EmbeddedAppState {
   localProfile?: LocalProfile;
   identitySource?: "discord" | "local";
   authError?: string;
+  startupError?: string;
+  startupStage?: "disabled" | "sdk_init" | "sdk_ready" | "auth" | "ready";
   cleanup?: () => void;
 }
 
@@ -240,13 +242,54 @@ export async function initializeEmbeddedApp(options: InitializeEmbeddedAppOption
   const fallbackLocalProfile = getLocalProfile();
 
   if (!enabled || !clientId) {
-    return { enabled: false, localProfile: fallbackLocalProfile, identitySource: "local" };
+    return {
+      enabled: false,
+      localProfile: fallbackLocalProfile,
+      identitySource: "local",
+      startupStage: "disabled",
+      startupError: !enabled ? "Discord SDK is disabled by environment." : "Discord client ID is missing.",
+    };
   }
 
   patchActivityUrlMappings();
 
-  const sdk = new DiscordSDK(clientId);
-  await sdk.ready();
+  let sdk: DiscordSDK;
+
+  try {
+    sdk = new DiscordSDK(clientId);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Discord SDK failed to initialize.";
+    console.error("Discord SDK construction failed.", error);
+    persistLocalProfile(fallbackLocalProfile);
+
+    return {
+      enabled: false,
+      localProfile: fallbackLocalProfile,
+      identitySource: "local",
+      startupStage: "sdk_init",
+      startupError: message,
+    };
+  }
+
+  try {
+    await sdk.ready();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Discord SDK failed to become ready.";
+    console.error("Discord SDK ready() failed.", error);
+    persistLocalProfile(fallbackLocalProfile);
+
+    return {
+      enabled: false,
+      sdk,
+      channelId: sdk.channelId ?? undefined,
+      guildId: sdk.guildId ?? undefined,
+      instanceId: sdk.instanceId ?? undefined,
+      localProfile: fallbackLocalProfile,
+      identitySource: "local",
+      startupStage: "sdk_ready",
+      startupError: message,
+    };
+  }
 
   try {
     const { localProfile, cleanup } = await resolveDiscordIdentity(sdk, clientId, options.onProfileUpdate);
@@ -259,6 +302,7 @@ export async function initializeEmbeddedApp(options: InitializeEmbeddedAppOption
       instanceId: sdk.instanceId ?? undefined,
       localProfile,
       identitySource: "discord",
+      startupStage: "ready",
       cleanup,
     };
   } catch (error) {
@@ -274,6 +318,8 @@ export async function initializeEmbeddedApp(options: InitializeEmbeddedAppOption
       instanceId: sdk.instanceId ?? undefined,
       localProfile: fallbackLocalProfile,
       identitySource: "local",
+      startupStage: "auth",
+      startupError: message,
       authError: message,
     };
   }

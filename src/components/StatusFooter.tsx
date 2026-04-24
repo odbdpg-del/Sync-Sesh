@@ -32,7 +32,10 @@ export function StatusFooter({ syncStatus, sdkState }: StatusFooterProps) {
         Transport: <strong>{syncStatus.connection}</strong>
       </span>
       <span>
-        SDK: <strong>{sdkState.enabled ? "embedded" : "mock browser mode"}</strong>
+        SDK: <strong>{sdkState.enabled ? "embedded" : "fallback mode"}</strong>
+      </span>
+      <span>
+        Startup: <strong>{sdkState.startupStage ?? "unknown"}</strong>
       </span>
       <span>
         Identity: <strong>{sdkState.identitySource === "discord" ? "discord" : "local fallback"}</strong>
@@ -49,6 +52,11 @@ export function StatusFooter({ syncStatus, sdkState }: StatusFooterProps) {
       {sdkState.authError ? (
         <span>
           Discord auth: <strong>{sdkState.authError}</strong>
+        </span>
+      ) : null}
+      {sdkState.startupError && sdkState.startupError !== sdkState.authError ? (
+        <span>
+          Discord startup: <strong>{sdkState.startupError}</strong>
         </span>
       ) : null}
     </footer>
