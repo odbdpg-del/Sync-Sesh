@@ -28,6 +28,14 @@ interface DiscordAuthProgress {
   authError?: string;
 }
 
+interface DiscordAuthorizeRequest {
+  client_id: string;
+  response_type: "code";
+  state: string;
+  scope: Array<(typeof DISCORD_IDENTITY_SCOPES)[number]>;
+  prompt?: "none";
+}
+
 const DEFAULT_SYNC_PROXY_TARGET = "sync-sesh-sync.onrender.com";
 const STATIC_ACTIVITY_URL_MAPPINGS = [
   { prefix: "/soundcloud-widget", target: "w.soundcloud.com" },
@@ -113,6 +121,7 @@ interface InitializeEmbeddedAppOptions {
 }
 
 const FRONTEND_BUILD_ID = typeof __APP_BUILD_ID__ !== "undefined" ? __APP_BUILD_ID__ : "test-build";
+const DISCORD_AUTHORIZE_TIMEOUT_MS = 45_000;
 
 export function createDiscordAuthAttemptId(now = Date.now(), randomValue = Math.random()) {
   return `auth-${now.toString(36)}-${Math.floor(randomValue * 0xffffff)
@@ -122,6 +131,52 @@ export function createDiscordAuthAttemptId(now = Date.now(), randomValue = Math.
 
 export function shouldApplyDiscordAuthAttemptResult(activeAttemptId: string | undefined, incomingAttemptId: string) {
   return !activeAttemptId || activeAttemptId === incomingAttemptId;
+}
+
+export function extractDiscordAuthorizationCode(
+  authorizeResult: unknown,
+): { code?: string; debugSummary: string } {
+  if (!authorizeResult || typeof authorizeResult !== "object") {
+    return {
+      debugSummary: `unexpected authorize result type: ${typeof authorizeResult}`,
+    };
+  }
+
+  const candidate = "code" in authorizeResult ? authorizeResult.code : undefined;
+  const code = typeof candidate === "string" ? candidate.trim() : "";
+  const keys = Object.keys(authorizeResult);
+
+  return {
+    code: code || undefined,
+    debugSummary: `authorize result keys: ${keys.length > 0 ? keys.join(", ") : "none"}`,
+  };
+}
+
+async function requestDiscordAuthorization(
+  sdk: DiscordSDK,
+  authorizeOptions: DiscordAuthorizeRequest,
+  attemptId: string,
+): Promise<string> {
+  const authorizeResult = await Promise.race([
+    sdk.commands.authorize(authorizeOptions),
+    new Promise<never>((_, reject) => {
+      window.setTimeout(() => {
+        reject(new Error("Discord authorize timed out before returning a fresh authorization code."));
+      }, DISCORD_AUTHORIZE_TIMEOUT_MS);
+    }),
+  ]);
+  const { code, debugSummary } = extractDiscordAuthorizationCode(authorizeResult);
+
+  if (!code) {
+    console.warn("Discord authorize returned without a usable code.", {
+      attemptId,
+      debugSummary,
+      authorizeResult,
+    });
+    throw new Error("Discord authorize failed: no fresh authorization code returned.");
+  }
+
+  return code;
 }
 
 function buildProfileFromDiscordIdentity(user: DiscordUserLike, guildMember?: DiscordGuildMemberLike): LocalProfile {
@@ -205,11 +260,12 @@ async function resolveDiscordIdentity(
   emitAuthProgress("authorizing");
 
   try {
-    ({ code } = await sdk.commands.authorize(authorizeOptions));
+    code = await requestDiscordAuthorization(sdk, authorizeOptions, attemptId);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Discord authorize request failed.";
-    emitAuthProgress("authorizing", `Discord authorize failed: ${message}`);
-    throw new Error(`Discord authorize failed: ${message}`);
+    const normalizedMessage = message.startsWith("Discord authorize failed:") ? message : `Discord authorize failed: ${message}`;
+    emitAuthProgress("authorizing", normalizedMessage);
+    throw new Error(normalizedMessage);
   }
 
   let accessToken: string;
