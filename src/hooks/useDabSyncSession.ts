@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { initializeEmbeddedApp, type EmbeddedAppState } from "../lib/discord/embeddedApp";
+import { initializeEmbeddedApp, retryDiscordIdentity, type EmbeddedAppState } from "../lib/discord/embeddedApp";
 import { createSyncClient } from "../lib/sync/createSyncClient";
 import type { DabSyncState, FreeRoamPresenceUpdate, RangeScoreSubmission } from "../types/session";
 import { deriveLobbyState } from "../lib/lobby/sessionState";
@@ -9,12 +9,11 @@ export function useDabSyncSession() {
   const [syncClient] = useState(() => createSyncClient());
   const [state, setState] = useState<DabSyncState>(() => syncClient.getSnapshot());
   const autoJoinAttemptKeyRef = useRef<string | null>(null);
+  const embeddedCleanupRef = useRef<(() => void) | undefined>();
 
   useEffect(() => {
     const unsubscribe = syncClient.subscribe(setState);
     let disposed = false;
-    let embeddedCleanup: (() => void) | undefined;
-
     void initializeEmbeddedApp({
       onProfileUpdate: (localProfile) => {
         if (disposed) {
@@ -46,7 +45,7 @@ export function useDabSyncSession() {
           return;
         }
 
-        embeddedCleanup = nextSdkState.cleanup;
+        embeddedCleanupRef.current = nextSdkState.cleanup;
         setSdkState(nextSdkState);
 
         if (nextSdkState.localProfile) {
@@ -71,11 +70,64 @@ export function useDabSyncSession() {
 
     return () => {
       disposed = true;
-      embeddedCleanup?.();
+      embeddedCleanupRef.current?.();
+      embeddedCleanupRef.current = undefined;
       unsubscribe();
       syncClient.disconnect();
     };
   }, [syncClient]);
+
+  const retryDiscordProfile = useCallback(async () => {
+    const currentSdk = sdkState.sdk;
+
+    if (!currentSdk) {
+      return;
+    }
+
+    setSdkState((current) => ({
+      ...current,
+      startupStage: "auth",
+      startupError: undefined,
+      authError: undefined,
+    }));
+
+    const nextSdkState = await retryDiscordIdentity(currentSdk, {
+      onProfileUpdate: (localProfile) => {
+        const previousLocalProfile = syncClient.getSnapshot().localProfile;
+        const profileChanged =
+          previousLocalProfile.id !== localProfile.id ||
+          previousLocalProfile.displayName !== localProfile.displayName ||
+          previousLocalProfile.avatarUrl !== localProfile.avatarUrl ||
+          previousLocalProfile.avatarSeed !== localProfile.avatarSeed;
+
+        if (!profileChanged) {
+          return;
+        }
+
+        syncClient.setLocalProfile(localProfile);
+        setSdkState((current) => ({ ...current, localProfile, identitySource: "discord", authError: undefined }));
+
+        if (syncClient.getSnapshot().users.some((user) => user.id === localProfile.id)) {
+          syncClient.send({ type: "join_session" });
+        }
+      },
+    });
+
+    embeddedCleanupRef.current?.();
+    embeddedCleanupRef.current = nextSdkState.cleanup;
+    setSdkState((current) => ({
+      ...current,
+      ...nextSdkState,
+      sdk: currentSdk,
+      channelId: currentSdk.channelId ?? current.channelId,
+      guildId: currentSdk.guildId ?? current.guildId,
+      instanceId: currentSdk.instanceId ?? current.instanceId,
+    }));
+
+    if (nextSdkState.localProfile) {
+      syncClient.setLocalProfile(nextSdkState.localProfile);
+    }
+  }, [sdkState.sdk, syncClient]);
 
   const lobbyState = useMemo(() => deriveLobbyState(state), [state]);
 
@@ -208,5 +260,6 @@ export function useDabSyncSession() {
     submitRangeScore,
     updateFreeRoamPresence,
     clearFreeRoamPresence,
+    retryDiscordProfile,
   };
 }

@@ -232,6 +232,48 @@ async function resolveDiscordIdentity(
   };
 }
 
+export async function retryDiscordIdentity(
+  sdk: DiscordSDK,
+  options: InitializeEmbeddedAppOptions = {},
+): Promise<Pick<EmbeddedAppState, "localProfile" | "identitySource" | "startupStage" | "startupError" | "authError" | "cleanup">> {
+  const clientId = import.meta.env.VITE_DISCORD_CLIENT_ID;
+
+  if (!clientId) {
+    return {
+      localProfile: getLocalProfile(),
+      identitySource: "local",
+      startupStage: "auth",
+      startupError: "Discord client ID is missing.",
+      authError: "Discord client ID is missing.",
+    };
+  }
+
+  try {
+    const { localProfile, cleanup } = await resolveDiscordIdentity(sdk, clientId, options.onProfileUpdate);
+    return {
+      localProfile,
+      identitySource: "discord",
+      startupStage: "ready",
+      startupError: undefined,
+      authError: undefined,
+      cleanup,
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Discord identity setup failed.";
+    console.error("Discord identity retry failed.", error);
+    const fallbackLocalProfile = getLocalProfile();
+    persistLocalProfile(fallbackLocalProfile);
+
+    return {
+      localProfile: fallbackLocalProfile,
+      identitySource: "local",
+      startupStage: "auth",
+      startupError: message,
+      authError: message,
+    };
+  }
+}
+
 export async function initializeEmbeddedApp(options: InitializeEmbeddedAppOptions = {}): Promise<EmbeddedAppState> {
   const clientId = import.meta.env.VITE_DISCORD_CLIENT_ID;
   const enabled = import.meta.env.VITE_ENABLE_DISCORD_SDK === "true";

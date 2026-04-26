@@ -1860,6 +1860,23 @@ h2 {
   background: linear-gradient(135deg, rgba(255, 138, 91, 0.12), rgba(4, 10, 22, 0.82));
 }
 
+.discord-identity-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.discord-identity-banner-copy {
+  flex: 1 1 auto;
+}
+
+.discord-identity-retry {
+  min-height: 40px;
+  padding: 8px 14px;
+  white-space: nowrap;
+}
+
 .soundcloud-panel {
   padding: 16px 18px 18px;
   display: grid;

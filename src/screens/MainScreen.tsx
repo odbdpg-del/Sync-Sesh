@@ -45,6 +45,7 @@ export function MainScreen() {
     submitRangeScore,
     updateFreeRoamPresence,
     clearFreeRoamPresence,
+    retryDiscordProfile,
   } = useDabSyncSession();
   const countdownDisplay = useCountdownDisplay(state);
   const { playCue, playSecretCodeStep } = useSoundEffects(state, lobbyState, countdownDisplay);
@@ -111,9 +112,14 @@ export function MainScreen() {
 
       {sdkState.enabled && (sdkState.authError || sdkState.identitySource === "local") ? (
         <div className="panel sync-banner sync-banner-alert discord-identity-banner">
-          <strong>Discord identity unavailable.</strong>{" "}
-          {sdkState.authError ??
-            "The activity is running, but Discord name/avatar resolution fell back to a local profile."}
+          <div className="discord-identity-banner-copy">
+            <strong>Discord identity unavailable.</strong>{" "}
+            {sdkState.authError ??
+              "The activity is running, but Discord name/avatar resolution fell back to a local profile."}
+          </div>
+          <button type="button" className="ghost-button discord-identity-retry" onClick={() => void retryDiscordProfile()}>
+            Retry Discord Identity
+          </button>
         </div>
       ) : null}
 
