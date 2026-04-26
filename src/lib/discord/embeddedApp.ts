@@ -109,6 +109,7 @@ interface InitializeEmbeddedAppOptions {
   authPrompt?: "none" | "interactive";
   attemptId?: string;
   onAuthProgress?: (progress: DiscordAuthProgress) => void;
+  fallbackLocalProfile?: LocalProfile;
 }
 
 const FRONTEND_BUILD_ID = typeof __APP_BUILD_ID__ !== "undefined" ? __APP_BUILD_ID__ : "test-build";
@@ -309,12 +310,13 @@ export async function retryDiscordIdentity(
 ): Promise<Pick<EmbeddedAppState, "buildId" | "attemptId" | "localProfile" | "identitySource" | "authStage" | "startupStage" | "startupError" | "authError" | "cleanup">> {
   const clientId = import.meta.env.VITE_DISCORD_CLIENT_ID;
   const attemptId = options.attemptId ?? createDiscordAuthAttemptId();
+  const fallbackLocalProfile = options.fallbackLocalProfile ?? getLocalProfile();
 
   if (!clientId) {
     return {
       buildId: FRONTEND_BUILD_ID,
       attemptId,
-      localProfile: getLocalProfile(),
+      localProfile: fallbackLocalProfile,
       identitySource: "local",
       authStage: "idle",
       startupStage: "auth",
@@ -346,7 +348,6 @@ export async function retryDiscordIdentity(
   } catch (error) {
     const message = error instanceof Error ? error.message : "Discord identity setup failed.";
     console.error("Discord identity retry failed.", error);
-    const fallbackLocalProfile = getLocalProfile();
     persistLocalProfile(fallbackLocalProfile);
 
     return {

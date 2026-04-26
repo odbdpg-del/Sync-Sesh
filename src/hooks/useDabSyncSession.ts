@@ -158,6 +158,7 @@ export function useDabSyncSession() {
     const nextSdkState = await retryDiscordIdentity(currentSdk, {
       attemptId,
       authPrompt: "interactive",
+      fallbackLocalProfile: syncClient.getSnapshot().localProfile,
       onProfileUpdate: (localProfile) => {
         const previousLocalProfile = syncClient.getSnapshot().localProfile;
         const profileChanged =

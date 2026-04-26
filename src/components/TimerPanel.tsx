@@ -73,6 +73,42 @@ function getActionLabel(lobbyState: DerivedLobbyState, isHolding: boolean) {
   };
 }
 
+function getHoldDisabledReason(lobbyState: DerivedLobbyState, syncStatus: SyncStatus) {
+  if (syncStatus.connection !== "connected" && syncStatus.mode !== "mock") {
+    return "Sync has to reconnect before the ready control can run.";
+  }
+
+  if (!lobbyState.isJoined) {
+    return "Join the session to use the ready control.";
+  }
+
+  if (lobbyState.isLocalUserSpectating) {
+    return "Spectators can’t arm the current round.";
+  }
+
+  if (!lobbyState.canHoldToReady) {
+    return "Ready hold is only available while the round is in lobby or armed state.";
+  }
+
+  return undefined;
+}
+
+function getTimerEditDisabledReason(lobbyState: DerivedLobbyState, phase: DabSyncState["session"]["phase"], syncStatus: SyncStatus) {
+  if (syncStatus.connection !== "connected" && syncStatus.mode !== "mock") {
+    return "Sync has to reconnect before timer settings can change.";
+  }
+
+  if (phase === "precount" || phase === "countdown") {
+    return "Timer settings lock while the countdown is active.";
+  }
+
+  if (!lobbyState.canEditTimer) {
+    return "Timer settings are only editable in idle, lobby, or armed state.";
+  }
+
+  return undefined;
+}
+
 export function TimerPanel({
   state,
   lobbyState,
@@ -86,6 +122,8 @@ export function TimerPanel({
   const [draftDuration, setDraftDuration] = useState(state.timerConfig.durationSeconds.toString());
   const preCountPresets = state.timerConfig.preCountPresets ?? [3, 5];
   const syncReady = state.syncStatus.mode === "mock" || state.syncStatus.connection === "connected";
+  const holdDisabledReason = getHoldDisabledReason(lobbyState, state.syncStatus);
+  const timerEditDisabledReason = getTimerEditDisabledReason(lobbyState, state.session.phase, state.syncStatus);
   const { isHolding, bindHoldButton } = useReadyHold({
     enabled: lobbyState.canHoldToReady && syncReady,
     onHoldStart: onStartReadyHold,
@@ -180,6 +218,7 @@ export function TimerPanel({
           type="button"
           className={`hold-button ${isHolding ? "hold-button-active" : ""}`}
           disabled={!lobbyState.canHoldToReady || !syncReady}
+          title={holdDisabledReason}
           {...bindHoldButton}
         >
           <span className="hold-orb" aria-hidden="true">
@@ -212,6 +251,7 @@ export function TimerPanel({
             <span />
           </span>
         </button>
+        {holdDisabledReason ? <p className="hold-disabled-copy">{holdDisabledReason}</p> : null}
       </div>
 
       <div className="timer-config panel inset-panel">
@@ -235,6 +275,7 @@ export function TimerPanel({
                   }
                 }}
                 disabled={!lobbyState.canEditTimer || !syncReady}
+                title={timerEditDisabledReason}
                 className="timer-input"
               />
               <span className="timer-input-suffix">seconds</span>
@@ -246,6 +287,7 @@ export function TimerPanel({
                   type="button"
                   className={`ghost-button ${preset === state.timerConfig.durationSeconds ? "preset-active" : ""}`}
                   disabled={!lobbyState.canEditTimer || !syncReady}
+                  title={timerEditDisabledReason}
                   onClick={() => onSetTimerDuration(preset)}
                 >
                   {preset}
@@ -265,6 +307,7 @@ export function TimerPanel({
                   type="button"
                   className={`ghost-button precount-button ${preset === state.timerConfig.preCountSeconds ? "preset-active" : ""}`}
                   disabled={!lobbyState.canEditTimer || !syncReady}
+                  title={timerEditDisabledReason}
                   onClick={() => onSetPrecountDuration(preset)}
                 >
                   {getPrecountSequenceLabel(preset)}
