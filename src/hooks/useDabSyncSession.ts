@@ -92,6 +92,7 @@ export function useDabSyncSession() {
     }));
 
     const nextSdkState = await retryDiscordIdentity(currentSdk, {
+      authPrompt: "interactive",
       onProfileUpdate: (localProfile) => {
         const previousLocalProfile = syncClient.getSnapshot().localProfile;
         const profileChanged =

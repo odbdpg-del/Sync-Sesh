@@ -95,6 +95,7 @@ interface DiscordTokenExchangeResponse {
 
 interface InitializeEmbeddedAppOptions {
   onProfileUpdate?: (localProfile: LocalProfile) => void;
+  authPrompt?: "none" | "interactive";
 }
 
 function buildProfileFromDiscordIdentity(user: DiscordUserLike, guildMember?: DiscordGuildMemberLike): LocalProfile {
@@ -154,14 +155,16 @@ async function resolveDiscordIdentity(
   sdk: DiscordSDK,
   clientId: string,
   onProfileUpdate?: (localProfile: LocalProfile) => void,
+  authPrompt: "none" | "interactive" = "none",
 ): Promise<{ localProfile: LocalProfile; cleanup: () => void }> {
-  const { code } = await sdk.commands.authorize({
+  const authorizeOptions = {
     client_id: clientId,
-    response_type: "code",
-    state: "",
-    prompt: "none",
+    response_type: "code" as const,
+    state: `${Date.now()}`,
     scope: [...DISCORD_IDENTITY_SCOPES],
-  });
+    ...(authPrompt === "none" ? { prompt: "none" as const } : {}),
+  };
+  const { code } = await sdk.commands.authorize(authorizeOptions);
 
   const accessToken = await exchangeDiscordAuthCode(code);
   const auth = await sdk.commands.authenticate({
@@ -249,7 +252,7 @@ export async function retryDiscordIdentity(
   }
 
   try {
-    const { localProfile, cleanup } = await resolveDiscordIdentity(sdk, clientId, options.onProfileUpdate);
+    const { localProfile, cleanup } = await resolveDiscordIdentity(sdk, clientId, options.onProfileUpdate, options.authPrompt);
     return {
       localProfile,
       identitySource: "discord",
