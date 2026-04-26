@@ -146,6 +146,13 @@ async function readJsonBody(request: import("node:http").IncomingMessage) {
 }
 
 async function handleDiscordTokenExchange(request: import("node:http").IncomingMessage, response: import("node:http").ServerResponse) {
+  console.log("Discord token exchange requested.", {
+    method: request.method,
+    origin: request.headers.origin ?? null,
+    referer: request.headers.referer ?? null,
+    user_agent: request.headers["user-agent"] ?? null,
+  });
+
   if (!discordClientId || !discordClientSecret) {
     sendJson(response, 500, {
       error: "Discord OAuth is not configured on the sync server.",
@@ -167,6 +174,7 @@ async function handleDiscordTokenExchange(request: import("node:http").IncomingM
   const code = typeof body.code === "string" ? body.code : undefined;
 
   if (!code) {
+    console.error("Discord token exchange request missing code.");
     sendJson(response, 400, {
       error: "Missing Discord authorization code.",
     });
@@ -233,7 +241,17 @@ const httpServer = createServer((request, response) => {
 
   if (request.url === "/health") {
     response.writeHead(200, { "Content-Type": "application/json" });
-    response.end(JSON.stringify({ ok: true, service: "sync-sesh-sync" }));
+    response.end(
+      JSON.stringify({
+        ok: true,
+        service: "sync-sesh-sync",
+        discord_oauth: {
+          has_client_id: Boolean(discordClientId),
+          has_client_secret: Boolean(discordClientSecret),
+          redirect_uri: discordRedirectUri,
+        },
+      }),
+    );
     return;
   }
 
@@ -342,5 +360,10 @@ setInterval(() => {
 }, 100);
 
 httpServer.listen(port, "0.0.0.0", () => {
+  console.log("Discord OAuth config at startup.", {
+    has_client_id: Boolean(discordClientId),
+    has_client_secret: Boolean(discordClientSecret),
+    redirect_uri: discordRedirectUri,
+  });
   console.log(`DabSync sync server listening on port ${port}`);
 });
