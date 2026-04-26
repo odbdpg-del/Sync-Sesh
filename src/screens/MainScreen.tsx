@@ -115,7 +115,9 @@ export function MainScreen() {
           <div className="discord-identity-banner-copy">
             <strong>Discord identity unavailable.</strong>{" "}
             {sdkState.authError ??
-              "The activity is running, but Discord name/avatar resolution fell back to a local profile."}
+              (sdkState.authStage && sdkState.authStage !== "ready"
+                ? `Discord identity refresh is in progress (${sdkState.authStage.replace(/_/g, " ")}).`
+                : "The activity is running, but Discord name/avatar resolution fell back to a local profile.")}
           </div>
           <button type="button" className="ghost-button discord-identity-retry" onClick={() => void retryDiscordProfile()}>
             Retry Discord Identity

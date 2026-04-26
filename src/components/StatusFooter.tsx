@@ -23,6 +23,8 @@ function getSyncSummary(syncStatus: SyncStatus) {
 }
 
 export function StatusFooter({ syncStatus, sdkState }: StatusFooterProps) {
+  const shortAttemptId = sdkState.attemptId ? sdkState.attemptId.slice(-8) : "n/a";
+
   return (
     <footer className="panel footer-bar">
       <span>
@@ -39,6 +41,15 @@ export function StatusFooter({ syncStatus, sdkState }: StatusFooterProps) {
       </span>
       <span>
         Identity: <strong>{sdkState.identitySource === "discord" ? "discord" : "local fallback"}</strong>
+      </span>
+      <span>
+        Auth stage: <strong>{sdkState.authStage ?? "idle"}</strong>
+      </span>
+      <span>
+        Attempt: <strong>{shortAttemptId}</strong>
+      </span>
+      <span>
+        Build: <strong>{sdkState.buildId}</strong>
       </span>
       <span>
         Latency: <strong>{syncStatus.latencyMs !== undefined ? `${syncStatus.latencyMs}ms` : "n/a"}</strong>

@@ -1,20 +1,51 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { initializeEmbeddedApp, retryDiscordIdentity, type EmbeddedAppState } from "../lib/discord/embeddedApp";
+import {
+  createDiscordAuthAttemptId,
+  initializeEmbeddedApp,
+  retryDiscordIdentity,
+  shouldApplyDiscordAuthAttemptResult,
+  type EmbeddedAppState,
+  type DiscordAuthStage,
+} from "../lib/discord/embeddedApp";
 import { createSyncClient } from "../lib/sync/createSyncClient";
 import type { DabSyncState, FreeRoamPresenceUpdate, RangeScoreSubmission } from "../types/session";
 import { deriveLobbyState } from "../lib/lobby/sessionState";
 
 export function useDabSyncSession() {
-  const [sdkState, setSdkState] = useState<EmbeddedAppState>({ enabled: false });
+  const [sdkState, setSdkState] = useState<EmbeddedAppState>({ enabled: false, buildId: __APP_BUILD_ID__, authStage: "idle" });
   const [syncClient] = useState(() => createSyncClient());
   const [state, setState] = useState<DabSyncState>(() => syncClient.getSnapshot());
   const autoJoinAttemptKeyRef = useRef<string | null>(null);
   const embeddedCleanupRef = useRef<(() => void) | undefined>();
+  const activeAuthAttemptIdRef = useRef<string | undefined>();
 
   useEffect(() => {
     const unsubscribe = syncClient.subscribe(setState);
     let disposed = false;
+    const initialAttemptId = createDiscordAuthAttemptId();
+    activeAuthAttemptIdRef.current = initialAttemptId;
+
+    const handleAuthProgress = (attemptId: string, authStage: DiscordAuthStage, authError?: string) => {
+      setSdkState((current) => {
+        if (!shouldApplyDiscordAuthAttemptResult(activeAuthAttemptIdRef.current, attemptId)) {
+          return current;
+        }
+
+        return {
+          ...current,
+          enabled: true,
+          buildId: current.buildId ?? __APP_BUILD_ID__,
+          attemptId,
+          authStage,
+          startupStage: "auth",
+          startupError: authError,
+          authError,
+        };
+      });
+    };
+
     void initializeEmbeddedApp({
+      attemptId: initialAttemptId,
       onProfileUpdate: (localProfile) => {
         if (disposed) {
           return;
@@ -32,15 +63,23 @@ export function useDabSyncSession() {
         }
 
         syncClient.setLocalProfile(localProfile);
-        setSdkState((current) => ({ ...current, localProfile, identitySource: "discord", authError: undefined }));
+        setSdkState((current) => ({ ...current, localProfile, identitySource: "discord", authError: undefined, startupError: undefined, authStage: "ready" }));
 
         if (syncClient.getSnapshot().users.some((user) => user.id === localProfile.id)) {
           syncClient.send({ type: "join_session" });
         }
       },
+      onAuthProgress: ({ attemptId, authStage, authError }) => {
+        handleAuthProgress(attemptId, authStage, authError);
+      },
     })
       .then((nextSdkState) => {
         if (disposed) {
+          nextSdkState.cleanup?.();
+          return;
+        }
+
+        if (!shouldApplyDiscordAuthAttemptResult(activeAuthAttemptIdRef.current, nextSdkState.attemptId ?? initialAttemptId)) {
           nextSdkState.cleanup?.();
           return;
         }
@@ -61,7 +100,10 @@ export function useDabSyncSession() {
 
         setSdkState({
           enabled: false,
+          buildId: __APP_BUILD_ID__,
+          attemptId: initialAttemptId,
           identitySource: "local",
+          authStage: "idle",
           startupStage: "sdk_init",
           startupError: "Discord startup failed before initialization completed.",
         });
@@ -84,14 +126,37 @@ export function useDabSyncSession() {
       return;
     }
 
+    const attemptId = createDiscordAuthAttemptId();
+    activeAuthAttemptIdRef.current = attemptId;
+
+    const handleAuthProgress = (incomingAttemptId: string, authStage: DiscordAuthStage, authError?: string) => {
+      setSdkState((current) => {
+        if (!shouldApplyDiscordAuthAttemptResult(activeAuthAttemptIdRef.current, incomingAttemptId)) {
+          return current;
+        }
+
+        return {
+          ...current,
+          attemptId: incomingAttemptId,
+          authStage,
+          startupStage: "auth",
+          startupError: authError,
+          authError,
+        };
+      });
+    };
+
     setSdkState((current) => ({
       ...current,
+      attemptId,
+      authStage: "authorizing",
       startupStage: "auth",
       startupError: undefined,
       authError: undefined,
     }));
 
     const nextSdkState = await retryDiscordIdentity(currentSdk, {
+      attemptId,
       authPrompt: "interactive",
       onProfileUpdate: (localProfile) => {
         const previousLocalProfile = syncClient.getSnapshot().localProfile;
@@ -106,13 +171,21 @@ export function useDabSyncSession() {
         }
 
         syncClient.setLocalProfile(localProfile);
-        setSdkState((current) => ({ ...current, localProfile, identitySource: "discord", authError: undefined }));
+        setSdkState((current) => ({ ...current, localProfile, identitySource: "discord", authError: undefined, startupError: undefined, authStage: "ready" }));
 
         if (syncClient.getSnapshot().users.some((user) => user.id === localProfile.id)) {
           syncClient.send({ type: "join_session" });
         }
       },
+      onAuthProgress: ({ attemptId: incomingAttemptId, authStage, authError }) => {
+        handleAuthProgress(incomingAttemptId, authStage, authError);
+      },
     });
+
+    if (!shouldApplyDiscordAuthAttemptResult(activeAuthAttemptIdRef.current, nextSdkState.attemptId ?? attemptId)) {
+      nextSdkState.cleanup?.();
+      return;
+    }
 
     embeddedCleanupRef.current?.();
     embeddedCleanupRef.current = nextSdkState.cleanup;
