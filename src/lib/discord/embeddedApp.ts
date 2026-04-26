@@ -164,12 +164,34 @@ async function resolveDiscordIdentity(
     scope: [...DISCORD_IDENTITY_SCOPES],
     ...(authPrompt === "none" ? { prompt: "none" as const } : {}),
   };
-  const { code } = await sdk.commands.authorize(authorizeOptions);
+  let code: string;
 
-  const accessToken = await exchangeDiscordAuthCode(code);
-  const auth = await sdk.commands.authenticate({
-    access_token: accessToken,
-  });
+  try {
+    ({ code } = await sdk.commands.authorize(authorizeOptions));
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Discord authorize request failed.";
+    throw new Error(`Discord authorize failed: ${message}`);
+  }
+
+  let accessToken: string;
+
+  try {
+    accessToken = await exchangeDiscordAuthCode(code);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Discord token exchange failed.";
+    throw new Error(`Discord token exchange failed: ${message}`);
+  }
+
+  let auth: Awaited<ReturnType<typeof sdk.commands.authenticate>>;
+
+  try {
+    auth = await sdk.commands.authenticate({
+      access_token: accessToken,
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Discord authenticate failed.";
+    throw new Error(`Discord authenticate failed: ${message}`);
+  }
 
   let currentUser: DiscordUserLike = auth.user;
   let currentGuildMember = await fetchCurrentGuildMember(accessToken, sdk.guildId ?? undefined);
