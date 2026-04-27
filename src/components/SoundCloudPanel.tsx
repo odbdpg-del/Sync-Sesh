@@ -254,7 +254,7 @@ export function SoundCloudPanel({ player }: SoundCloudPanelProps) {
         </div>
       </div>
 
-      <div className={`soundcloud-widget-shell ${state.errorMessage && !state.isWidgetReady ? "soundcloud-widget-shell-visible" : ""}`}>
+      <div className={`soundcloud-widget-shell ${state.isWidgetReady ? "soundcloud-widget-shell-visible" : ""}`}>
         <iframe
           key={state.selectedPlaylist.id}
           ref={(element) => {

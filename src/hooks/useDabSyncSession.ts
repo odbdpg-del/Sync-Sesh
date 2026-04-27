@@ -21,6 +21,40 @@ export function useDabSyncSession() {
   const activeAuthAttemptIdRef = useRef<string | undefined>();
 
   useEffect(() => {
+    if (!sdkState.attemptId || !sdkState.authStage || sdkState.authStage === "idle" || sdkState.authStage === "ready" || sdkState.authError) {
+      return;
+    }
+
+    const attemptId = sdkState.attemptId;
+    const stalledStage = sdkState.authStage;
+    const timeoutId = window.setTimeout(() => {
+      setSdkState((current) => {
+        if (
+          current.attemptId !== attemptId ||
+          current.authStage !== stalledStage ||
+          current.authError
+        ) {
+          return current;
+        }
+
+        const message = `Discord identity refresh timed out while ${stalledStage.replace(/_/g, " ")}.`;
+
+        return {
+          ...current,
+          authStage: "idle",
+          startupStage: "auth",
+          startupError: message,
+          authError: message,
+        };
+      });
+    }, DISCORD_RETRY_TIMEOUT_MS);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [sdkState.attemptId, sdkState.authError, sdkState.authStage]);
+
+  useEffect(() => {
     const unsubscribe = syncClient.subscribe(setState);
     let disposed = false;
     const initialAttemptId = createDiscordAuthAttemptId();

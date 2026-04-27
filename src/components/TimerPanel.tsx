@@ -187,7 +187,11 @@ export function TimerPanel({
         </div>
       </div>
 
-      <div className={`armed-banner ${lobbyState.isArmed ? "armed-live" : ""} ${state.session.phase === "precount" ? "armed-banner-hot" : ""}`}>
+      <div
+        className={`armed-banner ${lobbyState.isArmed ? "armed-live" : ""} ${
+          isHolding && lobbyState.isArmed ? "armed-banner-armed-live" : ""
+        } ${state.session.phase === "precount" ? "armed-banner-hot" : ""}`}
+      >
         <span className="armed-prefix">
           <span className="armed-prefix-icon" aria-hidden="true" />
           {armedLabel}
