@@ -68,6 +68,12 @@ textarea {
   min-height: 100vh;
 }
 
+.app-stage {
+  min-height: 100vh;
+  position: relative;
+  isolation: isolate;
+}
+
 .app-shell {
   max-width: 1820px;
   margin: 0 auto;
@@ -77,6 +83,108 @@ textarea {
   zoom: var(--app-zoom);
   transform-origin: top center;
   perspective: 1600px;
+  position: relative;
+  z-index: 1;
+}
+
+.app-shell::before,
+.app-shell::after {
+  content: "";
+  position: fixed;
+  pointer-events: none;
+}
+
+.app-shell::before {
+  inset: 12px;
+  z-index: -1;
+  border-radius: 34px;
+  border: 1px solid rgba(89, 207, 255, 0.12);
+  box-shadow:
+    inset 0 0 0 1px rgba(6, 16, 29, 0.72),
+    inset 0 22px 48px rgba(16, 39, 58, 0.12),
+    0 0 0 1px rgba(12, 23, 39, 0.72),
+    0 24px 80px rgba(0, 0, 0, 0.34);
+  background:
+    linear-gradient(180deg, rgba(4, 10, 20, 0.14), rgba(4, 10, 18, 0.04)),
+    radial-gradient(circle at 64% 44%, rgba(34, 210, 255, 0.06), transparent 34%);
+}
+
+.app-shell::after {
+  inset: 30px 44px auto;
+  z-index: -1;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    rgba(56, 198, 244, 0),
+    rgba(56, 198, 244, 0.22) 18%,
+    rgba(118, 116, 255, 0.3) 54%,
+    rgba(197, 110, 255, 0)
+  );
+  opacity: 0.9;
+}
+
+.app-background-media {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+  background: #02050c;
+}
+
+.app-background-video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: 62% 50%;
+  filter: saturate(0.82) brightness(0.48) contrast(1.14);
+  transform: scale(1.04);
+}
+
+.app-background-stage-tint,
+.app-background-stage-focus,
+.app-background-stage-grid,
+.app-background-stage-atmosphere {
+  position: absolute;
+  inset: 0;
+}
+
+.app-background-stage-tint {
+  background:
+    linear-gradient(180deg, rgba(2, 7, 14, 0.54), rgba(3, 8, 18, 0.76) 72%, rgba(2, 6, 14, 0.88)),
+    linear-gradient(90deg, rgba(4, 12, 20, 0.68), rgba(4, 11, 21, 0.18) 38%, rgba(4, 11, 20, 0.8)),
+    radial-gradient(circle at 63% 49%, rgba(22, 95, 126, 0.18), transparent 24%);
+}
+
+.app-background-stage-focus {
+  background:
+    radial-gradient(circle at 67% 50%, rgba(75, 230, 255, 0.18), rgba(18, 57, 79, 0.08) 18%, transparent 40%),
+    radial-gradient(circle at 66% 51%, rgba(150, 87, 255, 0.12), transparent 28%),
+    radial-gradient(circle at 50% 45%, transparent 0%, transparent 38%, rgba(2, 6, 14, 0.28) 62%, rgba(2, 5, 11, 0.88) 100%);
+  mix-blend-mode: screen;
+}
+
+.app-background-stage-grid {
+  background:
+    linear-gradient(rgba(255, 255, 255, 0.025) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.02) 1px, transparent 1px),
+    radial-gradient(circle at 16% 18%, rgba(66, 255, 165, 0.08), transparent 18%),
+    radial-gradient(circle at 79% 10%, rgba(142, 92, 255, 0.09), transparent 18%);
+  background-size: 100% 5px, 5px 100%, auto, auto;
+  opacity: 0.34;
+  mix-blend-mode: screen;
+}
+
+.app-background-stage-atmosphere {
+  background:
+    radial-gradient(circle at 70% 50%, rgba(103, 238, 255, 0.12), transparent 14%),
+    radial-gradient(circle at 74% 44%, rgba(72, 203, 255, 0.08), transparent 10%),
+    radial-gradient(circle at 45% 34%, rgba(96, 117, 255, 0.06), transparent 16%);
+  filter: blur(18px);
+  opacity: 0.86;
+  animation: stageBloomDrift 18s ease-in-out infinite alternate;
 }
 
 .panel {
@@ -86,8 +194,8 @@ textarea {
   box-shadow: var(--shadow-panel);
   position: relative;
   overflow: hidden;
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(18px) saturate(1.08);
+  -webkit-backdrop-filter: blur(18px) saturate(1.08);
 }
 
 .panel::before,
@@ -109,8 +217,9 @@ textarea {
   inset: 0;
   pointer-events: none;
   background:
-    radial-gradient(circle at top left, rgba(63, 233, 255, 0.08), transparent 18%),
-    radial-gradient(circle at bottom right, rgba(122, 78, 255, 0.06), transparent 20%);
+    radial-gradient(circle at top left, rgba(63, 233, 255, 0.12), transparent 18%),
+    radial-gradient(circle at 82% 110%, rgba(122, 78, 255, 0.08), transparent 24%),
+    linear-gradient(180deg, rgba(15, 31, 45, 0.14), rgba(8, 16, 28, 0));
   mix-blend-mode: screen;
 }
 
@@ -129,8 +238,9 @@ textarea {
     inset 0 0 0 1px rgba(7, 23, 38, 0.9),
     0 12px 38px rgba(2, 10, 18, 0.46);
   background:
-    linear-gradient(180deg, rgba(16, 27, 37, 0.97), rgba(9, 18, 28, 0.98)),
-    linear-gradient(90deg, rgba(16, 32, 43, 0.4), rgba(9, 18, 28, 0));
+    linear-gradient(180deg, rgba(14, 25, 36, 0.94), rgba(8, 17, 28, 0.98)),
+    linear-gradient(90deg, rgba(18, 43, 59, 0.22), rgba(9, 18, 28, 0) 42%, rgba(88, 55, 133, 0.12) 100%),
+    radial-gradient(circle at 14% 50%, rgba(49, 201, 255, 0.08), transparent 28%);
   overflow: hidden;
 }
 
@@ -687,6 +797,9 @@ textarea {
   padding: 18px 20px 20px;
   display: grid;
   gap: 14px;
+  background:
+    linear-gradient(180deg, rgba(10, 19, 31, 0.9), rgba(7, 15, 26, 0.95)),
+    radial-gradient(circle at 78% 24%, rgba(51, 193, 255, 0.08), transparent 24%);
 }
 
 .section-heading {
@@ -2547,6 +2660,23 @@ h2 {
   }
 }
 
+@keyframes stageBloomDrift {
+  0% {
+    transform: translate3d(-1.5%, -1%, 0) scale(1);
+    opacity: 0.7;
+  }
+
+  50% {
+    transform: translate3d(1.5%, 0.8%, 0) scale(1.05);
+    opacity: 0.92;
+  }
+
+  100% {
+    transform: translate3d(0.5%, -1.4%, 0) scale(1.02);
+    opacity: 0.8;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -2559,6 +2689,16 @@ h2 {
 }
 
 @media (max-width: 1180px) {
+  .app-background-video {
+    object-position: 58% 50%;
+  }
+
+  .app-background-stage-focus {
+    background:
+      radial-gradient(circle at 58% 42%, rgba(75, 230, 255, 0.14), rgba(18, 57, 79, 0.06) 18%, transparent 36%),
+      radial-gradient(circle at 50% 45%, transparent 0%, transparent 32%, rgba(2, 6, 14, 0.34) 60%, rgba(2, 5, 11, 0.9) 100%);
+  }
+
   .content-grid {
     grid-template-columns: 1fr;
   }
@@ -2584,6 +2724,35 @@ h2 {
 }
 
 @media (max-width: 900px) {
+  .app-shell::before {
+    inset: 8px;
+    border-radius: 24px;
+  }
+
+  .app-shell::after {
+    inset: 22px 20px auto;
+  }
+
+  .app-background-video {
+    object-position: 56% 50%;
+    filter: saturate(0.76) brightness(0.4) contrast(1.1);
+  }
+
+  .app-background-stage-grid {
+    opacity: 0.24;
+    background-size: 100% 6px, 6px 100%, auto, auto;
+  }
+
+  .app-background-stage-atmosphere {
+    opacity: 0.62;
+  }
+
+  .app-background-stage-tint {
+    background:
+      linear-gradient(180deg, rgba(2, 7, 14, 0.68), rgba(3, 8, 18, 0.84) 72%, rgba(2, 6, 14, 0.92)),
+      linear-gradient(90deg, rgba(4, 12, 20, 0.8), rgba(4, 11, 21, 0.24) 46%, rgba(4, 11, 20, 0.88));
+  }
+
   .app-header {
     flex-direction: column;
     align-items: stretch;

@@ -14,6 +14,7 @@ import { useDabSyncSession } from "../hooks/useDabSyncSession";
 import { useSecretCodeUnlock } from "../hooks/useSecretCodeUnlock";
 import { useSoundCloudPlayer } from "../hooks/useSoundCloudPlayer";
 import { useSoundEffects } from "../hooks/useSoundEffects";
+import backgroundVideo from "../../media/202587-918431513.mp4";
 
 function hasRenderingSpikeParam() {
   return new URLSearchParams(window.location.search).get("spike3d") === "1";
@@ -84,106 +85,118 @@ export function MainScreen() {
   };
 
   return (
-    <main
-      className="app-shell"
-      data-secret-unlocked={isSecretUnlocked ? "true" : undefined}
-      data-3d-shell-open={isThreeDModeOpen ? "true" : undefined}
-      onClickCapture={!isThreeDModeOpen ? resetSecretEntry : undefined}
-    >
-      <AppHeader
-        session={state.session}
-        syncStatus={state.syncStatus}
-        zoomPercent={zoomPercent}
-        secretEntryProgress={entryProgress}
-        secretUnlockCount={unlockCount}
-      />
-
-      {state.syncStatus.connection === "connecting" ? (
-        <div className="panel sync-banner">
-          <strong>Sync warming up.</strong> Waiting for the timing link before enabling shared controls.
-        </div>
-      ) : null}
-
-      {state.syncStatus.connection === "offline" || state.syncStatus.connection === "error" ? (
-        <div className="panel sync-banner sync-banner-alert">
-          <strong>Sync unavailable.</strong> {state.syncStatus.warning ?? "Reconnect the sync layer to resume shared timing."}
-        </div>
-      ) : null}
-
-      {sdkState.enabled && (sdkState.authError || sdkState.identitySource === "local") ? (
-        <div className="panel sync-banner sync-banner-alert discord-identity-banner">
-          <div className="discord-identity-banner-copy">
-            <strong>Discord identity unavailable.</strong>{" "}
-            {sdkState.authError ??
-              (sdkState.authStage && sdkState.authStage !== "ready"
-                ? `Discord identity refresh is in progress (${sdkState.authStage.replace(/_/g, " ")}).`
-                : "The activity is running, but Discord name/avatar resolution fell back to a local profile.")}
-          </div>
-          <button type="button" className="ghost-button discord-identity-retry" onClick={() => void retryDiscordProfile()}>
-            Retry Discord Identity
-          </button>
-        </div>
-      ) : null}
-
-      {!sdkState.enabled && sdkState.startupError ? (
-        <div className="panel sync-banner sync-banner-alert discord-identity-banner">
-          <strong>Discord SDK startup failed.</strong> {sdkState.startupError}
-        </div>
-      ) : null}
-
-      <div className="content-grid">
-        <LobbyPanel session={state.session} users={state.users} lobbyState={lobbyState} onJoinSession={handleJoinSession} />
-        <TimerPanel
-          state={state}
-          lobbyState={lobbyState}
-          countdownDisplay={countdownDisplay}
-          onStartReadyHold={handleStartReadyHold}
-          onEndReadyHold={handleEndReadyHold}
-          onSetTimerDuration={setTimerDuration}
-          onSetPrecountDuration={setPrecountDuration}
-        />
+    <div className="app-stage">
+      <div className="app-background-media" aria-hidden="true">
+        <video className="app-background-video" autoPlay muted loop playsInline preload="auto">
+          <source src={backgroundVideo} type="video/mp4" />
+        </video>
+        <div className="app-background-stage-tint" />
+        <div className="app-background-stage-focus" />
+        <div className="app-background-stage-grid" />
+        <div className="app-background-stage-atmosphere" />
       </div>
 
-      <SoundCloudPanel waveformBarCount={soundCloudWaveformBarCount} player={soundCloudPlayer} />
-
-      <AdminPanel
-        state={state}
-        lobbyState={lobbyState}
-        isOpen={isAdminOpen}
-        waveformBarCount={soundCloudWaveformBarCount}
-        soundCloudPlayer={soundCloudPlayer}
-        onClose={() => setIsAdminOpen(false)}
-        onSetWaveformBarCount={setSoundCloudWaveformBarCount}
-        onForceStartRound={forceStartRound}
-        onForceCompleteRound={forceCompleteRound}
-        onResetSession={adminResetSession}
-        onAddTestParticipant={addTestParticipant}
-        onToggleTestParticipantsReady={toggleTestParticipantsReady}
-        onClearTestParticipants={clearTestParticipants}
-        onSetLateJoinersJoinReady={setLateJoinersJoinReady}
-        onSetAutoJoinOnLoad={setAutoJoinOnLoad}
-      />
-
-      <StatusFooter syncStatus={state.syncStatus} sdkState={sdkState} />
-
-      {isThreeDModeOpen ? (
-        <ThreeDModeShell
-          countdownDisplay={countdownDisplay}
-          users={state.users}
-          localUserId={state.localProfile.id}
-          ownerId={state.session.ownerId}
-          roundNumber={state.session.roundNumber}
-          rangeScoreboard={state.rangeScoreboard}
-          onSubmitRangeScore={submitRangeScore}
-          freeRoamPresence={state.freeRoamPresence}
-          onUpdateFreeRoamPresence={updateFreeRoamPresence}
-          onClearFreeRoamPresence={clearFreeRoamPresence}
-          jukeboxDisplay={soundCloudPlayer.jukeboxDisplay}
-          jukeboxActions={soundCloudPlayer.jukeboxActions}
-          onExit={() => setIsThreeDModeOpen(false)}
+      <main
+        className="app-shell"
+        data-secret-unlocked={isSecretUnlocked ? "true" : undefined}
+        data-3d-shell-open={isThreeDModeOpen ? "true" : undefined}
+        onClickCapture={!isThreeDModeOpen ? resetSecretEntry : undefined}
+      >
+        <AppHeader
+          session={state.session}
+          syncStatus={state.syncStatus}
+          zoomPercent={zoomPercent}
+          secretEntryProgress={entryProgress}
+          secretUnlockCount={unlockCount}
         />
-      ) : null}
-      {isRenderingSpikeOpen ? <RenderingStackSpike onClose={() => setIsRenderingSpikeOpen(false)} /> : null}
-    </main>
+
+        {state.syncStatus.connection === "connecting" ? (
+          <div className="panel sync-banner">
+            <strong>Sync warming up.</strong> Waiting for the timing link before enabling shared controls.
+          </div>
+        ) : null}
+
+        {state.syncStatus.connection === "offline" || state.syncStatus.connection === "error" ? (
+          <div className="panel sync-banner sync-banner-alert">
+            <strong>Sync unavailable.</strong> {state.syncStatus.warning ?? "Reconnect the sync layer to resume shared timing."}
+          </div>
+        ) : null}
+
+        {sdkState.enabled && (sdkState.authError || sdkState.identitySource === "local") ? (
+          <div className="panel sync-banner sync-banner-alert discord-identity-banner">
+            <div className="discord-identity-banner-copy">
+              <strong>Discord identity unavailable.</strong>{" "}
+              {sdkState.authError ??
+                (sdkState.authStage && sdkState.authStage !== "ready"
+                  ? `Discord identity refresh is in progress (${sdkState.authStage.replace(/_/g, " ")}).`
+                  : "The activity is running, but Discord name/avatar resolution fell back to a local profile.")}
+            </div>
+            <button type="button" className="ghost-button discord-identity-retry" onClick={() => void retryDiscordProfile()}>
+              Retry Discord Identity
+            </button>
+          </div>
+        ) : null}
+
+        {!sdkState.enabled && sdkState.startupError ? (
+          <div className="panel sync-banner sync-banner-alert discord-identity-banner">
+            <strong>Discord SDK startup failed.</strong> {sdkState.startupError}
+          </div>
+        ) : null}
+
+        <div className="content-grid">
+          <LobbyPanel session={state.session} users={state.users} lobbyState={lobbyState} onJoinSession={handleJoinSession} />
+          <TimerPanel
+            state={state}
+            lobbyState={lobbyState}
+            countdownDisplay={countdownDisplay}
+            onStartReadyHold={handleStartReadyHold}
+            onEndReadyHold={handleEndReadyHold}
+            onSetTimerDuration={setTimerDuration}
+            onSetPrecountDuration={setPrecountDuration}
+          />
+        </div>
+
+        <SoundCloudPanel waveformBarCount={soundCloudWaveformBarCount} player={soundCloudPlayer} />
+
+        <AdminPanel
+          state={state}
+          lobbyState={lobbyState}
+          isOpen={isAdminOpen}
+          waveformBarCount={soundCloudWaveformBarCount}
+          soundCloudPlayer={soundCloudPlayer}
+          onClose={() => setIsAdminOpen(false)}
+          onSetWaveformBarCount={setSoundCloudWaveformBarCount}
+          onForceStartRound={forceStartRound}
+          onForceCompleteRound={forceCompleteRound}
+          onResetSession={adminResetSession}
+          onAddTestParticipant={addTestParticipant}
+          onToggleTestParticipantsReady={toggleTestParticipantsReady}
+          onClearTestParticipants={clearTestParticipants}
+          onSetLateJoinersJoinReady={setLateJoinersJoinReady}
+          onSetAutoJoinOnLoad={setAutoJoinOnLoad}
+        />
+
+        <StatusFooter syncStatus={state.syncStatus} sdkState={sdkState} />
+
+        {isThreeDModeOpen ? (
+          <ThreeDModeShell
+            countdownDisplay={countdownDisplay}
+            users={state.users}
+            localUserId={state.localProfile.id}
+            ownerId={state.session.ownerId}
+            roundNumber={state.session.roundNumber}
+            rangeScoreboard={state.rangeScoreboard}
+            onSubmitRangeScore={submitRangeScore}
+            freeRoamPresence={state.freeRoamPresence}
+            onUpdateFreeRoamPresence={updateFreeRoamPresence}
+            onClearFreeRoamPresence={clearFreeRoamPresence}
+            jukeboxDisplay={soundCloudPlayer.jukeboxDisplay}
+            jukeboxActions={soundCloudPlayer.jukeboxActions}
+            onExit={() => setIsThreeDModeOpen(false)}
+          />
+        ) : null}
+        {isRenderingSpikeOpen ? <RenderingStackSpike onClose={() => setIsRenderingSpikeOpen(false)} /> : null}
+      </main>
+    </div>
   );
 }
