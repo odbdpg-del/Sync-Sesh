@@ -216,7 +216,9 @@ export function TimerPanel({
       <div className="hold-stage">
         <button
           type="button"
-          className={`hold-button ${isHolding ? "hold-button-active" : ""}`}
+          className={`hold-button ${isHolding ? "hold-button-active" : ""} ${
+            isHolding && lobbyState.isArmed ? "hold-button-armed-live" : ""
+          }`}
           disabled={!lobbyState.canHoldToReady || !syncReady}
           title={holdDisabledReason}
           {...bindHoldButton}

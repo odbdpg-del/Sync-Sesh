@@ -10,6 +10,8 @@ interface AppHeaderProps {
   onPanelOpacityChange: (value: number) => void;
   secretEntryProgress?: number;
   secretUnlockCount?: number;
+  secretErrorProgress?: number;
+  secretErrorCount?: number;
 }
 
 const TITLE_LETTERS = ["S", "Y", "N", "C", " ", "S", "E", "S", "H"] as const;
@@ -22,9 +24,13 @@ export function AppHeader({
   onPanelOpacityChange,
   secretEntryProgress = 0,
   secretUnlockCount = 0,
+  secretErrorProgress = 0,
+  secretErrorCount = 0,
 }: AppHeaderProps) {
   const sessionLabel = session.id.startsWith("discord-") ? "DISCORD" : session.code;
   const displayRoundNumber = getDisplayRoundNumber(session);
+  const isSecretErrorActive = secretErrorProgress > 0;
+  const highlightedLetterCount = isSecretErrorActive ? secretErrorProgress : secretEntryProgress;
   let matchedLetterCount = 0;
 
   return (
@@ -39,8 +45,10 @@ export function AppHeader({
         <div className="brand-copy">
           <p className="eyebrow">Discord Activity</p>
           <div
-            key={`brand-title-shell-${secretUnlockCount}`}
+            key={`brand-title-shell-${secretUnlockCount}-${secretErrorCount}`}
             className={`brand-title-shell ${secretEntryProgress > 0 ? "brand-title-shell-secret" : ""} ${
+              isSecretErrorActive ? "brand-title-shell-secret-error" : ""
+            } ${
               secretUnlockCount > 0 ? "brand-title-shell-secret-complete" : ""
             }`}
           >
@@ -57,10 +65,15 @@ export function AppHeader({
                 }
 
                 matchedLetterCount += 1;
-                const isActive = matchedLetterCount <= secretEntryProgress;
+                const isActive = matchedLetterCount <= highlightedLetterCount;
 
                 return (
-                  <span key={`${letter}-${index}`} className={`brand-title-letter ${isActive ? "brand-title-letter-secret" : ""}`}>
+                  <span
+                    key={`${letter}-${index}`}
+                    className={`brand-title-letter ${isActive ? "brand-title-letter-secret" : ""} ${
+                      isActive && isSecretErrorActive ? "brand-title-letter-secret-error" : ""
+                    }`}
+                  >
                     {letter}
                   </span>
                 );
@@ -99,7 +112,7 @@ export function AppHeader({
           <input
             className="header-opacity-slider"
             type="range"
-            min="5"
+            min="0"
             max="100"
             step="1"
             value={panelOpacityPercent}

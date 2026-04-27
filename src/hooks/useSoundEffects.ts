@@ -15,6 +15,10 @@ const CUE_SHAPES: Record<SoundCueId, CueShape[]> = {
   ui_join_ping: [{ type: "triangle", startHz: 660, endHz: 880, duration: 0.16, volume: 0.045 }],
   ui_ready_hold_start: [{ type: "sine", startHz: 240, endHz: 360, duration: 0.2, volume: 0.05 }],
   ui_ready_release_cancel: [{ type: "triangle", startHz: 420, endHz: 220, duration: 0.14, volume: 0.04 }],
+  ui_secret_error: [
+    { type: "sawtooth", startHz: 208, endHz: 142, duration: 0.11, volume: 0.032 },
+    { type: "square", startHz: 124, endHz: 92, duration: 0.18, volume: 0.026, offset: 0.05 },
+  ],
   state_armed_lock: [
     { type: "square", startHz: 330, duration: 0.12, volume: 0.055 },
     { type: "triangle", startHz: 495, duration: 0.2, volume: 0.045, offset: 0.03 },

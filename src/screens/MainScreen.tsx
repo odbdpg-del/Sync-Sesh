@@ -25,7 +25,8 @@ export function MainScreen() {
   const [isThreeDModeOpen, setIsThreeDModeOpen] = useState(false);
   const [soundCloudWaveformBarCount, setSoundCloudWaveformBarCount] = useState(60);
   const { zoomPercent, panelOpacityPercent, setPanelOpacityPercent } = useAppViewportControls();
-  const { isSecretUnlocked, resetSecretEntry, unlockCount, entryProgress, entryStepCount, lastMatchedLength } = useSecretCodeUnlock();
+  const { isSecretUnlocked, resetSecretEntry, unlockCount, entryProgress, entryStepCount, lastMatchedLength, errorCount, errorProgress } =
+    useSecretCodeUnlock();
   const {
     state,
     lobbyState,
@@ -65,6 +66,12 @@ export function MainScreen() {
       playSecretCodeStep(lastMatchedLength - 1);
     }
   }, [entryStepCount, lastMatchedLength, playSecretCodeStep]);
+
+  useEffect(() => {
+    if (errorCount > 0) {
+      playCue("ui_secret_error");
+    }
+  }, [errorCount, playCue]);
 
   const handleJoinSession = () => {
     playCue("ui_join_ping");
@@ -110,6 +117,8 @@ export function MainScreen() {
           onPanelOpacityChange={setPanelOpacityPercent}
           secretEntryProgress={entryProgress}
           secretUnlockCount={unlockCount}
+          secretErrorProgress={errorProgress}
+          secretErrorCount={errorCount}
         />
 
         {state.syncStatus.connection === "connecting" ? (

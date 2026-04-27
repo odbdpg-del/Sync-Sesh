@@ -2,6 +2,7 @@ export type SoundCueId =
   | "ui_join_ping"
   | "ui_ready_hold_start"
   | "ui_ready_release_cancel"
+  | "ui_secret_error"
   | "state_armed_lock"
   | "ui_secret_unlock"
   | "count_second_tick"
@@ -41,6 +42,13 @@ export const SOUND_CUES: Record<SoundCueId, SoundCueDefinition> = {
     category: "ui",
     label: "Ready Release Cancel",
     description: "Plays when the local hold ends before the round is armed.",
+    priority: "medium",
+  },
+  ui_secret_error: {
+    id: "ui_secret_error",
+    category: "ui",
+    label: "Secret Error",
+    description: "Plays when the hidden code input breaks on a wrong key.",
     priority: "medium",
   },
   state_armed_lock: {
@@ -119,6 +127,7 @@ export const SOUND_TRIGGER_NOTES: Record<SoundCueId, string> = {
   ui_join_ping: "Trigger after a successful local join.",
   ui_ready_hold_start: "Trigger when the local hold begins.",
   ui_ready_release_cancel: "Trigger when the local hold ends before ARMED.",
+  ui_secret_error: "Trigger when a wrong key interrupts the secret code sequence.",
   state_armed_lock: "Trigger on transition into armed.",
   ui_secret_unlock: "Trigger when the secret 3D code is fully entered.",
   count_second_tick: "Trigger once per second during the main countdown before the urgent window.",

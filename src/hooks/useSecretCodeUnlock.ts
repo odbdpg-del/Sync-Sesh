@@ -34,12 +34,24 @@ export function useSecretCodeUnlock() {
   const [entryProgress, setEntryProgress] = useState(0);
   const [entryStepCount, setEntryStepCount] = useState(0);
   const [lastMatchedLength, setLastMatchedLength] = useState(0);
+  const [errorCount, setErrorCount] = useState(0);
+  const [errorProgress, setErrorProgress] = useState(0);
   const bufferRef = useRef("");
+  const progressRef = useRef(0);
+  const errorResetTimeoutRef = useRef<number | undefined>();
   const secretCode = useMemo(getSecretCode, []);
   const resetSecretEntry = useCallback(() => {
     bufferRef.current = "";
     setEntryProgress(0);
     setLastMatchedLength(0);
+    progressRef.current = 0;
+
+    if (errorResetTimeoutRef.current) {
+      window.clearTimeout(errorResetTimeoutRef.current);
+      errorResetTimeoutRef.current = undefined;
+    }
+
+    setErrorProgress(0);
   }, []);
 
   useEffect(() => {
@@ -55,15 +67,35 @@ export function useSecretCodeUnlock() {
         return;
       }
 
+      const currentProgress = progressRef.current;
+      const pressedKey = event.key.toLowerCase();
+      const expectedKey = secretCode[currentProgress];
+      const didMissActiveSequence = currentProgress > 0 && pressedKey !== expectedKey;
+
+      if (didMissActiveSequence) {
+        if (errorResetTimeoutRef.current) {
+          window.clearTimeout(errorResetTimeoutRef.current);
+        }
+
+        setErrorProgress(currentProgress);
+        setErrorCount((currentCount) => currentCount + 1);
+        errorResetTimeoutRef.current = window.setTimeout(() => {
+          setErrorProgress(0);
+          errorResetTimeoutRef.current = undefined;
+        }, 420);
+      }
+
       const nextBuffer = `${bufferRef.current}${event.key.toLowerCase()}`.slice(-secretCode.length);
       bufferRef.current = nextBuffer;
       const nextProgress = getMatchedPrefixLength(nextBuffer, secretCode);
+      progressRef.current = nextProgress;
       setEntryProgress(nextProgress);
 
       if (nextBuffer === secretCode) {
         setIsSecretUnlocked(true);
         setUnlockCount((currentCount) => currentCount + 1);
         bufferRef.current = "";
+        progressRef.current = 0;
         setEntryProgress(0);
         setLastMatchedLength(secretCode.length);
         setEntryStepCount((currentCount) => currentCount + 1);
@@ -82,6 +114,10 @@ export function useSecretCodeUnlock() {
 
     return () => {
       window.removeEventListener("keydown", handleKeyDown);
+
+      if (errorResetTimeoutRef.current) {
+        window.clearTimeout(errorResetTimeoutRef.current);
+      }
     };
   }, [secretCode]);
 
@@ -91,6 +127,8 @@ export function useSecretCodeUnlock() {
     entryProgress,
     entryStepCount,
     lastMatchedLength,
+    errorCount,
+    errorProgress,
     secretCodeLength: secretCode.length,
     resetSecretEntry,
   };

@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   createDiscordAuthAttemptId,
   initializeEmbeddedApp,
-  retryDiscordIdentity,
   shouldApplyDiscordAuthAttemptResult,
   type EmbeddedAppState,
   type DiscordAuthStage,
@@ -120,12 +119,6 @@ export function useDabSyncSession() {
   }, [syncClient]);
 
   const retryDiscordProfile = useCallback(async () => {
-    const currentSdk = sdkState.sdk;
-
-    if (!currentSdk) {
-      return;
-    }
-
     const attemptId = createDiscordAuthAttemptId();
     activeAuthAttemptIdRef.current = attemptId;
 
@@ -155,10 +148,8 @@ export function useDabSyncSession() {
       authError: undefined,
     }));
 
-    const nextSdkState = await retryDiscordIdentity(currentSdk, {
+    const nextSdkState = await initializeEmbeddedApp({
       attemptId,
-      authPrompt: "interactive",
-      fallbackLocalProfile: syncClient.getSnapshot().localProfile,
       onProfileUpdate: (localProfile) => {
         const previousLocalProfile = syncClient.getSnapshot().localProfile;
         const profileChanged =
@@ -190,19 +181,12 @@ export function useDabSyncSession() {
 
     embeddedCleanupRef.current?.();
     embeddedCleanupRef.current = nextSdkState.cleanup;
-    setSdkState((current) => ({
-      ...current,
-      ...nextSdkState,
-      sdk: currentSdk,
-      channelId: currentSdk.channelId ?? current.channelId,
-      guildId: currentSdk.guildId ?? current.guildId,
-      instanceId: currentSdk.instanceId ?? current.instanceId,
-    }));
+    setSdkState(nextSdkState);
 
     if (nextSdkState.localProfile) {
       syncClient.setLocalProfile(nextSdkState.localProfile);
     }
-  }, [sdkState.sdk, syncClient]);
+  }, [syncClient]);
 
   const lobbyState = useMemo(() => deriveLobbyState(state), [state]);
 

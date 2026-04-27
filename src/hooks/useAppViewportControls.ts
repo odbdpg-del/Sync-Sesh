@@ -6,7 +6,7 @@ const MIN_ZOOM_PERCENT = 70;
 const MAX_ZOOM_PERCENT = 150;
 const DEFAULT_ZOOM_PERCENT = 100;
 const ZOOM_STEP_PERCENT = 5;
-const MIN_PANEL_OPACITY_PERCENT = 5;
+const MIN_PANEL_OPACITY_PERCENT = 0;
 const MAX_PANEL_OPACITY_PERCENT = 100;
 const DEFAULT_PANEL_OPACITY_PERCENT = 93;
 
@@ -100,6 +100,62 @@ function formatHeadlineShellBottom(alpha: number) {
   return `rgba(10, 19, 28, ${Math.max(0, alpha * 0.66)})`;
 }
 
+function formatChipBackground(alpha: number) {
+  return `rgba(8, 17, 31, ${Math.max(0, alpha * 0.92)})`;
+}
+
+function formatButtonBackground(alpha: number) {
+  return `rgba(8, 15, 28, ${Math.max(0, alpha * 0.94)})`;
+}
+
+function formatConfigBackground(alpha: number) {
+  return `rgba(5, 12, 24, ${Math.max(0, alpha * 0.82)})`;
+}
+
+function formatAccentTopBackground(alpha: number) {
+  return `rgba(7, 34, 35, ${Math.max(0, alpha * 0.92)})`;
+}
+
+function formatAccentBottomBackground(alpha: number) {
+  return `rgba(5, 19, 32, ${Math.max(0, alpha * 0.94)})`;
+}
+
+function formatVioletTopBackground(alpha: number) {
+  return `rgba(70, 31, 148, ${Math.max(0, alpha * 0.18)})`;
+}
+
+function formatVioletBottomBackground(alpha: number) {
+  return `rgba(11, 17, 31, ${Math.max(0, alpha * 0.92)})`;
+}
+
+function formatLogoFrameTop(alpha: number) {
+  return `rgba(13, 28, 39, ${Math.max(0, alpha * 0.98)})`;
+}
+
+function formatLogoFrameBottom(alpha: number) {
+  return `rgba(7, 16, 25, ${Math.max(0, alpha * 0.98)})`;
+}
+
+function formatLogoInnerCenter(alpha: number) {
+  return `rgba(8, 18, 28, ${Math.max(0, alpha * 0.2)})`;
+}
+
+function formatLogoInnerBottom(alpha: number) {
+  return `rgba(5, 11, 18, ${Math.max(0, alpha * 0.84)})`;
+}
+
+function formatHeadlineAccent(alpha: number) {
+  return `${Math.max(0, alpha * 0.08)}`;
+}
+
+function formatHeadlineRail(alpha: number) {
+  return `${Math.max(0, alpha * 0.82)}`;
+}
+
+function formatHeadlineRailTail(alpha: number) {
+  return `${Math.max(0, alpha * 0.08)}`;
+}
+
 export function useAppViewportControls() {
   const [zoomPercent, setZoomPercent] = useState(DEFAULT_ZOOM_PERCENT);
   const [panelOpacityPercent, setPanelOpacityPercent] = useState(DEFAULT_PANEL_OPACITY_PERCENT);
@@ -121,6 +177,20 @@ export function useAppViewportControls() {
     document.documentElement.style.setProperty("--bg-header-pill-bottom", formatHeaderPillBottom(initialPanelOpacity / 100));
     document.documentElement.style.setProperty("--bg-headline-shell-top", formatHeadlineShellTop(initialPanelOpacity / 100));
     document.documentElement.style.setProperty("--bg-headline-shell-bottom", formatHeadlineShellBottom(initialPanelOpacity / 100));
+    document.documentElement.style.setProperty("--bg-chip", formatChipBackground(initialPanelOpacity / 100));
+    document.documentElement.style.setProperty("--bg-button", formatButtonBackground(initialPanelOpacity / 100));
+    document.documentElement.style.setProperty("--bg-config", formatConfigBackground(initialPanelOpacity / 100));
+    document.documentElement.style.setProperty("--bg-accent-top", formatAccentTopBackground(initialPanelOpacity / 100));
+    document.documentElement.style.setProperty("--bg-accent-bottom", formatAccentBottomBackground(initialPanelOpacity / 100));
+    document.documentElement.style.setProperty("--bg-violet-top", formatVioletTopBackground(initialPanelOpacity / 100));
+    document.documentElement.style.setProperty("--bg-violet-bottom", formatVioletBottomBackground(initialPanelOpacity / 100));
+    document.documentElement.style.setProperty("--bg-logo-frame-top", formatLogoFrameTop(initialPanelOpacity / 100));
+    document.documentElement.style.setProperty("--bg-logo-frame-bottom", formatLogoFrameBottom(initialPanelOpacity / 100));
+    document.documentElement.style.setProperty("--bg-logo-inner-center", formatLogoInnerCenter(initialPanelOpacity / 100));
+    document.documentElement.style.setProperty("--bg-logo-inner-bottom", formatLogoInnerBottom(initialPanelOpacity / 100));
+    document.documentElement.style.setProperty("--headline-accent-alpha", formatHeadlineAccent(initialPanelOpacity / 100));
+    document.documentElement.style.setProperty("--headline-rail-alpha", formatHeadlineRail(initialPanelOpacity / 100));
+    document.documentElement.style.setProperty("--headline-rail-tail-alpha", formatHeadlineRailTail(initialPanelOpacity / 100));
   }, []);
 
   useEffect(() => {
@@ -141,6 +211,20 @@ export function useAppViewportControls() {
     document.documentElement.style.setProperty("--bg-header-pill-bottom", formatHeaderPillBottom(alpha));
     document.documentElement.style.setProperty("--bg-headline-shell-top", formatHeadlineShellTop(alpha));
     document.documentElement.style.setProperty("--bg-headline-shell-bottom", formatHeadlineShellBottom(alpha));
+    document.documentElement.style.setProperty("--bg-chip", formatChipBackground(alpha));
+    document.documentElement.style.setProperty("--bg-button", formatButtonBackground(alpha));
+    document.documentElement.style.setProperty("--bg-config", formatConfigBackground(alpha));
+    document.documentElement.style.setProperty("--bg-accent-top", formatAccentTopBackground(alpha));
+    document.documentElement.style.setProperty("--bg-accent-bottom", formatAccentBottomBackground(alpha));
+    document.documentElement.style.setProperty("--bg-violet-top", formatVioletTopBackground(alpha));
+    document.documentElement.style.setProperty("--bg-violet-bottom", formatVioletBottomBackground(alpha));
+    document.documentElement.style.setProperty("--bg-logo-frame-top", formatLogoFrameTop(alpha));
+    document.documentElement.style.setProperty("--bg-logo-frame-bottom", formatLogoFrameBottom(alpha));
+    document.documentElement.style.setProperty("--bg-logo-inner-center", formatLogoInnerCenter(alpha));
+    document.documentElement.style.setProperty("--bg-logo-inner-bottom", formatLogoInnerBottom(alpha));
+    document.documentElement.style.setProperty("--headline-accent-alpha", formatHeadlineAccent(alpha));
+    document.documentElement.style.setProperty("--headline-rail-alpha", formatHeadlineRail(alpha));
+    document.documentElement.style.setProperty("--headline-rail-tail-alpha", formatHeadlineRailTail(alpha));
     window.localStorage.setItem(PANEL_OPACITY_STORAGE_KEY, String(panelOpacityPercent));
   }, [panelOpacityPercent]);
 
