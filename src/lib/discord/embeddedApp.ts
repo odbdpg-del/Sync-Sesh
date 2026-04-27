@@ -202,6 +202,65 @@ function buildProfileFromDiscordIdentity(user: DiscordUserLike, guildMember?: Di
   });
 }
 
+async function resolveBestEffortDiscordProfile(sdk: DiscordSDK): Promise<LocalProfile | undefined> {
+  const participantProfilePromise = fetchParticipantIdentity(sdk, "").then((participant) => {
+    if (!participant) {
+      return undefined;
+    }
+
+    return buildProfileFromDiscordIdentity(participant);
+  });
+
+  const currentUserProfilePromise = new Promise<LocalProfile | undefined>((resolve) => {
+    let settled = false;
+
+    const resolveOnce = (profile?: LocalProfile) => {
+      if (settled) {
+        return;
+      }
+
+      settled = true;
+      resolve(profile);
+    };
+
+    const timeoutId = window.setTimeout(() => {
+      resolveOnce();
+    }, 1_500);
+
+    const handleCurrentUserUpdate = (user: DiscordUserLike) => {
+      window.clearTimeout(timeoutId);
+      resolveOnce(buildProfileFromDiscordIdentity(user));
+      void sdk.unsubscribe("CURRENT_USER_UPDATE", handleCurrentUserUpdate);
+    };
+
+    void sdk
+      .subscribe("CURRENT_USER_UPDATE", handleCurrentUserUpdate)
+      .catch(() => {
+        window.clearTimeout(timeoutId);
+        resolveOnce();
+      });
+  });
+
+  const directParticipantProfilePromise = sdk.commands
+    .getInstanceConnectedParticipants()
+    .then(({ participants }) => {
+      if (participants.length !== 1) {
+        return undefined;
+      }
+
+      return buildProfileFromDiscordIdentity(participants[0]);
+    })
+    .catch(() => undefined);
+
+  const [currentUserProfile, singleParticipantProfile, participantProfile] = await Promise.all([
+    currentUserProfilePromise,
+    directParticipantProfilePromise,
+    participantProfilePromise,
+  ]);
+
+  return currentUserProfile ?? singleParticipantProfile ?? participantProfile;
+}
+
 async function exchangeDiscordAuthCode(code: string, attemptId: string): Promise<string> {
   const response = await fetch(resolveDiscordAuthEndpoint(), {
     method: "POST",
@@ -242,6 +301,10 @@ async function fetchCurrentGuildMember(accessToken: string, guildId?: string): P
 async function fetchParticipantIdentity(sdk: DiscordSDK, userId: string): Promise<DiscordUserLike | undefined> {
   try {
     const { participants } = await sdk.commands.getInstanceConnectedParticipants();
+    if (!userId) {
+      return participants.length === 1 ? participants[0] : undefined;
+    }
+
     return participants.find((participant) => participant.id === userId);
   } catch {
     return undefined;
@@ -440,6 +503,7 @@ export async function initializeEmbeddedApp(options: InitializeEmbeddedAppOption
   const clientId = import.meta.env.VITE_DISCORD_CLIENT_ID;
   const enabled = import.meta.env.VITE_ENABLE_DISCORD_SDK === "true";
   const fallbackLocalProfile = getLocalProfile();
+  let resolvedLocalProfile = fallbackLocalProfile;
   const attemptId = options.attemptId ?? createDiscordAuthAttemptId();
 
   if (!enabled || !clientId) {
@@ -501,6 +565,14 @@ export async function initializeEmbeddedApp(options: InitializeEmbeddedAppOption
     };
   }
 
+  const bestEffortDiscordProfile = await resolveBestEffortDiscordProfile(sdk).catch(() => undefined);
+
+  if (bestEffortDiscordProfile) {
+    resolvedLocalProfile = bestEffortDiscordProfile;
+    persistLocalProfile(bestEffortDiscordProfile);
+    options.onProfileUpdate?.(bestEffortDiscordProfile);
+  }
+
   try {
     const { localProfile, cleanup } = await resolveDiscordIdentity(
       sdk,
@@ -538,8 +610,8 @@ export async function initializeEmbeddedApp(options: InitializeEmbeddedAppOption
       channelId: sdk.channelId ?? undefined,
       guildId: sdk.guildId ?? undefined,
       instanceId: sdk.instanceId ?? undefined,
-      localProfile: fallbackLocalProfile,
-      identitySource: "local",
+      localProfile: resolvedLocalProfile,
+      identitySource: bestEffortDiscordProfile ? "discord" : "local",
       authStage: "idle",
       startupStage: "auth",
       startupError: message,
