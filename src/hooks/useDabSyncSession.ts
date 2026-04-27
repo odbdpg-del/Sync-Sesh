@@ -10,6 +10,8 @@ import { createSyncClient } from "../lib/sync/createSyncClient";
 import type { DabSyncState, FreeRoamPresenceUpdate, RangeScoreSubmission } from "../types/session";
 import { deriveLobbyState } from "../lib/lobby/sessionState";
 
+const DISCORD_RETRY_TIMEOUT_MS = 20_000;
+
 export function useDabSyncSession() {
   const [sdkState, setSdkState] = useState<EmbeddedAppState>({ enabled: false, buildId: __APP_BUILD_ID__, authStage: "idle" });
   const [syncClient] = useState(() => createSyncClient());
@@ -148,43 +150,76 @@ export function useDabSyncSession() {
       authError: undefined,
     }));
 
-    const nextSdkState = await initializeEmbeddedApp({
-      attemptId,
-      onProfileUpdate: (localProfile) => {
-        const previousLocalProfile = syncClient.getSnapshot().localProfile;
-        const profileChanged =
-          previousLocalProfile.id !== localProfile.id ||
-          previousLocalProfile.displayName !== localProfile.displayName ||
-          previousLocalProfile.avatarUrl !== localProfile.avatarUrl ||
-          previousLocalProfile.avatarSeed !== localProfile.avatarSeed;
+    try {
+      const nextSdkState = await Promise.race([
+        initializeEmbeddedApp({
+          attemptId,
+          onProfileUpdate: (localProfile) => {
+            const previousLocalProfile = syncClient.getSnapshot().localProfile;
+            const profileChanged =
+              previousLocalProfile.id !== localProfile.id ||
+              previousLocalProfile.displayName !== localProfile.displayName ||
+              previousLocalProfile.avatarUrl !== localProfile.avatarUrl ||
+              previousLocalProfile.avatarSeed !== localProfile.avatarSeed;
 
-        if (!profileChanged) {
-          return;
-        }
+            if (!profileChanged) {
+              return;
+            }
 
-        syncClient.setLocalProfile(localProfile);
-        setSdkState((current) => ({ ...current, localProfile, identitySource: "discord", authError: undefined, startupError: undefined, authStage: "ready" }));
+            syncClient.setLocalProfile(localProfile);
+            setSdkState((current) => ({
+              ...current,
+              localProfile,
+              identitySource: "discord",
+              authError: undefined,
+              startupError: undefined,
+              authStage: "ready",
+            }));
 
-        if (syncClient.getSnapshot().users.some((user) => user.id === localProfile.id)) {
-          syncClient.send({ type: "join_session" });
-        }
-      },
-      onAuthProgress: ({ attemptId: incomingAttemptId, authStage, authError }) => {
-        handleAuthProgress(incomingAttemptId, authStage, authError);
-      },
-    });
+            if (syncClient.getSnapshot().users.some((user) => user.id === localProfile.id)) {
+              syncClient.send({ type: "join_session" });
+            }
+          },
+          onAuthProgress: ({ attemptId: incomingAttemptId, authStage, authError }) => {
+            handleAuthProgress(incomingAttemptId, authStage, authError);
+          },
+        }),
+        new Promise<EmbeddedAppState>((_, reject) => {
+          window.setTimeout(() => {
+            reject(new Error("Discord identity refresh timed out before the SDK completed authorization."));
+          }, DISCORD_RETRY_TIMEOUT_MS);
+        }),
+      ]);
 
-    if (!shouldApplyDiscordAuthAttemptResult(activeAuthAttemptIdRef.current, nextSdkState.attemptId ?? attemptId)) {
-      nextSdkState.cleanup?.();
-      return;
-    }
+      if (!shouldApplyDiscordAuthAttemptResult(activeAuthAttemptIdRef.current, nextSdkState.attemptId ?? attemptId)) {
+        nextSdkState.cleanup?.();
+        return;
+      }
 
-    embeddedCleanupRef.current?.();
-    embeddedCleanupRef.current = nextSdkState.cleanup;
-    setSdkState(nextSdkState);
+      embeddedCleanupRef.current?.();
+      embeddedCleanupRef.current = nextSdkState.cleanup;
+      setSdkState(nextSdkState);
 
-    if (nextSdkState.localProfile) {
-      syncClient.setLocalProfile(nextSdkState.localProfile);
+      if (nextSdkState.localProfile) {
+        syncClient.setLocalProfile(nextSdkState.localProfile);
+      }
+    } catch (error) {
+      if (!shouldApplyDiscordAuthAttemptResult(activeAuthAttemptIdRef.current, attemptId)) {
+        return;
+      }
+
+      const message =
+        error instanceof Error ? error.message : "Discord identity refresh failed before authorization completed.";
+
+      setSdkState((current) => ({
+        ...current,
+        attemptId,
+        authStage: "idle",
+        startupStage: "auth",
+        startupError: message,
+        authError: message,
+        identitySource: current.identitySource ?? "local",
+      }));
     }
   }, [syncClient]);
 
