@@ -6,13 +6,23 @@ interface AppHeaderProps {
   session: SessionInfo;
   syncStatus: SyncStatus;
   zoomPercent: number;
+  panelOpacityPercent: number;
+  onPanelOpacityChange: (value: number) => void;
   secretEntryProgress?: number;
   secretUnlockCount?: number;
 }
 
 const TITLE_LETTERS = ["S", "Y", "N", "C", " ", "S", "E", "S", "H"] as const;
 
-export function AppHeader({ session, syncStatus, zoomPercent, secretEntryProgress = 0, secretUnlockCount = 0 }: AppHeaderProps) {
+export function AppHeader({
+  session,
+  syncStatus,
+  zoomPercent,
+  panelOpacityPercent,
+  onPanelOpacityChange,
+  secretEntryProgress = 0,
+  secretUnlockCount = 0,
+}: AppHeaderProps) {
   const sessionLabel = session.id.startsWith("discord-") ? "DISCORD" : session.code;
   const displayRoundNumber = getDisplayRoundNumber(session);
   let matchedLetterCount = 0;
@@ -83,6 +93,20 @@ export function AppHeader({ session, syncStatus, zoomPercent, secretEntryProgres
             <span style={{ width: `${Math.max(0, Math.min(zoomPercent, 100))}%` }} />
           </span>
         </div>
+        <label className="header-pill header-pill-opacity">
+          <span className="meta-label">Windows</span>
+          <strong>{panelOpacityPercent}%</strong>
+          <input
+            className="header-opacity-slider"
+            type="range"
+            min="5"
+            max="100"
+            step="1"
+            value={panelOpacityPercent}
+            onChange={(event) => onPanelOpacityChange(Number(event.target.value))}
+            aria-label="Window opacity"
+          />
+        </label>
       </div>
     </header>
   );

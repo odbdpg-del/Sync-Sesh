@@ -24,7 +24,7 @@ export function MainScreen() {
   const [isRenderingSpikeOpen, setIsRenderingSpikeOpen] = useState(hasRenderingSpikeParam);
   const [isThreeDModeOpen, setIsThreeDModeOpen] = useState(false);
   const [soundCloudWaveformBarCount, setSoundCloudWaveformBarCount] = useState(60);
-  const { zoomPercent } = useAppViewportControls();
+  const { zoomPercent, panelOpacityPercent, setPanelOpacityPercent } = useAppViewportControls();
   const { isSecretUnlocked, resetSecretEntry, unlockCount, entryProgress, entryStepCount, lastMatchedLength } = useSecretCodeUnlock();
   const {
     state,
@@ -106,6 +106,8 @@ export function MainScreen() {
           session={state.session}
           syncStatus={state.syncStatus}
           zoomPercent={zoomPercent}
+          panelOpacityPercent={panelOpacityPercent}
+          onPanelOpacityChange={setPanelOpacityPercent}
           secretEntryProgress={entryProgress}
           secretUnlockCount={unlockCount}
         />

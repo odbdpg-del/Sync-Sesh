@@ -1,10 +1,14 @@
 import { useEffect, useState } from "react";
 
 const APP_ZOOM_STORAGE_KEY = "syncsesh.app-zoom";
+const PANEL_OPACITY_STORAGE_KEY = "syncsesh.panel-opacity";
 const MIN_ZOOM_PERCENT = 70;
 const MAX_ZOOM_PERCENT = 150;
 const DEFAULT_ZOOM_PERCENT = 100;
 const ZOOM_STEP_PERCENT = 5;
+const MIN_PANEL_OPACITY_PERCENT = 5;
+const MAX_PANEL_OPACITY_PERCENT = 100;
+const DEFAULT_PANEL_OPACITY_PERCENT = 93;
 
 function isInteractiveTarget(target: EventTarget | null) {
   if (!(target instanceof HTMLElement)) {
@@ -26,6 +30,10 @@ function clampZoom(value: number) {
   return Math.min(MAX_ZOOM_PERCENT, Math.max(MIN_ZOOM_PERCENT, value));
 }
 
+function clampPanelOpacity(value: number) {
+  return Math.min(MAX_PANEL_OPACITY_PERCENT, Math.max(MIN_PANEL_OPACITY_PERCENT, value));
+}
+
 function readInitialZoom() {
   const storedValue = window.localStorage.getItem(APP_ZOOM_STORAGE_KEY);
   const parsedValue = storedValue ? Number(storedValue) : DEFAULT_ZOOM_PERCENT;
@@ -37,19 +45,104 @@ function readInitialZoom() {
   return clampZoom(parsedValue);
 }
 
+function readInitialPanelOpacity() {
+  const storedValue = window.localStorage.getItem(PANEL_OPACITY_STORAGE_KEY);
+  const parsedValue = storedValue ? Number(storedValue) : DEFAULT_PANEL_OPACITY_PERCENT;
+
+  if (!Number.isFinite(parsedValue)) {
+    return DEFAULT_PANEL_OPACITY_PERCENT;
+  }
+
+  return clampPanelOpacity(parsedValue);
+}
+
+function formatPanelBackground(alpha: number) {
+  return `rgba(7, 13, 24, ${Math.max(0, alpha * 0.78)})`;
+}
+
+function formatPanelStrongBackground(alpha: number) {
+  return `rgba(5, 11, 21, ${Math.max(0, alpha * 0.9)})`;
+}
+
+function formatCardBackground(alpha: number) {
+  return `rgba(10, 18, 32, ${Math.max(0, alpha * 0.72)})`;
+}
+
+function formatElevatedBackgroundTop(alpha: number) {
+  return `rgba(8, 16, 31, ${Math.max(0, alpha * 0.62)})`;
+}
+
+function formatElevatedBackgroundBottom(alpha: number) {
+  return `rgba(7, 13, 24, ${Math.max(0, alpha * 0.4)})`;
+}
+
+function formatHeaderBackgroundTop(alpha: number) {
+  return `rgba(14, 25, 36, ${Math.max(0, alpha * 0.7)})`;
+}
+
+function formatHeaderBackgroundBottom(alpha: number) {
+  return `rgba(8, 17, 28, ${Math.max(0, alpha * 0.78)})`;
+}
+
+function formatHeaderPillTop(alpha: number) {
+  return `rgba(20, 30, 38, ${Math.max(0, alpha * 0.68)})`;
+}
+
+function formatHeaderPillBottom(alpha: number) {
+  return `rgba(13, 23, 32, ${Math.max(0, alpha * 0.74)})`;
+}
+
+function formatHeadlineShellTop(alpha: number) {
+  return `rgba(16, 29, 39, ${Math.max(0, alpha * 0.62)})`;
+}
+
+function formatHeadlineShellBottom(alpha: number) {
+  return `rgba(10, 19, 28, ${Math.max(0, alpha * 0.66)})`;
+}
+
 export function useAppViewportControls() {
   const [zoomPercent, setZoomPercent] = useState(DEFAULT_ZOOM_PERCENT);
+  const [panelOpacityPercent, setPanelOpacityPercent] = useState(DEFAULT_PANEL_OPACITY_PERCENT);
 
   useEffect(() => {
     const initialZoom = readInitialZoom();
+    const initialPanelOpacity = readInitialPanelOpacity();
     setZoomPercent(initialZoom);
+    setPanelOpacityPercent(initialPanelOpacity);
     document.documentElement.style.setProperty("--app-zoom", `${initialZoom}%`);
+    document.documentElement.style.setProperty("--bg-panel", formatPanelBackground(initialPanelOpacity / 100));
+    document.documentElement.style.setProperty("--bg-panel-strong", formatPanelStrongBackground(initialPanelOpacity / 100));
+    document.documentElement.style.setProperty("--bg-card", formatCardBackground(initialPanelOpacity / 100));
+    document.documentElement.style.setProperty("--bg-elevated-top", formatElevatedBackgroundTop(initialPanelOpacity / 100));
+    document.documentElement.style.setProperty("--bg-elevated-bottom", formatElevatedBackgroundBottom(initialPanelOpacity / 100));
+    document.documentElement.style.setProperty("--bg-header-top", formatHeaderBackgroundTop(initialPanelOpacity / 100));
+    document.documentElement.style.setProperty("--bg-header-bottom", formatHeaderBackgroundBottom(initialPanelOpacity / 100));
+    document.documentElement.style.setProperty("--bg-header-pill-top", formatHeaderPillTop(initialPanelOpacity / 100));
+    document.documentElement.style.setProperty("--bg-header-pill-bottom", formatHeaderPillBottom(initialPanelOpacity / 100));
+    document.documentElement.style.setProperty("--bg-headline-shell-top", formatHeadlineShellTop(initialPanelOpacity / 100));
+    document.documentElement.style.setProperty("--bg-headline-shell-bottom", formatHeadlineShellBottom(initialPanelOpacity / 100));
   }, []);
 
   useEffect(() => {
     document.documentElement.style.setProperty("--app-zoom", `${zoomPercent}%`);
     window.localStorage.setItem(APP_ZOOM_STORAGE_KEY, String(zoomPercent));
   }, [zoomPercent]);
+
+  useEffect(() => {
+    const alpha = panelOpacityPercent / 100;
+    document.documentElement.style.setProperty("--bg-panel", formatPanelBackground(alpha));
+    document.documentElement.style.setProperty("--bg-panel-strong", formatPanelStrongBackground(alpha));
+    document.documentElement.style.setProperty("--bg-card", formatCardBackground(alpha));
+    document.documentElement.style.setProperty("--bg-elevated-top", formatElevatedBackgroundTop(alpha));
+    document.documentElement.style.setProperty("--bg-elevated-bottom", formatElevatedBackgroundBottom(alpha));
+    document.documentElement.style.setProperty("--bg-header-top", formatHeaderBackgroundTop(alpha));
+    document.documentElement.style.setProperty("--bg-header-bottom", formatHeaderBackgroundBottom(alpha));
+    document.documentElement.style.setProperty("--bg-header-pill-top", formatHeaderPillTop(alpha));
+    document.documentElement.style.setProperty("--bg-header-pill-bottom", formatHeaderPillBottom(alpha));
+    document.documentElement.style.setProperty("--bg-headline-shell-top", formatHeadlineShellTop(alpha));
+    document.documentElement.style.setProperty("--bg-headline-shell-bottom", formatHeadlineShellBottom(alpha));
+    window.localStorage.setItem(PANEL_OPACITY_STORAGE_KEY, String(panelOpacityPercent));
+  }, [panelOpacityPercent]);
 
   useEffect(() => {
     const shouldBlockSpaceScroll = (event: KeyboardEvent) => (
@@ -113,5 +206,7 @@ export function useAppViewportControls() {
 
   return {
     zoomPercent,
+    panelOpacityPercent,
+    setPanelOpacityPercent: (value: number) => setPanelOpacityPercent(clampPanelOpacity(value)),
   };
 }
