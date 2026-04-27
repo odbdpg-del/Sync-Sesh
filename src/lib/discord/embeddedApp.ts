@@ -33,6 +33,7 @@ interface DiscordAuthorizeRequest {
   response_type: "code";
   state: string;
   scope: Array<(typeof DISCORD_IDENTITY_SCOPES)[number]>;
+  redirect_uri: string;
   prompt?: "none";
 }
 
@@ -54,6 +55,10 @@ const STATIC_ACTIVITY_URL_MAPPINGS = [
 ] as const;
 
 let hasPatchedActivityUrlMappings = false;
+
+function isDiscordProxyHost() {
+  return window.location.host.includes("discordsays.com") || window.location.host.includes("discordsez.com");
+}
 
 function resolveSyncProxyTarget() {
   const configuredUrl = import.meta.env.VITE_SYNC_SERVER_URL;
@@ -90,12 +95,19 @@ function patchActivityUrlMappings() {
 function resolveDiscordAuthEndpoint() {
   const configuredUrl = import.meta.env.VITE_SYNC_SERVER_URL;
 
-  if (!configuredUrl || configuredUrl === "auto") {
+  if (!configuredUrl || configuredUrl === "auto" || isDiscordProxyHost()) {
     return "/api/discord/token";
   }
 
   try {
     const parsed = new URL(configuredUrl);
+    const isLocalTarget = parsed.hostname === "localhost" || parsed.hostname === "127.0.0.1";
+    const isRemotePage = window.location.hostname !== "localhost" && window.location.hostname !== "127.0.0.1";
+
+    if (isLocalTarget && isRemotePage) {
+      return "/api/discord/token";
+    }
+
     parsed.protocol = parsed.protocol === "wss:" ? "https:" : "http:";
     parsed.pathname = "/api/discord/token";
     parsed.search = "";
@@ -104,6 +116,10 @@ function resolveDiscordAuthEndpoint() {
   } catch {
     return "/api/discord/token";
   }
+}
+
+function resolveDiscordRedirectUri() {
+  return import.meta.env.VITE_DISCORD_REDIRECT_URI ?? "https://127.0.0.1";
 }
 
 const DISCORD_IDENTITY_SCOPES = ["identify", "guilds.members.read"] as const;
@@ -253,6 +269,7 @@ async function resolveDiscordIdentity(
     response_type: "code" as const,
     state: `${Date.now()}`,
     scope: [...DISCORD_IDENTITY_SCOPES],
+    redirect_uri: resolveDiscordRedirectUri(),
     ...(authPrompt === "none" ? { prompt: "none" as const } : {}),
   };
   let code: string;
