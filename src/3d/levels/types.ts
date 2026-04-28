@@ -78,7 +78,12 @@ export interface ControlRoomDisplayConfig extends DisplaySurfaceConfig {
 export interface LevelAreaConfig {
   id: string;
   label: string;
-  kind: "control-room" | "shooting-range" | "expansion-room" | "utility-room";
+  kind:
+    | "control-room"
+    | "shooting-range"
+    | "recording-studio"
+    | "expansion-room"
+    | "utility-room";
   bounds: {
     min: Vec3;
     max: Vec3;
@@ -133,6 +138,9 @@ export interface LevelExitConfig {
   id: string;
   label: string;
   targetLevelId: string;
+  transitionStyle?: "reveal" | "instant";
+  targetSpawnPosition?: Vec3;
+  targetCameraTarget?: Vec3;
   position: Vec3;
   rotation: Euler3;
   size: {

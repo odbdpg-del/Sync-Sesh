@@ -21,38 +21,39 @@ const SIM_MOVE_SPEED_UNITS_PER_SECOND = 0.9;
 const SIM_PAUSE_SECONDS = 1.6;
 const MIN_SEGMENT_DISTANCE = 0.001;
 const SIM_BOT_RADIUS = 0.32;
+const FLOOR_ORIGIN_Y = 0;
 
 const LEVEL_1_SIM_ROUTES: SimRoute[] = [
   {
     id: "control-room-loop",
     waypoints: [
-      [-3.8, 1.7, 0],
-      [-1.3, 1.7, 1],
-      [1.3, 1.7, 1],
-      [3.8, 1.7, 0],
-      [1.3, 1.7, -1],
-      [-1.3, 1.7, -1],
+      [-3.8, FLOOR_ORIGIN_Y, 0],
+      [-1.3, FLOOR_ORIGIN_Y, 1],
+      [1.3, FLOOR_ORIGIN_Y, 1],
+      [3.8, FLOOR_ORIGIN_Y, 0],
+      [1.3, FLOOR_ORIGIN_Y, -1],
+      [-1.3, FLOOR_ORIGIN_Y, -1],
     ],
   },
   {
     id: "connector-peek",
     waypoints: [
-      [4.8, 1.7, 0],
-      [6.45, 1.7, 0],
-      [8.8, 1.7, 0],
-      [10, 1.7, 0],
-      [8.8, 1.7, 0],
-      [6.45, 1.7, 0],
+      [4.8, FLOOR_ORIGIN_Y, 0],
+      [6.45, FLOOR_ORIGIN_Y, 0],
+      [8.8, FLOOR_ORIGIN_Y, 0],
+      [10, FLOOR_ORIGIN_Y, 0],
+      [8.8, FLOOR_ORIGIN_Y, 0],
+      [6.45, FLOOR_ORIGIN_Y, 0],
     ],
   },
   {
     id: "range-entry-loop",
     waypoints: [
-      [11.2, 1.7, 0],
-      [13.2, 1.7, 1.2],
-      [14, 1.7, 5.8],
-      [12.2, 1.7, 6.6],
-      [11.2, 1.7, 2.2],
+      [11.2, FLOOR_ORIGIN_Y, 0],
+      [13.2, FLOOR_ORIGIN_Y, 1.2],
+      [14, FLOOR_ORIGIN_Y, 5.8],
+      [12.2, FLOOR_ORIGIN_Y, 6.6],
+      [11.2, FLOOR_ORIGIN_Y, 2.2],
     ],
   },
 ];
@@ -61,10 +62,10 @@ const DEFAULT_SIM_ROUTES: SimRoute[] = [
   {
     id: "default-room-loop",
     waypoints: [
-      [-2, 1.7, 0],
-      [0, 1.7, 1],
-      [2, 1.7, 0],
-      [0, 1.7, -1],
+      [-2, FLOOR_ORIGIN_Y, 0],
+      [0, FLOOR_ORIGIN_Y, 1],
+      [2, FLOOR_ORIGIN_Y, 0],
+      [0, FLOOR_ORIGIN_Y, -1],
     ],
   },
 ];

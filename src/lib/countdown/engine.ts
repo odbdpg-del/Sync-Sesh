@@ -10,6 +10,20 @@ function formatSeconds(value: number) {
   return `${minutes.toString().padStart(2, "0")}:${seconds.toString().padStart(2, "0")}`;
 }
 
+function formatSecondsWithPrecision(value: number, precisionDigits: number) {
+  if (precisionDigits <= 0) {
+    return formatSeconds(Math.ceil(value));
+  }
+
+  const precisionMultiplier = 10 ** precisionDigits;
+  const safeValue = Math.floor(Math.max(0, value) * precisionMultiplier) / precisionMultiplier;
+  const minutes = Math.floor(safeValue / 60);
+  const seconds = safeValue - minutes * 60;
+  const paddedSeconds = seconds.toFixed(precisionDigits).padStart(3 + precisionDigits, "0");
+
+  return `${minutes.toString().padStart(2, "0")}:${paddedSeconds}`;
+}
+
 function getPrecountValue(countdown: CountdownTimeline, serverNowMs: number, preCountSeconds: number) {
   const countdownStartMs = parseTimestamp(countdown.countdownStartAt);
 
@@ -34,6 +48,16 @@ function getCountdownSecondsLeft(countdown: CountdownTimeline, serverNowMs: numb
   }
 
   return Math.max(0, Math.ceil((endAtMs - serverNowMs) / 1000));
+}
+
+function getCountdownTimeLeftSeconds(countdown: CountdownTimeline, serverNowMs: number) {
+  const endAtMs = parseTimestamp(countdown.countdownEndAt);
+
+  if (endAtMs === undefined) {
+    return 0;
+  }
+
+  return Math.max(0, (endAtMs - serverNowMs) / 1000);
 }
 
 export function getApproxServerNow(state: DabSyncState) {
@@ -61,12 +85,15 @@ export function deriveCountdownDisplay(state: DabSyncState, serverNowMs: number)
         isUrgent: true,
       };
     case "countdown": {
-      const secondsLeft = getCountdownSecondsLeft(state.countdown, serverNowMs);
+      const precisionDigits = state.timerConfig.countdownPrecisionDigits ?? 0;
+      const preciseSecondsLeft = getCountdownTimeLeftSeconds(state.countdown, serverNowMs);
+      const secondsLeft = precisionDigits > 0 ? Math.ceil(preciseSecondsLeft) : getCountdownSecondsLeft(state.countdown, serverNowMs);
+      const timerText = formatSecondsWithPrecision(preciseSecondsLeft, precisionDigits);
       return {
         phase: state.session.phase,
-        headline: formatSeconds(secondsLeft),
+        headline: timerText,
         subheadline: "Live round in progress",
-        timerText: formatSeconds(secondsLeft),
+        timerText,
         accentText: secondsLeft <= 10 ? "Final stretch" : `${state.timerConfig.durationSeconds}s configured`,
         isUrgent: secondsLeft <= 10,
       };

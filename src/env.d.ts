@@ -16,6 +16,7 @@ interface ImportMeta {
 
 interface SoundCloudWidgetSound {
   artwork_url?: string | null;
+  bpm?: number | null;
   duration?: number;
   metadata_artist?: string | null;
   title?: string;
@@ -50,6 +51,7 @@ interface SoundCloudWidgetStatic {
     READY: string;
     PLAY: string;
     PAUSE: string;
+    PLAY_PROGRESS?: string;
     FINISH: string;
     ERROR: string;
   };

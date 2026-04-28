@@ -1,5 +1,5 @@
 import type { DabSyncState, LocalProfile, SessionEvent, SessionSnapshot, SyncStatus } from "../../types/session";
-import { attachLocalProfile, createSessionSnapshot } from "../lobby/sessionState";
+import { attachLocalProfile, createSessionSnapshot, normalizeSessionSnapshot } from "../lobby/sessionState";
 import type { SyncClient } from "./types";
 
 interface WebSocketSyncClientOptions {
@@ -135,7 +135,7 @@ export class WebSocketSyncClient implements SyncClient {
         }
 
         if (payload.type === "snapshot") {
-          this.snapshot = payload.snapshot;
+          this.snapshot = normalizeSessionSnapshot(payload.snapshot);
           this.shouldRestoreJoinedSession = this.snapshot.users.some((user) => user.id === this.localProfile.id);
           this.syncStatus = {
             ...this.syncStatus,

@@ -24,6 +24,7 @@ export interface LocalProfile {
 export interface TimerConfig {
   durationSeconds: number;
   preCountSeconds: number;
+  countdownPrecisionDigits: number;
   allowLateJoinSpectators: boolean;
   lateJoinersJoinReady: boolean;
   autoJoinOnLoad: boolean;
@@ -80,6 +81,7 @@ export interface RangeScoreResult extends RangeScoreSubmission {
 
 export interface FreeRoamPresenceUpdate {
   levelId: string;
+  areaId?: string | null;
   position: readonly [number, number, number];
   yaw: number;
 }
@@ -87,6 +89,135 @@ export interface FreeRoamPresenceUpdate {
 export interface FreeRoamPresenceState extends FreeRoamPresenceUpdate {
   userId: string;
   updatedAt: string;
+}
+
+export type SharedDawTransportState = "stopped" | "playing";
+
+export interface SharedDawTransport {
+  state: SharedDawTransportState;
+  bpm: number;
+  timeSignature: "4 / 4";
+  anchorBar: number;
+  anchorBeat: number;
+  startedAt?: string;
+  stoppedAt?: string;
+  updatedAt: string;
+  updatedByUserId: string;
+  revision: number;
+}
+
+export const SHARED_DAW_TRACK_IDS = ["drums", "bass", "fm-synth", "piano", "looper"] as const;
+export const SHARED_DAW_LOOP_LENGTH_BARS = [1, 2, 4, 8] as const;
+
+export type SharedDawTrackId = (typeof SHARED_DAW_TRACK_IDS)[number];
+export type SharedDawLoopLengthBars = (typeof SHARED_DAW_LOOP_LENGTH_BARS)[number];
+export type SharedDawClipKind = "midi" | "control" | "mixed";
+export type SharedDawClipState = "recorded";
+export type SharedDawControlTarget = "clip-length" | "track-volume" | "track-mute" | "device-enabled";
+
+export interface SharedDawMidiNote {
+  pitch: number;
+  label: string;
+  startStep: number;
+  durationSteps: number;
+  velocity: number;
+}
+
+export interface SharedDawControlEvent {
+  target: SharedDawControlTarget;
+  step: number;
+  value: number | boolean;
+}
+
+export interface SharedDawClipPublishPayload {
+  trackId: SharedDawTrackId;
+  sceneIndex: number;
+  label: string;
+  kind: SharedDawClipKind;
+  lengthBars: SharedDawLoopLengthBars;
+  midiNotes: SharedDawMidiNote[];
+  controlEvents: SharedDawControlEvent[];
+}
+
+export interface SharedDawClipSummary {
+  id: string;
+  trackId: SharedDawTrackId;
+  sceneIndex: number;
+  label: string;
+  kind: SharedDawClipKind;
+  state: SharedDawClipState;
+  lengthBars: SharedDawLoopLengthBars;
+  noteCount: number;
+  controlEventCount: number;
+  ownerUserId: string;
+  updatedByUserId: string;
+  updatedAt: string;
+  revision: number;
+  checksum: string;
+}
+
+export interface SharedDawClip {
+  summary: SharedDawClipSummary;
+  midiNotes: SharedDawMidiNote[];
+  controlEvents: SharedDawControlEvent[];
+}
+
+export interface SharedDawClipsState {
+  clips: SharedDawClip[];
+  revision: number;
+  updatedAt: string;
+}
+
+export type SharedDawLiveSoundKind = "fm-synth" | "bass" | "bass-pattern" | "drum" | "piano";
+export type SharedDawLiveDrumKind = "kick" | "snare" | "hat";
+export type SharedDawLivePianoTarget = "fm-synth" | "bass";
+export type SharedDawLiveFmSynthEnvelopePreset = "pluck" | "stab" | "pad";
+export type SharedDawLiveBassWaveform = "sawtooth" | "square";
+
+export interface SharedDawLiveFmSynthPatch {
+  carrierFrequency: number;
+  modulationRatio: number;
+  modulationIndex: number;
+  envelopePreset: SharedDawLiveFmSynthEnvelopePreset;
+  gain: number;
+}
+
+export interface SharedDawLiveBassMachinePatch {
+  waveform: SharedDawLiveBassWaveform;
+  cutoffFrequency: number;
+  resonance: number;
+  envelopeAmount: number;
+  decaySeconds: number;
+  gain: number;
+}
+
+export interface SharedDawLiveSoundPayload {
+  areaId: "recording-studio";
+  kind: SharedDawLiveSoundKind;
+  label: string;
+  clientTriggeredAt?: string;
+  scheduledAt?: string;
+  frequency?: number;
+  durationSeconds?: number;
+  gainScale?: number;
+  drumKind?: SharedDawLiveDrumKind;
+  pianoTarget?: SharedDawLivePianoTarget;
+  fmSynthPatch?: SharedDawLiveFmSynthPatch;
+  bassMachinePatch?: SharedDawLiveBassMachinePatch;
+}
+
+export interface SharedDawLiveSoundEvent extends SharedDawLiveSoundPayload {
+  id: string;
+  triggeredAt: string;
+  triggeredByUserId: string;
+  revision: number;
+}
+
+export interface SharedStudioGuitarState {
+  holderUserId: string | null;
+  updatedAt: string;
+  updatedByUserId: string | null;
+  revision: number;
 }
 
 export interface SyncStatus {
@@ -105,6 +236,10 @@ export interface SessionSnapshot {
   countdown: CountdownTimeline;
   rangeScoreboard: RangeScoreResult[];
   freeRoamPresence: FreeRoamPresenceState[];
+  dawTransport: SharedDawTransport;
+  dawClips: SharedDawClipsState;
+  dawLiveSound: SharedDawLiveSoundEvent | null;
+  studioGuitar: SharedStudioGuitarState;
 }
 
 export interface DabSyncState extends SessionSnapshot {
@@ -142,6 +277,8 @@ export interface CountdownDisplayState {
 export type SessionEvent =
   | { type: "join_session" }
   | { type: "leave_session" }
+  | { type: "roll_display_name"; rollKey: string }
+  | { type: "select_display_name"; displayName: string }
   | { type: "ready_hold_start" }
   | { type: "ready_hold_end" }
   | { type: "set_timer_duration"; durationSeconds: number }
@@ -155,6 +292,15 @@ export type SessionEvent =
   | { type: "admin_clear_test_participants" }
   | { type: "admin_set_late_joiners_join_ready"; enabled: boolean }
   | { type: "admin_set_auto_join_on_load"; enabled: boolean }
+  | { type: "admin_set_countdown_precision_digits"; digits: number }
   | { type: "range_score_submit"; result: RangeScoreSubmission }
   | { type: "free_roam_presence_update"; presence: FreeRoamPresenceUpdate }
-  | { type: "free_roam_presence_clear" };
+  | { type: "free_roam_presence_clear" }
+  | { type: "daw_transport_set_tempo"; bpm: number }
+  | { type: "daw_transport_play" }
+  | { type: "daw_transport_stop" }
+  | { type: "daw_clip_publish"; clip: SharedDawClipPublishPayload }
+  | { type: "daw_clip_clear"; trackId: SharedDawTrackId; sceneIndex: number }
+  | { type: "daw_live_sound"; sound: SharedDawLiveSoundPayload }
+  | { type: "studio_guitar_pickup" }
+  | { type: "studio_guitar_drop" };

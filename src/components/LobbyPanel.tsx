@@ -1,11 +1,26 @@
+import { useEffect, useMemo, useState } from "react";
+import type { MouseEvent } from "react";
+import { createPortal } from "react-dom";
 import type { DerivedLobbyState, SessionInfo, SessionUser } from "../types/session";
 
 interface LobbyPanelProps {
   session: SessionInfo;
   users: SessionUser[];
   lobbyState: DerivedLobbyState;
+  generatedDisplayNames: string[];
   onJoinSession: () => void;
+  onRollDisplayName: () => void;
+  onSelectDisplayName: (displayName: string) => void;
 }
+
+interface NamePickerPosition {
+  left: number;
+  top: number;
+}
+
+const NAME_PICKER_ESTIMATED_WIDTH = 300;
+const NAME_PICKER_ESTIMATED_HEIGHT = 340;
+const NAME_PICKER_VIEWPORT_GAP = 12;
 
 function getStateLabel(state: SessionUser["presence"]) {
   switch (state) {
@@ -52,7 +67,113 @@ function getUserSubcopy(user: SessionUser) {
   }
 }
 
-export function LobbyPanel({ session, users, lobbyState, onJoinSession }: LobbyPanelProps) {
+export function LobbyPanel({
+  session,
+  users,
+  lobbyState,
+  generatedDisplayNames,
+  onJoinSession,
+  onRollDisplayName,
+  onSelectDisplayName,
+}: LobbyPanelProps) {
+  const [isNamePickerOpen, setIsNamePickerOpen] = useState(false);
+  const [namePickerPosition, setNamePickerPosition] = useState<NamePickerPosition>({ left: 0, top: 0 });
+  const localDisplayName = lobbyState.localUser?.displayName ?? "";
+  const availableDisplayNames = useMemo(() => {
+    const takenNames = new Set(users
+      .filter((user) => user.id !== lobbyState.localUser?.id)
+      .map((user) => user.displayName.trim().toLowerCase()));
+
+    return generatedDisplayNames.filter((name) => (
+      name !== localDisplayName &&
+      !takenNames.has(name.trim().toLowerCase())
+    ));
+  }, [generatedDisplayNames, lobbyState.localUser?.id, localDisplayName, users]);
+
+  useEffect(() => {
+    if (!isNamePickerOpen) {
+      return undefined;
+    }
+
+    const closeNamePicker = () => setIsNamePickerOpen(false);
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        closeNamePicker();
+      }
+    };
+
+    window.addEventListener("pointerdown", closeNamePicker);
+    window.addEventListener("resize", closeNamePicker);
+    window.addEventListener("scroll", closeNamePicker, true);
+    window.addEventListener("keydown", closeOnEscape);
+
+    return () => {
+      window.removeEventListener("pointerdown", closeNamePicker);
+      window.removeEventListener("resize", closeNamePicker);
+      window.removeEventListener("scroll", closeNamePicker, true);
+      window.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [isNamePickerOpen]);
+
+  const openNamePicker = (event: MouseEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+
+    const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight;
+    const left = Math.max(
+      NAME_PICKER_VIEWPORT_GAP,
+      Math.min(event.clientX - NAME_PICKER_ESTIMATED_WIDTH + 28, viewportWidth - NAME_PICKER_ESTIMATED_WIDTH - NAME_PICKER_VIEWPORT_GAP),
+    );
+    const top = Math.max(
+      NAME_PICKER_VIEWPORT_GAP,
+      Math.min(event.clientY + 8, viewportHeight - NAME_PICKER_ESTIMATED_HEIGHT - NAME_PICKER_VIEWPORT_GAP),
+    );
+
+    setNamePickerPosition({ left, top });
+    setIsNamePickerOpen(true);
+  };
+
+  const namePickerMenu = isNamePickerOpen && typeof document !== "undefined"
+    ? createPortal(
+        <div
+          className="roll-name-menu"
+          role="listbox"
+          aria-label="Available display names"
+          style={{
+            left: `${namePickerPosition.left}px`,
+            top: `${namePickerPosition.top}px`,
+          }}
+          onPointerDown={(event) => event.stopPropagation()}
+          onContextMenu={(event) => event.preventDefault()}
+        >
+          <div className="roll-name-menu-header">
+            <span className="meta-label">Pick name</span>
+            <button type="button" className="roll-name-menu-close" onClick={() => setIsNamePickerOpen(false)}>
+              x
+            </button>
+          </div>
+          {availableDisplayNames.length > 0 ? (
+            availableDisplayNames.map((name) => (
+              <button
+                key={name}
+                type="button"
+                className="roll-name-option"
+                onClick={() => {
+                  onSelectDisplayName(name);
+                  setIsNamePickerOpen(false);
+                }}
+              >
+                {name}
+              </button>
+            ))
+          ) : (
+            <p className="roll-name-empty">No open names.</p>
+          )}
+        </div>,
+        document.body,
+      )
+    : null;
   return (
     <section className={`panel stack lobby-panel lobby-phase-${session.phase}`}>
       <div className="section-heading">
@@ -149,6 +270,23 @@ export function LobbyPanel({ session, users, lobbyState, onJoinSession }: LobbyP
               </div>
               <div className="user-status">
                 <span className={`presence-chip presence-${user.presence}`}>{getStateLabel(user.presence)}</span>
+                {user.id === lobbyState.localUser?.id ? (
+                  <div className="roll-name-wrapper">
+                    <button
+                      type="button"
+                      className="roll-name-button"
+                      onClick={() => {
+                        setIsNamePickerOpen(false);
+                        onRollDisplayName();
+                      }}
+                      onContextMenu={(event) => {
+                        openNamePicker(event);
+                      }}
+                    >
+                      Roll
+                    </button>
+                  </div>
+                ) : null}
                 {user.presence === "ready" ? (
                   <span className="ready-bars" aria-hidden="true">
                     III
@@ -168,6 +306,7 @@ export function LobbyPanel({ session, users, lobbyState, onJoinSession }: LobbyP
           ))}
         </ul>
       </div>
+      {namePickerMenu}
     </section>
   );
 }

@@ -18,7 +18,10 @@ interface AdminPanelProps {
   onClearTestParticipants: () => void;
   onSetLateJoinersJoinReady: (enabled: boolean) => void;
   onSetAutoJoinOnLoad: (enabled: boolean) => void;
+  onSetCountdownPrecisionDigits: (digits: number) => void;
 }
+
+const MAX_COUNTDOWN_PRECISION_DIGITS = 5;
 
 function formatDebugValue(value: boolean | number | string | null) {
   if (typeof value === "boolean") {
@@ -30,6 +33,10 @@ function formatDebugValue(value: boolean | number | string | null) {
 
 function truncateDebugUrl(url: string) {
   return url.length > 96 ? `${url.slice(0, 93)}...` : url;
+}
+
+function formatCountdownPrecisionLabel(digits: number) {
+  return digits === 0 ? "Whole seconds" : `${digits} ${digits === 1 ? "decimal" : "decimals"}`;
 }
 
 export function AdminPanel({
@@ -48,6 +55,7 @@ export function AdminPanel({
   onClearTestParticipants,
   onSetLateJoinersJoinReady,
   onSetAutoJoinOnLoad,
+  onSetCountdownPrecisionDigits,
 }: AdminPanelProps) {
   const [isSoundCloudToolsOpen, setIsSoundCloudToolsOpen] = useState(false);
 
@@ -58,6 +66,7 @@ export function AdminPanel({
   const testUsers = state.users.filter((user) => user.isTestUser);
   const soundCloudState = soundCloudPlayer.state;
   const isActiveCountdown = state.session.phase === "precount" || state.session.phase === "countdown";
+  const countdownPrecisionDigits = state.timerConfig.countdownPrecisionDigits;
 
   return (
     <aside className="panel admin-panel">
@@ -123,6 +132,33 @@ export function AdminPanel({
         />
       </label>
 
+      <div className="panel inset-panel admin-stepper-panel">
+        <div>
+          <p className="meta-label">Countdown precision</p>
+          <p>{formatCountdownPrecisionLabel(countdownPrecisionDigits)}</p>
+        </div>
+        <div className="admin-stepper-controls" aria-label="Countdown precision controls">
+          <button
+            type="button"
+            className="ghost-button admin-stepper-button"
+            onClick={() => onSetCountdownPrecisionDigits(countdownPrecisionDigits - 1)}
+            disabled={countdownPrecisionDigits <= 0}
+            aria-label="Decrease countdown precision"
+          >
+            -
+          </button>
+          <button
+            type="button"
+            className="ghost-button admin-stepper-button"
+            onClick={() => onSetCountdownPrecisionDigits(countdownPrecisionDigits + 1)}
+            disabled={countdownPrecisionDigits >= MAX_COUNTDOWN_PRECISION_DIGITS}
+            aria-label="Increase countdown precision"
+          >
+            +
+          </button>
+        </div>
+      </div>
+
       {isSoundCloudToolsOpen ? (
         <div className="panel inset-panel admin-control-panel">
           <div className="admin-control-heading">
@@ -145,7 +181,7 @@ export function AdminPanel({
             <span>Fine</span>
           </label>
           <div className="admin-debug-panel">
-            <p className="meta-label">SoundCloud debug</p>
+            <p className="meta-label">Deck A SoundCloud debug</p>
             <dl>
               <div>
                 <dt>Script</dt>

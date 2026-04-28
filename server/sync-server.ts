@@ -1,8 +1,17 @@
 import { existsSync, readFileSync } from "node:fs";
 import { createServer } from "node:http";
-import { join } from "node:path";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { WebSocketServer } from "ws";
 import { advanceSessionTime, createSessionSnapshot, reduceSessionEvent } from "../src/lib/lobby/sessionState";
+import {
+  FALLBACK_GENERATED_PROFILE_NAMES,
+  getAvatarSeedFromName,
+  getGeneratedProfileNameForUser,
+  getRolledGeneratedProfileNameForUser,
+  normalizeGeneratedProfileNames,
+  parseGeneratedProfileNames,
+} from "../src/lib/session/generatedNamesCore";
 import type { LocalProfile, SessionEvent, SessionSnapshot } from "../src/types/session";
 
 type ClientMessage =
@@ -26,6 +35,8 @@ interface SocketSessionInfo {
 }
 
 const port = Number(process.env.PORT ?? 8787);
+const serverDirname = dirname(fileURLToPath(import.meta.url));
+const generatedNamesPath = resolve(serverDirname, "../src/data/generatedNames.txt");
 const rooms = new Map<string, SessionRoom>();
 const socketToSessionInfo = new Map<import("ws").WebSocket, SocketSessionInfo>();
 
@@ -70,6 +81,17 @@ function loadEnvFile(filename: string) {
   }
 }
 
+function readGeneratedNamePool() {
+  try {
+    const names = parseGeneratedProfileNames(readFileSync(generatedNamesPath, "utf8"));
+    return names.length > 0 ? names : FALLBACK_GENERATED_PROFILE_NAMES;
+  } catch {
+    return FALLBACK_GENERATED_PROFILE_NAMES;
+  }
+}
+
+const generatedNamePool = readGeneratedNamePool();
+
 function createRoom(sessionId: string): SessionRoom {
   return {
     snapshot: createSessionSnapshot({
@@ -96,6 +118,69 @@ function getRoom(sessionId: string) {
   }
 
   return existingRoom;
+}
+
+function createProfileWithDisplayName(localProfile: LocalProfile, displayName: string): LocalProfile {
+  return {
+    ...localProfile,
+    displayName,
+    avatarSeed: getAvatarSeedFromName(displayName),
+  };
+}
+
+function getExistingProfile(localProfile: LocalProfile, existingUser?: SessionSnapshot["users"][number]): LocalProfile {
+  if (!existingUser) {
+    return localProfile;
+  }
+
+  return {
+    ...localProfile,
+    displayName: existingUser.displayName,
+    avatarSeed: existingUser.avatarSeed,
+    avatarUrl: existingUser.avatarUrl,
+  };
+}
+
+function selectGeneratedProfile(room: SessionRoom, localProfile: LocalProfile, requestedName: string): LocalProfile | null {
+  const normalizedName = normalizeGeneratedProfileNames([requestedName])[0];
+
+  if (!normalizedName) {
+    return null;
+  }
+
+  const canonicalName = generatedNamePool.find((name) => name.toLowerCase() === normalizedName.toLowerCase());
+
+  if (!canonicalName) {
+    return null;
+  }
+
+  const isTaken = room.snapshot.users.some((user) => (
+    user.id !== localProfile.id &&
+    user.displayName.trim().toLowerCase() === canonicalName.toLowerCase()
+  ));
+
+  return isTaken ? null : createProfileWithDisplayName(localProfile, canonicalName);
+}
+
+function assignGeneratedProfile(room: SessionRoom, localProfile: LocalProfile, event?: SessionEvent): LocalProfile {
+  const existingUser = room.snapshot.users.find((user) => user.id === localProfile.id);
+
+  if (event?.type === "select_display_name") {
+    return selectGeneratedProfile(room, localProfile, event.displayName) ?? getExistingProfile(localProfile, existingUser);
+  }
+
+  if (existingUser && event?.type !== "roll_display_name") {
+    return getExistingProfile(localProfile, existingUser);
+  }
+
+  const takenNames = room.snapshot.users
+    .filter((user) => user.id !== localProfile.id)
+    .map((user) => user.displayName);
+  const displayName = event?.type === "roll_display_name"
+    ? getRolledGeneratedProfileNameForUser(localProfile.id, takenNames, existingUser?.displayName ?? localProfile.displayName, event.rollKey, generatedNamePool)
+    : getGeneratedProfileNameForUser(localProfile.id, takenNames, generatedNamePool);
+
+  return createProfileWithDisplayName(localProfile, displayName);
 }
 
 function send(socket: import("ws").WebSocket, payload: ServerMessage) {
@@ -244,7 +329,9 @@ async function handleDiscordTokenExchange(request: import("node:http").IncomingM
 }
 
 const httpServer = createServer((request, response) => {
-  if (request.method === "OPTIONS" && request.url === "/api/discord/token") {
+  const pathname = request.url ? new URL(request.url, "http://localhost").pathname : "/";
+
+  if (request.method === "OPTIONS" && pathname === "/api/discord/token") {
     response.writeHead(204, {
       "Access-Control-Allow-Origin": "*",
       "Access-Control-Allow-Headers": "Content-Type",
@@ -254,7 +341,7 @@ const httpServer = createServer((request, response) => {
     return;
   }
 
-  if (request.url === "/health") {
+  if (pathname === "/health") {
     response.writeHead(200, { "Content-Type": "application/json" });
     response.end(
       JSON.stringify({
@@ -271,8 +358,14 @@ const httpServer = createServer((request, response) => {
     return;
   }
 
-  if (request.method === "POST" && request.url === "/api/discord/token") {
+  if (request.method === "POST" && pathname === "/api/discord/token") {
     void handleDiscordTokenExchange(request, response);
+    return;
+  }
+
+  if (pathname === "/sync/generated-names" || pathname === "/generated-names") {
+    response.writeHead(200, { "Content-Type": "application/json" });
+    response.end(JSON.stringify({ names: generatedNamePool }));
     return;
   }
 
@@ -314,11 +407,12 @@ wsServer.on("connection", (socket) => {
 
     if (payload.type === "event") {
       const room = getRoom(payload.sessionId);
+      const assignedProfile = assignGeneratedProfile(room, payload.localProfile, payload.event);
       socketToSessionInfo.set(socket, {
         sessionId: payload.sessionId,
-        localProfile: payload.localProfile,
+        localProfile: assignedProfile,
       });
-      room.snapshot = reduceSessionEvent(room.snapshot, payload.event, payload.localProfile, Date.now());
+      room.snapshot = reduceSessionEvent(room.snapshot, payload.event, assignedProfile, Date.now());
       broadcast(payload.sessionId);
       return;
     }

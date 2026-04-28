@@ -1,10 +1,12 @@
 import { useEffect, useRef, type CSSProperties, type MouseEvent, type UIEvent } from "react";
 import { FloatingWindow } from "./FloatingWindow";
+import { SoundCloudModeToggle, type SoundCloudPanelMode } from "./SoundCloudModeToggle";
 import type { SoundCloudPlayerController } from "../hooks/useSoundCloudPlayer";
 
 interface SoundCloudPanelProps {
-  waveformBarCount: number;
   player: SoundCloudPlayerController;
+  mode: SoundCloudPanelMode;
+  onChangeMode: (mode: SoundCloudPanelMode) => void;
 }
 
 interface SoundCloudWaveformViewProps {
@@ -146,7 +148,7 @@ function SoundCloudWaveformView({ waveformBars, progress, position, duration, di
   );
 }
 
-export function SoundCloudPanel({ player }: SoundCloudPanelProps) {
+export function SoundCloudPanel({ player, mode, onChangeMode }: SoundCloudPanelProps) {
   const { iframeRef, state, actions } = player;
 
   return (
@@ -160,6 +162,15 @@ export function SoundCloudPanel({ player }: SoundCloudPanelProps) {
           <span className="capacity-pill">{state.trackCount} tracks</span>
           <span className={`sync-pill ${state.isPlaying ? "sync-connected" : "sync-connecting"}`}>{state.isPlaying ? "Playing" : "Standby"}</span>
         </div>
+      </div>
+
+      <div className="soundcloud-panel-toolbar">
+        <p className="soundcloud-panel-note">
+          {isDiscordProxyHost()
+            ? "The default load uses the lightweight Shuffle Radio. Switch to Widget for the native embed or DJ Decks for the booth workspace."
+            : "Shuffle Radio is the default front-end player. Switch to Widget for the standard SoundCloud embed or DJ Decks for the full booth workspace."}
+        </p>
+        <SoundCloudModeToggle activeMode={mode} onChangeMode={onChangeMode} />
       </div>
 
       <div className={`soundcloud-player ${state.errorMessage ? "soundcloud-error-state" : ""}`}>
@@ -213,11 +224,9 @@ export function SoundCloudPanel({ player }: SoundCloudPanelProps) {
 
             <div className="soundcloud-actions">
               <button type="button" className="soundcloud-control-button soundcloud-play-button" onClick={actions.togglePlayback} disabled={!state.isWidgetReady}>
-                <span aria-hidden="true">{state.isPlaying ? "❚❚" : "▶"}</span>
                 {state.isPlaying ? "Pause" : "Play"}
               </button>
               <button type="button" className="soundcloud-control-button" onClick={actions.shufflePlay} disabled={state.controlsDisabled}>
-                <span aria-hidden="true">⤮</span>
                 Shuffle
               </button>
               {state.errorMessage ? (
@@ -254,7 +263,7 @@ export function SoundCloudPanel({ player }: SoundCloudPanelProps) {
         </div>
       </div>
 
-      <div className={`soundcloud-widget-shell ${state.isWidgetReady ? "soundcloud-widget-shell-visible" : ""}`}>
+      <div className={`soundcloud-widget-shell ${state.errorMessage ? "soundcloud-widget-shell-visible" : ""}`}>
         <iframe
           key={state.selectedPlaylist.id}
           ref={(element) => {

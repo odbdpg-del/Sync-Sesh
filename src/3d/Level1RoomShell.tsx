@@ -1,11 +1,11 @@
 import { useCallback, useMemo, useRef, useState } from "react";
 import { useFrame } from "@react-three/fiber";
-import type { LevelConfig, LightConfig } from "./levels";
+import type { LevelConfig, LevelExitConfig, LightConfig } from "./levels";
 import { ControlRoomWallDisplays } from "./ControlRoomWallDisplays";
 import { ComputerStation } from "./ComputerStation";
 import { FreeRoamPresenceMarker } from "./FreeRoamPresenceMarker";
 import { LevelExitDoor } from "./LevelExitDoor";
-import { Level1RangeRoom } from "./Level1RangeRoom";
+import { Level1RecordingStudioRoom } from "./Level1RecordingStudioRoom";
 import { ShootingRangePrototype } from "./ShootingRangePrototype";
 import { SimBotRoamingMarker } from "./SimBotRoamingMarker";
 import { StationOccupantMarker } from "./StationOccupantMarker";
@@ -13,7 +13,10 @@ import { WorldTimerDisplay } from "./WorldTimerDisplay";
 import { useRegisterInteractable } from "./interactions";
 import { getPhaseVisuals } from "./phaseVisuals";
 import type { PhaseVisuals } from "./phaseVisuals";
+import type { LocalDawAudioEngineActions, LocalDawAudioEngineState } from "./useLocalDawAudioEngine";
+import type { LocalDawActions, LocalDawState } from "./useLocalDawState";
 import type { JukeboxConfig, JukeboxControlZoneConfig, JukeboxScreenColorRole, JukeboxScreenSurfaceConfig } from "./levels";
+import type { SoundCloudBoothState } from "./soundCloudBooth";
 import type { JukeboxActions, JukeboxDisplayState } from "../hooks/useSoundCloudPlayer";
 import type {
   CountdownDisplayState,
@@ -21,6 +24,12 @@ import type {
   RangeScoreResult,
   RangeScoreSubmission,
   SessionUser,
+  SharedDawClipPublishPayload,
+  SharedDawClipsState,
+  SharedDawLiveSoundPayload,
+  SharedStudioGuitarState,
+  SharedDawTransport,
+  SharedDawTrackId,
 } from "../types/session";
 
 const WALL_THICKNESS = 0.18;
@@ -30,9 +39,54 @@ type JukeboxFeedback = {
   message: string;
   key: number;
 };
+type HeldStudioInstrument = "guitar" | null;
+type StudioGuitarRecordingStatus = {
+  caption: string;
+  isEnabled: boolean;
+  label: string;
+};
 
 function isSimRoamingDisabledByQuery() {
   return new URLSearchParams(window.location.search).get("simRoam") === "0";
+}
+
+function isControlRoomHubLevel(levelConfig: LevelConfig) {
+  return levelConfig.id === "level-1";
+}
+
+function isStandaloneStudioLevel(levelConfig: LevelConfig) {
+  return levelConfig.id === "level-3-recording-studio";
+}
+
+function getActiveLevelArea(levelConfig: LevelConfig, areaId: string, kind: NonNullable<LevelConfig["areas"]>[number]["kind"]) {
+  return levelConfig.areas?.find((area) => (
+    area.id === areaId &&
+    area.kind === kind &&
+    area.status === "active"
+  ));
+}
+
+function isControlRoomToStudioOpening(opening: NonNullable<LevelConfig["openings"]>[number]) {
+  return (
+    opening.id === "control-room-recording-studio-opening" &&
+    opening.fromAreaId === "control-room" &&
+    opening.toAreaId === "recording-studio"
+  );
+}
+
+function isStandaloneStudioReturnOpening(opening: NonNullable<LevelConfig["openings"]>[number]) {
+  return (
+    opening.id === "level-3-recording-studio-return-opening" &&
+    opening.fromAreaId === "recording-studio" &&
+    opening.toAreaId === "control-room"
+  );
+}
+
+function getActiveRecordingStudioOpening(levelConfig: LevelConfig) {
+  return levelConfig.openings?.find((opening) => (
+    (isControlRoomToStudioOpening(opening) || isStandaloneStudioReturnOpening(opening)) &&
+    opening.status === "active"
+  ));
 }
 
 function LevelLight({ light, phaseVisuals }: { light: LightConfig; phaseVisuals: PhaseVisuals }) {
@@ -107,6 +161,54 @@ function ControlRoomOpeningStub({
         <boxGeometry args={[stubWallThickness, 4 - opening.size.height, opening.size.width]} />
         <meshStandardMaterial args={[{ color: wallColor, roughness: 0.82, metalness: 0.04 }]} />
       </mesh>
+    </>
+  );
+}
+
+function ControlRoomWestOpeningWall({
+  opening,
+  roomWestWallX,
+  wallCenterY,
+  wallColor,
+  roomHeight,
+  roomMinZ,
+  roomMaxZ,
+}: {
+  opening: NonNullable<LevelConfig["openings"]>[number];
+  roomWestWallX: number;
+  wallCenterY: number;
+  wallColor: string;
+  roomHeight: number;
+  roomMinZ: number;
+  roomMaxZ: number;
+}) {
+  const openingHalfWidth = opening.size.width / 2;
+  const openingLeftEdge = opening.position[2] - openingHalfWidth;
+  const openingRightEdge = opening.position[2] + openingHalfWidth;
+  const lowerWallDepth = Math.max(0, openingLeftEdge - roomMinZ);
+  const upperWallDepth = Math.max(0, roomMaxZ - openingRightEdge);
+
+  return (
+    <>
+      {lowerWallDepth > 0 ? (
+        <Wall
+          position={[roomWestWallX, wallCenterY, roomMinZ + lowerWallDepth / 2]}
+          args={[WALL_THICKNESS, roomHeight, lowerWallDepth]}
+          color={wallColor}
+        />
+      ) : null}
+      {upperWallDepth > 0 ? (
+        <Wall
+          position={[roomWestWallX, wallCenterY, openingRightEdge + upperWallDepth / 2]}
+          args={[WALL_THICKNESS, roomHeight, upperWallDepth]}
+          color={wallColor}
+        />
+      ) : null}
+      <Wall
+        position={[roomWestWallX, opening.size.height + (roomHeight - opening.size.height) / 2, opening.position[2]]}
+        args={[WALL_THICKNESS, roomHeight - opening.size.height, opening.size.width]}
+        color={wallColor}
+      />
     </>
   );
 }
@@ -1244,13 +1346,41 @@ interface Level1RoomShellProps {
   roundNumber: number;
   rangeScoreboard: RangeScoreResult[];
   onSubmitRangeScore: (result: RangeScoreSubmission) => void;
-  onLevelExit: (targetLevelId: string) => void;
+  onLevelExit: (exit: LevelExitConfig) => void;
   freeRoamPresence: FreeRoamPresenceState[];
   onActivateLocalDashboard: () => void;
   localStationId?: string;
   localStationSource: "joined" | "temporary" | "emergency";
   jukeboxDisplay?: JukeboxDisplayState;
   jukeboxActions?: JukeboxActions;
+  soundCloudBooth?: SoundCloudBoothState;
+  localDawState?: LocalDawState;
+  localDawActions?: LocalDawActions;
+  localDawAudioState?: LocalDawAudioEngineState;
+  localDawAudioActions?: LocalDawAudioEngineActions;
+  sharedDawTransport?: SharedDawTransport;
+  sharedDawClips?: SharedDawClipsState;
+  canControlSharedDawTransport?: boolean;
+  canAdminSharedDawClips?: boolean;
+  onSetSharedDawTempo?: (bpm: number) => void;
+  onPlaySharedDawTransport?: () => void;
+  onStopSharedDawTransport?: () => void;
+  localUserIdForSharedDawClips?: string;
+  onPublishSharedDawClip?: (clip: SharedDawClipPublishPayload) => void;
+  onClearSharedDawClip?: (trackId: SharedDawTrackId, sceneIndex: number) => void;
+  onBroadcastDawLiveSound?: (sound: SharedDawLiveSoundPayload) => void;
+  studioGuitar?: SharedStudioGuitarState;
+  onPickupStudioGuitar?: () => void;
+  onDropStudioGuitar?: () => void;
+  heldStudioInstrument?: HeldStudioInstrument;
+  studioGuitarBankLabel?: string;
+  studioGuitarRecordingStatus?: StudioGuitarRecordingStatus;
+  onToggleStudioGuitarRecording?: () => void;
+  studioGuitarFeedbackKey?: number;
+  studioGuitarNoteIndex?: number;
+  studioGuitarNoteLabel?: string;
+  studioGuitarSlotIndex?: number;
+  showLayoutGrabBoxes?: boolean;
 }
 
 export function Level1RoomShell({
@@ -1269,32 +1399,57 @@ export function Level1RoomShell({
   localStationSource,
   jukeboxDisplay,
   jukeboxActions,
+  soundCloudBooth,
+  localDawState,
+  localDawActions,
+  localDawAudioState,
+  localDawAudioActions,
+  sharedDawTransport,
+  sharedDawClips,
+  canControlSharedDawTransport,
+  canAdminSharedDawClips,
+  onSetSharedDawTempo,
+  onPlaySharedDawTransport,
+  onStopSharedDawTransport,
+  localUserIdForSharedDawClips,
+  onPublishSharedDawClip,
+  onClearSharedDawClip,
+  onBroadcastDawLiveSound,
+  studioGuitar,
+  onPickupStudioGuitar,
+  onDropStudioGuitar,
+  heldStudioInstrument,
+  studioGuitarBankLabel,
+  studioGuitarRecordingStatus,
+  onToggleStudioGuitarRecording,
+  studioGuitarFeedbackKey,
+  studioGuitarNoteIndex,
+  studioGuitarNoteLabel,
+  studioGuitarSlotIndex,
+  showLayoutGrabBoxes = true,
 }: Level1RoomShellProps) {
   const { dimensions, exits, lighting, openings, stations, timerDisplay } = levelConfig;
-  const activeControlRoomArea = levelConfig.areas?.find((area) => (
-    area.id === "control-room" &&
-    area.kind === "control-room" &&
-    area.status === "active"
-  ));
+  const shouldRenderStandaloneStudioShell = isStandaloneStudioLevel(levelConfig);
+  const shouldRenderHubShell = !shouldRenderStandaloneStudioShell;
+  const activeControlRoomArea = getActiveLevelArea(levelConfig, "control-room", "control-room");
   const activeControlRoomOpening = openings?.find((opening) => (
     opening.id === "control-room-range-opening" &&
     opening.fromAreaId === "control-room" &&
     opening.toAreaId === "shooting-range" &&
     opening.status === "active"
   ));
-  const activeShootingRangeArea = levelConfig.areas?.find((area) => (
-    area.id === "shooting-range" &&
-    area.kind === "shooting-range" &&
-    area.status === "active"
-  ));
+  const activeShootingRangeArea = getActiveLevelArea(levelConfig, "shooting-range", "shooting-range");
+  const activeRecordingStudioArea = getActiveLevelArea(levelConfig, "recording-studio", "recording-studio");
+  const activeRecordingStudioOpening = getActiveRecordingStudioOpening(levelConfig);
   const halfWidth = dimensions.width / 2;
   const halfDepth = dimensions.depth / 2;
   const wallCenterY = dimensions.height / 2;
   const gridSize = Math.max(dimensions.width, dimensions.depth);
-  const roomEastWallX = levelConfig.collisionBounds.room.min[0] + dimensions.width;
+  const roomWestWallX = activeControlRoomArea?.bounds.min[0] ?? -halfWidth;
+  const roomEastWallX = activeControlRoomArea?.bounds.max[0] ?? halfWidth;
   const connectorEndX = activeShootingRangeArea?.bounds.min[0] ?? levelConfig.collisionBounds.room.max[0];
   const phaseVisuals = getPhaseVisuals(countdownDisplay.phase, countdownDisplay.isUrgent);
-  const shouldRenderControlRoomDisplays = levelConfig.id === "level-1" && Boolean(activeControlRoomArea);
+  const shouldRenderControlRoomDisplays = isControlRoomHubLevel(levelConfig) && Boolean(activeControlRoomArea);
   const freshPresenceByUserId = new Map(
     freeRoamPresence
       .filter((presence) => presence.levelId === levelConfig.id && Date.now() - Date.parse(presence.updatedAt) <= FREE_ROAM_PRESENCE_TTL_MS)
@@ -1344,33 +1499,53 @@ export function Level1RoomShell({
         <LevelLight key={light.id} light={light} phaseVisuals={phaseVisuals} />
       ))}
 
-      <TimerAreaPulse phaseVisuals={phaseVisuals} />
+      {shouldRenderHubShell ? <TimerAreaPulse phaseVisuals={phaseVisuals} /> : null}
 
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, 0]}>
-        <planeGeometry args={[dimensions.width, dimensions.depth]} />
-        <meshStandardMaterial args={[{ color: phaseVisuals.floor, roughness: 0.86, metalness: 0.02 }]} />
-      </mesh>
+      {shouldRenderHubShell ? (
+        <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, 0]}>
+          <planeGeometry args={[dimensions.width, dimensions.depth]} />
+          <meshStandardMaterial args={[{ color: phaseVisuals.floor, roughness: 0.86, metalness: 0.02 }]} />
+        </mesh>
+      ) : null}
 
-      <gridHelper args={[gridSize, 14, phaseVisuals.gridPrimary, phaseVisuals.gridSecondary]} position={[0, 0.015, 0]} />
+      {shouldRenderHubShell ? (
+        <gridHelper args={[gridSize, 14, phaseVisuals.gridPrimary, phaseVisuals.gridSecondary]} position={[0, 0.015, 0]} />
+      ) : null}
 
-      <Wall position={[0, wallCenterY, -halfDepth]} args={[dimensions.width, dimensions.height, WALL_THICKNESS]} color={phaseVisuals.wall} />
-      <Wall position={[0, wallCenterY, halfDepth]} args={[dimensions.width, dimensions.height, WALL_THICKNESS]} color={phaseVisuals.wall} />
-      <Wall position={[-halfWidth, wallCenterY, 0]} args={[WALL_THICKNESS, dimensions.height, dimensions.depth]} color={phaseVisuals.wall} />
-      {activeControlRoomOpening ? (
-        <ControlRoomOpeningStub
-          opening={activeControlRoomOpening}
-          roomEastWallX={roomEastWallX}
-          connectorEndX={connectorEndX}
-          wallCenterY={wallCenterY}
-          wallColor={phaseVisuals.wall}
-          roomMinZ={activeControlRoomArea?.bounds.min[2] ?? -halfDepth}
-          roomMaxZ={activeControlRoomArea?.bounds.max[2] ?? halfDepth}
-        />
-      ) : (
-        <Wall position={[halfWidth, wallCenterY, 0]} args={[WALL_THICKNESS, dimensions.height, dimensions.depth]} color={phaseVisuals.wall} />
-      )}
+      {shouldRenderHubShell ? (
+        <>
+          <Wall position={[0, wallCenterY, -halfDepth]} args={[dimensions.width, dimensions.height, WALL_THICKNESS]} color={phaseVisuals.wall} />
+          <Wall position={[0, wallCenterY, halfDepth]} args={[dimensions.width, dimensions.height, WALL_THICKNESS]} color={phaseVisuals.wall} />
+          {activeRecordingStudioOpening ? (
+            <ControlRoomWestOpeningWall
+              opening={activeRecordingStudioOpening}
+              roomWestWallX={roomWestWallX}
+              wallCenterY={wallCenterY}
+              wallColor={phaseVisuals.wall}
+              roomHeight={dimensions.height}
+              roomMinZ={activeControlRoomArea?.bounds.min[2] ?? -halfDepth}
+              roomMaxZ={activeControlRoomArea?.bounds.max[2] ?? halfDepth}
+            />
+          ) : (
+            <Wall position={[-halfWidth, wallCenterY, 0]} args={[WALL_THICKNESS, dimensions.height, dimensions.depth]} color={phaseVisuals.wall} />
+          )}
+          {activeControlRoomOpening ? (
+            <ControlRoomOpeningStub
+              opening={activeControlRoomOpening}
+              roomEastWallX={roomEastWallX}
+              connectorEndX={connectorEndX}
+              wallCenterY={wallCenterY}
+              wallColor={phaseVisuals.wall}
+              roomMinZ={activeControlRoomArea?.bounds.min[2] ?? -halfDepth}
+              roomMaxZ={activeControlRoomArea?.bounds.max[2] ?? halfDepth}
+            />
+          ) : (
+            <Wall position={[halfWidth, wallCenterY, 0]} args={[WALL_THICKNESS, dimensions.height, dimensions.depth]} color={phaseVisuals.wall} />
+          )}
+        </>
+      ) : null}
 
-      {stations.map((station) => (
+      {shouldRenderHubShell ? stations.map((station) => (
         <ComputerStation
           key={station.id}
           station={station}
@@ -1383,7 +1558,7 @@ export function Level1RoomShell({
           isLocalStation={localStationSource !== "emergency" && station.id === localStationId}
           onActivateLocalDashboard={onActivateLocalDashboard}
         />
-      ))}
+      )) : null}
 
       {stationOccupants.filter(({ user }) => !roamingSimUserIds.has(user.id)).map(({ user, station, isLocal, isHost }) => (
         <StationOccupantMarker key={user.id} user={user} station={station} isLocal={isLocal} isHost={isHost} />
@@ -1431,6 +1606,46 @@ export function Level1RoomShell({
         <ControlRoomKitchenIslandProps phaseVisuals={phaseVisuals} />
       ) : null}
 
+      {shouldRenderStandaloneStudioShell && activeRecordingStudioArea && activeRecordingStudioOpening ? (
+        <Level1RecordingStudioRoom
+          area={activeRecordingStudioArea}
+          opening={activeRecordingStudioOpening}
+          phaseVisuals={phaseVisuals}
+          users={users}
+          localUserId={localUserId}
+          ownerId={ownerId}
+          freeRoamPresence={[...freshPresenceByUserId.values()]}
+          localDawState={localDawState}
+          localDawActions={localDawActions}
+          localDawAudioState={localDawAudioState}
+          localDawAudioActions={localDawAudioActions}
+          sharedDawTransport={sharedDawTransport}
+          sharedDawClips={sharedDawClips}
+          canControlSharedDawTransport={canControlSharedDawTransport}
+          canAdminSharedDawClips={canAdminSharedDawClips}
+          onSetSharedDawTempo={onSetSharedDawTempo}
+          onPlaySharedDawTransport={onPlaySharedDawTransport}
+          onStopSharedDawTransport={onStopSharedDawTransport}
+          localUserIdForSharedDawClips={localUserIdForSharedDawClips}
+          onPublishSharedDawClip={onPublishSharedDawClip}
+          onClearSharedDawClip={onClearSharedDawClip}
+          onBroadcastDawLiveSound={onBroadcastDawLiveSound}
+          soundCloudBooth={soundCloudBooth}
+          studioGuitar={studioGuitar}
+          onPickupStudioGuitar={onPickupStudioGuitar}
+          onDropStudioGuitar={onDropStudioGuitar}
+          heldStudioInstrument={heldStudioInstrument}
+          studioGuitarBankLabel={studioGuitarBankLabel}
+          studioGuitarRecordingStatus={studioGuitarRecordingStatus}
+          onToggleStudioGuitarRecording={onToggleStudioGuitarRecording}
+          studioGuitarFeedbackKey={studioGuitarFeedbackKey}
+          studioGuitarNoteIndex={studioGuitarNoteIndex}
+          studioGuitarNoteLabel={studioGuitarNoteLabel}
+          studioGuitarSlotIndex={studioGuitarSlotIndex}
+          showLayoutGrabBoxes={showLayoutGrabBoxes}
+        />
+      ) : null}
+
       {shouldRenderControlRoomDisplays && activeControlRoomArea && levelConfig.jukebox ? (
         <ControlRoomJukebox
           jukebox={levelConfig.jukebox}
@@ -1440,22 +1655,13 @@ export function Level1RoomShell({
         />
       ) : null}
 
-      {!shouldRenderControlRoomDisplays ? (
+      {!shouldRenderControlRoomDisplays && shouldRenderHubShell ? (
         <WorldTimerDisplay countdownDisplay={countdownDisplay} phaseVisuals={phaseVisuals} timerDisplay={timerDisplay} />
       ) : null}
       {exits?.map((exit) => (
         <LevelExitDoor key={exit.id} exit={exit} onActivateExit={onLevelExit} />
       ))}
-      {levelConfig.id === "level-1" && levelConfig.shootingRange ? (
-        <Level1RangeRoom
-          shootingRange={levelConfig.shootingRange}
-          rangeScoreboard={rangeScoreboard}
-          roundNumber={roundNumber}
-          localUserId={localUserId}
-          onSubmitRangeScore={onSubmitRangeScore}
-          phaseVisuals={phaseVisuals}
-        />
-      ) : levelConfig.shootingRange ? (
+      {levelConfig.shootingRange ? (
         <ShootingRangePrototype
           shootingRange={levelConfig.shootingRange}
           levelId={levelConfig.id}

@@ -214,8 +214,9 @@ textarea {
   min-height: 116px;
   padding: 14px 18px 16px;
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
-  align-items: center;
+  align-items: flex-start;
   gap: 18px;
   border: 1px solid rgba(60, 195, 255, 0.3);
   border-radius: 28px;
@@ -392,6 +393,39 @@ textarea {
   animation: three-d-area-feedback 1800ms ease both;
 }
 
+.three-d-camera-mode {
+  position: fixed;
+  left: 22px;
+  bottom: 22px;
+  z-index: 72;
+  display: grid;
+  gap: 3px;
+  min-width: 132px;
+  padding: 9px 11px;
+  border: 1px solid rgba(163, 255, 126, 0.36);
+  border-radius: 8px;
+  background: rgba(5, 12, 24, 0.7);
+  color: #effcff;
+  box-shadow: 0 0 22px rgba(87, 243, 255, 0.1);
+  pointer-events: none;
+}
+
+.three-d-camera-mode span {
+  color: #8ba0c7;
+  font-size: 0.68rem;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.three-d-camera-mode strong {
+  overflow: hidden;
+  font-family: "Space Mono", "Courier New", monospace;
+  font-size: 0.98rem;
+  line-height: 1.15;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .three-d-area-feedback span {
   color: #8ba0c7;
   font-size: 0.68rem;
@@ -488,11 +522,391 @@ textarea {
   z-index: 71;
 }
 
+.three-d-shell-menu-toggle {
+  position: fixed;
+  top: 114px;
+  right: 18px;
+  z-index: 72;
+  min-width: 76px;
+  min-height: 38px;
+  border: 1px solid rgba(63, 233, 255, 0.34);
+  border-radius: 12px;
+  padding: 8px 14px;
+  background: rgba(5, 12, 24, 0.82);
+  color: #dffbff;
+  cursor: pointer;
+  box-shadow: 0 0 20px rgba(63, 233, 255, 0.12);
+  transition: transform 120ms ease, border-color 120ms ease;
+}
+
 .three-d-shell-skip:hover,
 .three-d-shell-exit:hover,
-.three-d-shell-panel-exit:hover {
+.three-d-shell-panel-exit:hover,
+.three-d-shell-menu-toggle:hover {
   transform: translateY(-1px);
   border-color: rgba(255, 138, 91, 0.82);
+}
+
+.three-d-shell-menu-toggle:hover {
+  border-color: rgba(63, 233, 255, 0.72);
+}
+
+.three-d-escape-menu-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 76;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+}
+
+.three-d-escape-menu-backdrop {
+  position: absolute;
+  inset: 0;
+  border: 0;
+  padding: 0;
+  background: rgba(2, 6, 12, 0.72);
+  backdrop-filter: blur(4px);
+  cursor: pointer;
+}
+
+.three-d-escape-menu-panel {
+  position: relative;
+  z-index: 1;
+  width: min(760px, calc(100vw - 24px));
+  max-height: min(640px, calc(100vh - 24px));
+  overflow: auto;
+  display: grid;
+  gap: 16px;
+  padding: 18px;
+  border: 1px solid rgba(87, 243, 255, 0.34);
+  border-radius: 12px;
+  background: rgba(5, 11, 20, 0.96);
+  color: #effcff;
+  box-shadow: 0 28px 64px rgba(0, 0, 0, 0.56), 0 0 30px rgba(63, 233, 255, 0.1);
+}
+
+.three-d-escape-menu-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  align-items: start;
+}
+
+.three-d-escape-menu-title-block {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.three-d-escape-menu-title-block h2,
+.three-d-escape-menu-copy h3 {
+  margin: 0;
+  font-family: "Courier New", monospace;
+  letter-spacing: 0.04em;
+}
+
+.three-d-escape-menu-title-block h2 {
+  font-size: 1.4rem;
+}
+
+.three-d-escape-menu-title-block span,
+.three-d-escape-menu-copy p {
+  color: #8ba0c7;
+}
+
+.three-d-escape-menu-eyebrow {
+  margin: 0;
+  color: #73ff4c;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  font-size: 0.72rem;
+}
+
+.three-d-escape-menu-close {
+  min-width: 40px;
+  min-height: 40px;
+  border: 1px solid rgba(87, 243, 255, 0.24);
+  border-radius: 12px;
+  padding: 0;
+  background: rgba(4, 10, 22, 0.86);
+  color: #dffbff;
+  font-size: 1.5rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.three-d-escape-menu-tabs {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.three-d-escape-menu-tab {
+  min-height: 42px;
+  border: 1px solid rgba(87, 243, 255, 0.18);
+  border-radius: 12px;
+  padding: 10px 12px;
+  background: rgba(4, 10, 22, 0.88);
+  color: #cfe7ff;
+  cursor: pointer;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-size: 0.76rem;
+  font-weight: 800;
+}
+
+.three-d-escape-menu-tab-active {
+  border-color: rgba(115, 255, 76, 0.36);
+  background: linear-gradient(135deg, rgba(115, 255, 76, 0.18), rgba(63, 233, 255, 0.08));
+  color: #f4ffea;
+  box-shadow: 0 0 18px rgba(115, 255, 76, 0.08);
+}
+
+.three-d-escape-menu-body {
+  display: grid;
+  gap: 16px;
+}
+
+.three-d-escape-menu-copy {
+  display: grid;
+  gap: 6px;
+}
+
+.three-d-escape-menu-copy h3 {
+  font-size: 1.1rem;
+}
+
+.three-d-escape-menu-copy p {
+  font-size: 0.94rem;
+}
+
+.three-d-escape-menu-grid {
+  display: grid;
+  gap: 10px;
+}
+
+.three-d-escape-menu-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 14px;
+  min-height: 52px;
+  padding: 12px 14px;
+  border: 1px solid rgba(87, 243, 255, 0.16);
+  border-radius: 12px;
+  background: rgba(8, 15, 28, 0.82);
+}
+
+.three-d-escape-menu-row span {
+  color: #8ba0c7;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 0.74rem;
+}
+
+.three-d-escape-menu-row strong {
+  color: #effcff;
+  font-size: 0.92rem;
+  text-align: right;
+}
+
+.three-d-escape-menu-stack {
+  display: grid;
+  gap: 10px;
+}
+
+.three-d-escape-menu-control-row,
+.three-d-escape-menu-toggle-row {
+  min-height: 46px;
+  display: grid;
+  gap: 10px;
+  align-items: center;
+  padding: 10px 12px;
+  border: 1px solid rgba(87, 243, 255, 0.16);
+  border-radius: 12px;
+  background: rgba(8, 15, 28, 0.82);
+}
+
+.three-d-escape-menu-control-row {
+  grid-template-columns: 132px minmax(0, 1fr) 64px;
+}
+
+.three-d-escape-menu-toggle-row {
+  grid-template-columns: auto minmax(0, 1fr);
+  cursor: pointer;
+}
+
+.three-d-escape-menu-control-row span,
+.three-d-escape-menu-toggle-row span {
+  color: #cfe7ff;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.three-d-escape-menu-control-row strong {
+  color: #d8ffbd;
+  font-family: "Courier New", monospace;
+  font-size: 0.86rem;
+  text-align: right;
+}
+
+.three-d-escape-menu-control-row input[type="range"] {
+  width: 100%;
+  accent-color: #73ff4c;
+}
+
+.three-d-escape-menu-toggle-row input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  accent-color: #73ff4c;
+}
+
+.three-d-escape-menu-avatar-grid {
+  display: grid;
+  grid-template-columns: minmax(180px, 0.42fr) minmax(0, 0.58fr);
+  gap: 12px;
+  align-items: stretch;
+}
+
+.three-d-escape-menu-avatar-preview {
+  min-height: 244px;
+  overflow: hidden;
+  border: 1px solid rgba(87, 243, 255, 0.18);
+  border-radius: 12px;
+  background:
+    linear-gradient(rgba(255, 255, 255, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.025) 1px, transparent 1px),
+    linear-gradient(150deg, rgba(8, 15, 28, 0.94), rgba(3, 8, 18, 0.96));
+  background-size: 100% 18px, 18px 100%, auto;
+}
+
+.three-d-escape-menu-avatar-control {
+  min-height: 46px;
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+  padding: 10px 12px;
+  border: 1px solid rgba(87, 243, 255, 0.16);
+  border-radius: 12px;
+  background: rgba(8, 15, 28, 0.82);
+}
+
+.three-d-escape-menu-avatar-control > span {
+  color: #cfe7ff;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.three-d-escape-menu-swatch-grid {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(24px, 1fr));
+  gap: 8px;
+  min-width: 0;
+}
+
+.three-d-escape-menu-swatch {
+  --avatar-swatch-color: #57f3ff;
+  min-width: 24px;
+  height: 28px;
+  border: 1px solid rgba(239, 252, 255, 0.2);
+  border-radius: 8px;
+  padding: 0;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.22), transparent 42%),
+    var(--avatar-swatch-color);
+  cursor: pointer;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.18);
+}
+
+.three-d-escape-menu-swatch-active {
+  border-color: rgba(115, 255, 76, 0.78);
+  box-shadow: 0 0 0 2px rgba(115, 255, 76, 0.16), 0 0 16px rgba(115, 255, 76, 0.1);
+}
+
+.three-d-escape-menu-segmented {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+  min-width: 0;
+}
+
+.three-d-escape-menu-segment {
+  min-height: 32px;
+  border: 1px solid rgba(87, 243, 255, 0.18);
+  border-radius: 8px;
+  padding: 6px 8px;
+  overflow: hidden;
+  background: rgba(4, 10, 22, 0.88);
+  color: #cfe7ff;
+  cursor: pointer;
+  font-size: 0.7rem;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.three-d-escape-menu-segment-active {
+  border-color: rgba(115, 255, 76, 0.48);
+  background: linear-gradient(135deg, rgba(115, 255, 76, 0.18), rgba(63, 233, 255, 0.08));
+  color: #f4ffea;
+}
+
+.three-d-escape-menu-action {
+  min-height: 40px;
+  border: 1px solid rgba(87, 243, 255, 0.2);
+  border-radius: 12px;
+  padding: 8px 12px;
+  background: rgba(4, 10, 22, 0.88);
+  color: #dffbff;
+  cursor: pointer;
+  font-weight: 800;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.three-d-escape-menu-action:hover:not(:disabled) {
+  transform: translateY(-1px);
+  border-color: rgba(87, 243, 255, 0.48);
+}
+
+.three-d-escape-menu-action:disabled {
+  cursor: not-allowed;
+  opacity: 0.48;
+}
+
+.three-d-escape-menu-button-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.three-d-escape-menu-button-grid-3 {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.three-d-escape-menu-note {
+  color: #ffd7cc;
+  font-size: 0.86rem;
+}
+
+.three-d-fps-counter {
+  position: fixed;
+  left: 22px;
+  top: 82px;
+  z-index: 72;
+  min-width: 74px;
+  border: 1px solid rgba(115, 255, 76, 0.34);
+  border-radius: 8px;
+  padding: 8px 10px;
+  background: rgba(5, 12, 24, 0.74);
+  color: #d8ffbd;
+  font-family: "Courier New", monospace;
+  font-size: 0.82rem;
+  pointer-events: none;
+  text-align: center;
 }
 
 .brand-lockup {
@@ -502,7 +916,7 @@ textarea {
   min-width: 0;
   position: relative;
   z-index: 1;
-  flex: 1;
+  flex: 1 1 420px;
 }
 
 .brand-logo-frame {
@@ -802,10 +1216,13 @@ textarea {
   gap: 14px;
   position: relative;
   z-index: 1;
+  flex: 1 1 560px;
+  min-width: 0;
+  margin-left: auto;
 }
 
 .header-pill {
-  min-width: 124px;
+  min-width: 104px;
   min-height: 82px;
   padding: 13px 16px 12px;
   border-radius: 16px;
@@ -816,6 +1233,7 @@ textarea {
   display: grid;
   gap: 7px;
   position: relative;
+  flex: 1 1 104px;
   box-shadow:
     inset 0 0 0 1px rgba(8, 20, 29, 0.9),
     inset 0 1px 0 rgba(117, 226, 255, 0.05);
@@ -850,11 +1268,11 @@ textarea {
 }
 
 .header-pill-zoom {
-  min-width: 154px;
+  min-width: 134px;
 }
 
 .header-pill-opacity {
-  min-width: 170px;
+  min-width: 146px;
   gap: 8px;
 }
 
@@ -1232,7 +1650,98 @@ h2 {
 .user-status {
   display: flex;
   align-items: center;
-  gap: 10px;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 14px;
+}
+
+.roll-name-button {
+  min-height: 34px;
+  border: 1px solid rgba(63, 233, 255, 0.32);
+  border-radius: 12px;
+  padding: 6px 10px;
+  background: rgba(10, 20, 34, 0.86);
+  color: #dffbff;
+  cursor: pointer;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0;
+  line-height: 1;
+  text-transform: uppercase;
+  transition: transform 120ms ease, border-color 120ms ease, box-shadow 120ms ease;
+}
+
+.roll-name-button:hover {
+  transform: translateY(-1px);
+  border-color: rgba(63, 233, 255, 0.58);
+  box-shadow: 0 0 12px rgba(63, 233, 255, 0.12);
+}
+
+.roll-name-wrapper {
+  position: relative;
+}
+
+.roll-name-menu {
+  position: fixed;
+  z-index: 120;
+  width: min(300px, calc(100vw - 24px));
+  max-height: min(340px, calc(100vh - 24px));
+  overflow: auto;
+  padding: 12px;
+  border: 1px solid rgba(63, 233, 255, 0.34);
+  border-radius: 14px;
+  background: rgba(5, 9, 16, 0.98);
+  box-shadow: 0 24px 58px rgba(0, 0, 0, 0.58), 0 0 24px rgba(63, 233, 255, 0.16);
+  scrollbar-color: rgba(63, 233, 255, 0.42) rgba(8, 15, 28, 0.86);
+  scrollbar-width: thin;
+}
+
+.roll-name-menu-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.roll-name-menu-close,
+.roll-name-option {
+  border: 1px solid rgba(87, 119, 180, 0.22);
+  background: rgba(10, 20, 34, 0.86);
+  color: #dffbff;
+  cursor: pointer;
+}
+
+.roll-name-menu-close {
+  width: 28px;
+  height: 28px;
+  border-radius: 9px;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.roll-name-option {
+  display: block;
+  width: 100%;
+  min-height: 36px;
+  margin-top: 6px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  font-weight: 800;
+  letter-spacing: 0;
+  text-align: left;
+}
+
+.roll-name-option:hover,
+.roll-name-menu-close:hover {
+  border-color: rgba(63, 233, 255, 0.58);
+  background: rgba(20, 42, 66, 0.92);
+}
+
+.roll-name-empty {
+  margin: 8px 0 2px;
+  color: var(--text-dim);
+  font-size: 0.88rem;
 }
 
 .ready-bars {
@@ -1530,6 +2039,26 @@ h2 {
 .timer-face-complete .seven-segment-display {
   --segment-color: var(--green-strong);
   --segment-off-color: rgba(105, 166, 88, 0.16);
+}
+
+.timer-value-precision-1 {
+  font-size: 8rem;
+}
+
+.timer-value-precision-2 {
+  font-size: 7rem;
+}
+
+.timer-value-precision-3 {
+  font-size: 6rem;
+}
+
+.timer-value-precision-4 {
+  font-size: 5.2rem;
+}
+
+.timer-value-precision-5 {
+  font-size: 4.6rem;
 }
 
 .timer-subcopy {
@@ -2165,6 +2694,185 @@ h2 {
   gap: 12px;
 }
 
+.soundcloud-panel-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.soundcloud-panel-note {
+  margin: 0;
+  color: var(--text-dim);
+  font-size: 0.94rem;
+}
+
+.soundcloud-mode-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px;
+  border-radius: 999px;
+  border: 1px solid rgba(87, 243, 255, 0.24);
+  background: rgba(7, 13, 26, 0.82);
+}
+
+.soundcloud-mode-button {
+  min-height: 36px;
+  padding: 8px 14px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-dim);
+  font-size: 0.84rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background 160ms ease,
+    color 160ms ease,
+    box-shadow 160ms ease,
+    transform 160ms ease;
+}
+
+.soundcloud-mode-button:hover {
+  color: #f4fdff;
+  transform: translateY(-1px);
+}
+
+.soundcloud-mode-button-active {
+  background: linear-gradient(135deg, rgba(87, 243, 255, 0.28), rgba(138, 110, 255, 0.24));
+  color: #f8fdff;
+  box-shadow: inset 0 0 0 1px rgba(127, 246, 255, 0.26);
+  cursor: default;
+  transform: none;
+}
+
+.soundcloud-dj-table {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(220px, 0.56fr) minmax(0, 1fr);
+  grid-template-areas: "deck-a mixer deck-b";
+  gap: 18px;
+  align-items: start;
+}
+
+.soundcloud-deck-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.soundcloud-deck {
+  min-width: 0;
+}
+
+.soundcloud-deck-a {
+  grid-area: deck-a;
+}
+
+.soundcloud-deck-b {
+  grid-area: deck-b;
+}
+
+.soundcloud-deck .soundcloud-player {
+  height: 100%;
+}
+
+.soundcloud-mixer-panel {
+  grid-area: mixer;
+  display: grid;
+  align-content: start;
+  gap: 10px;
+  padding: 14px 16px;
+  border: 1px solid rgba(87, 243, 255, 0.2);
+  border-radius: 18px;
+  background: rgba(4, 10, 22, 0.72);
+  position: sticky;
+  top: 20px;
+}
+
+.soundcloud-mixer-heading,
+.soundcloud-deck-heading {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  justify-content: space-between;
+  min-width: 0;
+}
+
+.soundcloud-mixer-heading > div,
+.soundcloud-deck-heading > div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.soundcloud-mixer-heading strong,
+.soundcloud-deck-heading strong {
+  color: #f2fbff;
+  line-height: 1.15;
+  overflow-wrap: anywhere;
+}
+
+.soundcloud-mixer-heading > span,
+.soundcloud-deck-status {
+  flex: 0 0 auto;
+  min-height: 28px;
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid rgba(87, 243, 255, 0.18);
+  border-radius: 999px;
+  padding: 4px 9px;
+  background: rgba(3, 8, 18, 0.66);
+  color: #dffbff;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.soundcloud-deck-status-playing {
+  border-color: rgba(99, 255, 180, 0.28);
+  color: #c9ffe2;
+}
+
+.soundcloud-mixer-readout {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+
+.soundcloud-mixer-readout span {
+  min-height: 30px;
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid rgba(87, 243, 255, 0.18);
+  border-radius: 999px;
+  padding: 5px 10px;
+  background: rgba(3, 8, 18, 0.66);
+  color: #dffbff;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.soundcloud-mixer-slider-row {
+  display: grid;
+  grid-template-columns: auto minmax(180px, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+}
+
+.soundcloud-mixer-slider {
+  width: 100%;
+  accent-color: var(--cyan);
+}
+
 .soundcloud-player {
   display: grid;
   grid-template-columns: 110px minmax(240px, 0.4fr) minmax(360px, 0.6fr);
@@ -2179,9 +2887,25 @@ h2 {
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 18px 42px rgba(0, 0, 0, 0.24);
 }
 
+.soundcloud-dj-table .soundcloud-player {
+  grid-template-columns: 1fr;
+}
+
 .soundcloud-error-state {
   border-color: rgba(255, 138, 91, 0.3);
   background: linear-gradient(135deg, rgba(255, 138, 91, 0.08), rgba(8, 15, 28, 0.96));
+}
+
+.soundcloud-deck-card {
+  gap: 16px;
+}
+
+.soundcloud-deck-card-empty {
+  border-color: rgba(87, 119, 180, 0.22);
+  background:
+    linear-gradient(135deg, rgba(87, 119, 180, 0.08), transparent 38%),
+    radial-gradient(circle at 78% 22%, rgba(63, 233, 255, 0.06), transparent 26%),
+    linear-gradient(150deg, rgba(6, 13, 26, 0.96), rgba(9, 16, 30, 0.94));
 }
 
 .soundcloud-artwork {
@@ -2209,16 +2933,58 @@ h2 {
 .soundcloud-player-main {
   display: grid;
   grid-template-columns: minmax(250px, 0.38fr) minmax(360px, 0.62fr) auto;
-  gap: 16px;
+  align-content: start;
+  gap: 14px;
   min-width: 0;
   align-items: start;
   grid-column: 2 / -1;
 }
 
+.soundcloud-widget-panel-main {
+  display: grid;
+  gap: 18px;
+}
+
+.soundcloud-widget-panel-meta {
+  display: grid;
+  gap: 16px;
+}
+
+.soundcloud-widget-panel-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+
+.soundcloud-deck-main {
+  grid-template-columns: 1fr;
+  grid-column: auto;
+  gap: 16px;
+}
+
+.soundcloud-deck-overview {
+  display: grid;
+  grid-template-columns: minmax(112px, 148px) minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.soundcloud-deck-artwork {
+  width: 100%;
+}
+
+.soundcloud-deck-track-row {
+  min-height: 100%;
+  align-content: center;
+}
+
 .soundcloud-track-row {
   display: grid;
-  gap: 10px;
   align-content: start;
+  gap: 14px;
+  align-items: flex-start;
+  min-width: 0;
 }
 
 .soundcloud-track-copy {
@@ -2243,6 +3009,17 @@ h2 {
 .soundcloud-track-copy span,
 .soundcloud-player-note {
   color: var(--text-dim);
+}
+
+.soundcloud-track-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.soundcloud-deck-links-compact {
+  justify-content: flex-start;
 }
 
 .soundcloud-waveform-row {
@@ -2372,6 +3149,69 @@ h2 {
   align-items: end;
 }
 
+.soundcloud-deck-core,
+.soundcloud-deck-utility,
+.soundcloud-deck-advanced {
+  display: grid;
+  gap: 12px;
+}
+
+.soundcloud-deck-transport {
+  grid-template-columns: minmax(0, 1fr) minmax(180px, 240px);
+  align-items: center;
+}
+
+.soundcloud-deck-transport-actions {
+  flex-wrap: wrap;
+}
+
+.soundcloud-deck-trim-row {
+  grid-template-columns: auto minmax(120px, 1fr) auto;
+}
+
+.soundcloud-deck-state-note {
+  min-height: 40px;
+  padding: 10px 12px;
+  border: 1px solid rgba(87, 119, 180, 0.16);
+  border-radius: 12px;
+  background: rgba(3, 8, 18, 0.46);
+}
+
+.soundcloud-deck-advanced {
+  padding: 14px;
+  border: 1px solid rgba(87, 243, 255, 0.14);
+  border-radius: 16px;
+  background: rgba(3, 8, 18, 0.42);
+}
+
+.soundcloud-deck-advanced-blocked {
+  border-color: rgba(87, 119, 180, 0.16);
+  background: rgba(4, 10, 22, 0.5);
+}
+
+.soundcloud-deck-advanced-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+  color: #9ab1d2;
+  font-size: 0.74rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.soundcloud-deck-advanced-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(240px, 0.9fr);
+  gap: 12px;
+  align-items: start;
+}
+
+.soundcloud-deck-grid-shell {
+  grid-column: 1 / -1;
+}
+
 .soundcloud-select-wrap {
   display: grid;
   gap: 8px;
@@ -2448,6 +3288,416 @@ h2 {
   opacity: 0.48;
 }
 
+.soundcloud-cue-strip {
+  display: grid;
+  gap: 10px;
+  padding: 12px 14px;
+  border: 1px solid rgba(87, 243, 255, 0.18);
+  border-radius: 16px;
+  background: rgba(3, 8, 18, 0.7);
+}
+
+.soundcloud-cue-strip-header {
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+  min-width: 0;
+}
+
+.soundcloud-cue-strip-feedback {
+  min-width: 0;
+  color: #b5c7e6;
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.soundcloud-cue-strip-blocked .soundcloud-cue-strip-feedback {
+  color: #ffd7cc;
+}
+
+.soundcloud-cue-set-button {
+  min-width: 118px;
+}
+
+.soundcloud-cue-set-button-active {
+  border-color: rgba(115, 255, 76, 0.42);
+  background: linear-gradient(135deg, rgba(115, 255, 76, 0.18), rgba(99, 255, 180, 0.12));
+  box-shadow: 0 0 16px rgba(115, 255, 76, 0.1);
+}
+
+.soundcloud-cue-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.soundcloud-cue-pad {
+  min-height: 54px;
+  display: grid;
+  align-content: center;
+  justify-items: start;
+  gap: 2px;
+  padding: 8px 10px;
+  border: 1px solid rgba(87, 243, 255, 0.2);
+  border-radius: 12px;
+  background: rgba(4, 10, 22, 0.86);
+  color: #eaffff;
+  text-align: left;
+  cursor: pointer;
+  transition: transform 120ms ease, border-color 120ms ease, box-shadow 120ms ease, background 120ms ease;
+}
+
+.soundcloud-cue-pad:hover {
+  transform: translateY(-1px);
+  border-color: rgba(87, 243, 255, 0.4);
+  box-shadow: 0 0 12px rgba(63, 233, 255, 0.08);
+}
+
+.soundcloud-cue-pad:focus-visible,
+.soundcloud-control-button:focus-visible,
+.soundcloud-open-link:focus-visible,
+.soundcloud-select:focus-visible,
+.soundcloud-volume-slider:focus-visible,
+.soundcloud-mixer-slider:focus-visible {
+  outline: 2px solid rgba(99, 255, 180, 0.52);
+  outline-offset: 2px;
+}
+
+.soundcloud-cue-pad-empty {
+  border-color: rgba(87, 119, 180, 0.22);
+  background: rgba(4, 10, 22, 0.78);
+  color: #b7c5de;
+}
+
+.soundcloud-cue-pad-saved {
+  border-color: rgba(115, 255, 76, 0.34);
+  background: linear-gradient(135deg, rgba(115, 255, 76, 0.1), rgba(4, 10, 22, 0.92));
+}
+
+.soundcloud-cue-pad-setting {
+  box-shadow: inset 0 0 0 1px rgba(115, 255, 76, 0.08);
+}
+
+.soundcloud-cue-pad-editing {
+  box-shadow: inset 0 0 0 1px rgba(63, 233, 255, 0.08);
+}
+
+.soundcloud-cue-pad-selected {
+  border-color: rgba(63, 233, 255, 0.58);
+  background: linear-gradient(135deg, rgba(63, 233, 255, 0.16), rgba(4, 10, 22, 0.92));
+  box-shadow: 0 0 18px rgba(63, 233, 255, 0.12);
+}
+
+.soundcloud-cue-pad-blocked,
+.soundcloud-cue-pad:disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
+  transform: none;
+  box-shadow: none;
+}
+
+.soundcloud-cue-pad-id {
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #84a0c6;
+}
+
+.soundcloud-cue-pad-label {
+  min-width: 0;
+  font-size: 0.82rem;
+  font-weight: 800;
+  letter-spacing: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.soundcloud-cue-pad-saved .soundcloud-cue-pad-label {
+  color: #d8ffbd;
+}
+
+.soundcloud-cue-pad-empty .soundcloud-cue-pad-label {
+  color: #b7c5de;
+}
+
+.soundcloud-cue-pad-blocked .soundcloud-cue-pad-label {
+  color: #ffd7cc;
+}
+
+.soundcloud-seek-strip {
+  display: grid;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid rgba(87, 243, 255, 0.16);
+  border-radius: 12px;
+  background: rgba(3, 8, 18, 0.6);
+}
+
+.soundcloud-seek-strip-editing {
+  border-color: rgba(115, 255, 76, 0.28);
+  background: rgba(6, 18, 16, 0.62);
+}
+
+.soundcloud-seek-strip-disabled {
+  opacity: 0.72;
+}
+
+.soundcloud-seek-strip-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  color: #9ab1d2;
+  font-size: 0.68rem;
+  font-weight: 900;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.soundcloud-seek-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(42px, 1fr));
+  gap: 6px;
+}
+
+.soundcloud-seek-button {
+  min-width: 0;
+  padding-inline: 7px;
+  font-size: 0.68rem;
+}
+
+.soundcloud-grid-feasibility {
+  display: grid;
+  gap: 9px;
+  padding: 10px 12px;
+  border: 1px solid rgba(255, 178, 31, 0.24);
+  border-radius: 12px;
+  background: rgba(16, 13, 8, 0.48);
+}
+
+.soundcloud-grid-feasibility-bursting {
+  border-color: rgba(115, 255, 76, 0.36);
+  box-shadow: 0 0 16px rgba(115, 255, 76, 0.08);
+}
+
+.soundcloud-grid-controller {
+  min-width: 0;
+}
+
+.soundcloud-grid-controller-locked {
+  border-color: rgba(255, 178, 31, 0.38);
+}
+
+.soundcloud-grid-controller-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: flex-start;
+  min-width: 0;
+}
+
+.soundcloud-grid-controller-heading > div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.soundcloud-grid-controller-heading strong {
+  color: #fff4ce;
+  line-height: 1.15;
+}
+
+.soundcloud-grid-controller-heading > span,
+.soundcloud-grid-readout {
+  min-height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(255, 178, 31, 0.22);
+  border-radius: 999px;
+  padding: 5px 9px;
+  background: rgba(4, 10, 22, 0.74);
+  color: #ffe2a1;
+  font-size: 0.7rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.soundcloud-grid-controller-heading > .soundcloud-grid-status-ready {
+  border-color: rgba(115, 255, 76, 0.28);
+  color: #d8ffbd;
+}
+
+.soundcloud-grid-settings-row {
+  display: grid;
+  grid-template-columns: repeat(9, minmax(0, 1fr));
+  gap: 6px;
+  align-items: center;
+  padding: 6px;
+  border: 1px solid rgba(255, 178, 31, 0.18);
+  border-radius: 10px;
+  background: rgba(3, 8, 18, 0.56);
+}
+
+.soundcloud-grid-setting-button {
+  min-height: 34px;
+  min-width: 0;
+  padding: 6px 7px;
+  overflow: hidden;
+  font-size: 0.58rem;
+  letter-spacing: 0.06em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.soundcloud-grid-burst-button {
+  border-color: rgba(255, 178, 31, 0.38);
+  background: linear-gradient(135deg, rgba(255, 178, 31, 0.2), rgba(4, 10, 22, 0.9));
+}
+
+.soundcloud-grid-mode-button-active {
+  border-color: rgba(63, 233, 255, 0.5);
+  color: #c9fbff;
+  background: linear-gradient(135deg, rgba(63, 233, 255, 0.22), rgba(4, 10, 22, 0.92));
+}
+
+.soundcloud-grid-lock-button-active {
+  border-color: rgba(255, 178, 31, 0.52);
+  color: #fff4ce;
+}
+
+.soundcloud-grid-mute-button-active {
+  border-color: rgba(255, 110, 150, 0.46);
+  color: #ffd7e3;
+}
+
+.soundcloud-grid-pad-matrix {
+  display: grid;
+  grid-template-columns: repeat(8, minmax(0, 1fr));
+  gap: 4px;
+  padding: 6px;
+  border: 1px solid rgba(87, 243, 255, 0.14);
+  border-radius: 10px;
+  background:
+    linear-gradient(rgba(255, 255, 255, 0.025) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.018) 1px, transparent 1px),
+    rgba(3, 8, 18, 0.62);
+  background-size: 100% 16px, 16px 100%, auto;
+}
+
+.soundcloud-grid-pad-matrix-empty {
+  border-color: rgba(255, 178, 31, 0.18);
+}
+
+.soundcloud-grid-pad {
+  min-width: 0;
+  min-height: 38px;
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  gap: 1px;
+  padding: 5px 3px;
+  border: 1px solid rgba(87, 243, 255, 0.18);
+  border-radius: 8px;
+  background: rgba(4, 10, 22, 0.86);
+  color: #eaffff;
+  cursor: pointer;
+  transition: transform 120ms ease, border-color 120ms ease, box-shadow 120ms ease, background 120ms ease;
+}
+
+.soundcloud-grid-pad:hover:not(:disabled) {
+  transform: translateY(-1px);
+  border-color: rgba(87, 243, 255, 0.42);
+  box-shadow: 0 0 12px rgba(63, 233, 255, 0.08);
+}
+
+.soundcloud-grid-pad:focus-visible {
+  outline: 2px solid rgba(99, 255, 180, 0.52);
+  outline-offset: 2px;
+}
+
+.soundcloud-grid-pad-ready {
+  border-color: rgba(63, 233, 255, 0.26);
+  background: linear-gradient(135deg, rgba(63, 233, 255, 0.08), rgba(4, 10, 22, 0.9));
+}
+
+.soundcloud-grid-pad-blocked,
+.soundcloud-grid-pad:disabled {
+  cursor: not-allowed;
+  opacity: 0.48;
+  transform: none;
+  box-shadow: none;
+}
+
+.soundcloud-grid-pad-last {
+  border-color: rgba(115, 255, 76, 0.64);
+  background: linear-gradient(135deg, rgba(115, 255, 76, 0.2), rgba(4, 10, 22, 0.92));
+  box-shadow: 0 0 16px rgba(115, 255, 76, 0.16);
+}
+
+.soundcloud-grid-pad-id {
+  color: #fff4ce;
+  font-size: 0.7rem;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  line-height: 1;
+}
+
+.soundcloud-grid-pad-time {
+  max-width: 100%;
+  overflow: hidden;
+  color: #90a6c8;
+  font-size: 0.52rem;
+  font-weight: 900;
+  letter-spacing: 0;
+  line-height: 1.05;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.soundcloud-grid-pad-ready .soundcloud-grid-pad-time,
+.soundcloud-grid-pad-last .soundcloud-grid-pad-time {
+  color: #d8ffbd;
+}
+
+.soundcloud-grid-readout-row {
+  display: grid;
+  grid-template-columns: minmax(112px, 1.4fr) repeat(6, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.soundcloud-grid-readout-row .soundcloud-grid-readout {
+  min-width: 0;
+  overflow: hidden;
+  padding-inline: 7px;
+  text-overflow: ellipsis;
+}
+
+.soundcloud-grid-readout-warn {
+  border-color: rgba(255, 110, 150, 0.36);
+  color: #ffd7e3;
+}
+
+.soundcloud-aux-widget-shell {
+  position: absolute;
+  width: 320px;
+  height: 166px;
+  overflow: hidden;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateX(-220vw);
+}
+
 .soundcloud-player-note,
 .soundcloud-help {
   margin: 0;
@@ -2484,6 +3734,10 @@ h2 {
   opacity: 1;
   pointer-events: auto;
   transform: none;
+}
+
+.soundcloud-widget-shell-inline {
+  margin-top: 0;
 }
 
 .soundcloud-widget-frame {
@@ -2725,6 +3979,33 @@ h2 {
   accent-color: #3fe9ff;
 }
 
+.admin-stepper-panel {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  justify-content: space-between;
+  color: #dce8ff;
+}
+
+.admin-stepper-panel p:not(.meta-label) {
+  color: var(--text-dim);
+  font-size: 0.92rem;
+}
+
+.admin-stepper-controls {
+  display: flex;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+
+.admin-stepper-button {
+  min-width: 48px;
+  min-height: 44px;
+  padding: 8px 12px;
+  font-size: 1.3rem;
+  line-height: 1;
+}
+
 .admin-control-heading {
   display: flex;
   justify-content: space-between;
@@ -2869,6 +4150,28 @@ h2 {
     grid-column: auto;
   }
 
+  .soundcloud-dj-table {
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      "deck-a"
+      "mixer"
+      "deck-b";
+  }
+
+  .soundcloud-mixer-panel {
+    position: static;
+  }
+
+  .soundcloud-deck-overview,
+  .soundcloud-deck-transport,
+  .soundcloud-deck-advanced-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .soundcloud-cue-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
   .hold-button {
     grid-template-columns: 112px 1fr 126px;
   }
@@ -2877,6 +4180,13 @@ h2 {
     grid-template-columns: auto minmax(48px, 0.28fr) 1fr auto;
     gap: 12px;
     padding: 0 18px 0 22px;
+  }
+}
+
+@media (max-width: 1500px) {
+  .header-meta {
+    justify-content: flex-start;
+    margin-left: 0;
   }
 }
 
@@ -2901,6 +4211,10 @@ h2 {
       linear-gradient(90deg, rgba(4, 12, 20, 0.8), rgba(4, 11, 21, 0.24) 46%, rgba(4, 11, 20, 0.88));
   }
 
+  .soundcloud-deck-grid {
+    grid-template-columns: 1fr;
+  }
+
   .app-header {
     flex-direction: column;
     align-items: stretch;
@@ -2909,10 +4223,14 @@ h2 {
 
   .header-meta {
     justify-content: flex-start;
+    flex: none;
+    width: 100%;
+    margin-left: 0;
   }
 
   .brand-lockup {
     align-items: flex-start;
+    flex: none;
   }
 
   .brand-title-shell {
@@ -2957,6 +4275,10 @@ h2 {
   .soundcloud-player-main,
   .soundcloud-controls {
     grid-template-columns: 1fr;
+  }
+
+  .soundcloud-deck-advanced-header {
+    display: grid;
   }
 }
 
@@ -3039,6 +4361,26 @@ h2 {
     --segment-length: 2.1rem;
   }
 
+  .timer-value-precision-1 {
+    font-size: 4rem;
+  }
+
+  .timer-value-precision-2 {
+    font-size: 3.4rem;
+  }
+
+  .timer-value-precision-3 {
+    font-size: 3rem;
+  }
+
+  .timer-value-precision-4 {
+    font-size: 2.65rem;
+  }
+
+  .timer-value-precision-5 {
+    font-size: 2.35rem;
+  }
+
   .hold-button {
     grid-template-columns: 1fr;
     justify-items: center;
@@ -3079,7 +4421,8 @@ h2 {
     grid-template-columns: 1fr;
   }
 
-  .soundcloud-player-main {
+  .soundcloud-player-main,
+  .soundcloud-dj-table .soundcloud-player {
     grid-template-columns: 1fr;
   }
 
@@ -3087,7 +4430,60 @@ h2 {
     width: min(100%, 180px);
   }
 
-  .soundcloud-track-row,
+  .soundcloud-deck-overview {
+    justify-items: start;
+  }
+
+  .soundcloud-cue-strip-header {
+    grid-template-columns: 1fr;
+  }
+
+  .soundcloud-cue-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .soundcloud-seek-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .soundcloud-grid-controller-heading {
+    grid-template-columns: 1fr;
+  }
+
+  .soundcloud-grid-controller-heading {
+    display: grid;
+  }
+
+  .soundcloud-grid-settings-row {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .soundcloud-grid-pad-matrix {
+    gap: 4px;
+    padding: 6px;
+  }
+
+  .soundcloud-grid-pad {
+    min-height: 36px;
+    padding-inline: 2px;
+  }
+
+  .soundcloud-grid-pad-id {
+    font-size: 0.62rem;
+  }
+
+  .soundcloud-grid-pad-time {
+    font-size: 0.46rem;
+  }
+
+  .soundcloud-grid-readout-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .soundcloud-cue-set-button {
+    width: 100%;
+  }
+
   .soundcloud-controls,
   .soundcloud-actions {
     align-items: stretch;
@@ -3100,5 +4496,39 @@ h2 {
 
   .soundcloud-control-button {
     flex: 1;
+  }
+
+  .three-d-escape-menu-header {
+    flex-direction: column;
+  }
+
+  .three-d-escape-menu-tabs {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .three-d-escape-menu-row {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .three-d-escape-menu-row strong {
+    text-align: left;
+  }
+
+  .three-d-escape-menu-avatar-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .three-d-escape-menu-avatar-preview {
+    min-height: 210px;
+  }
+
+  .three-d-escape-menu-control-row,
+  .three-d-escape-menu-avatar-control {
+    grid-template-columns: 1fr;
+  }
+
+  .three-d-escape-menu-swatch-grid {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
   }
 }

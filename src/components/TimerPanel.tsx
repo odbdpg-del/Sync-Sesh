@@ -11,6 +11,7 @@ interface TimerPanelProps {
   state: DabSyncState;
   lobbyState: DerivedLobbyState;
   countdownDisplay: CountdownDisplayState;
+  readyHotkeyEnabled?: boolean;
   onStartReadyHold: () => void;
   onEndReadyHold: () => void;
   onSetTimerDuration: (durationSeconds: number) => void;
@@ -113,6 +114,7 @@ export function TimerPanel({
   state,
   lobbyState,
   countdownDisplay,
+  readyHotkeyEnabled = true,
   onStartReadyHold,
   onEndReadyHold,
   onSetTimerDuration,
@@ -126,6 +128,7 @@ export function TimerPanel({
   const timerEditDisabledReason = getTimerEditDisabledReason(lobbyState, state.session.phase, state.syncStatus);
   const { isHolding, bindHoldButton } = useReadyHold({
     enabled: lobbyState.canHoldToReady && syncReady,
+    keyboardEnabled: readyHotkeyEnabled,
     onHoldStart: onStartReadyHold,
     onHoldEnd: onEndReadyHold,
   });
@@ -140,6 +143,7 @@ export function TimerPanel({
     state.session.phase === "completed" ? "Complete" : lobbyState.isArmed ? "Armed" : state.session.phase === "precount" ? "Launch" : "Standby";
   const displayRoundNumber = getDisplayRoundNumber(state.session);
   const showsSegmentDisplay = isSegmentDisplayValue(countdownDisplay.headline);
+  const countdownPrecisionDigits = state.session.phase === "countdown" ? state.timerConfig.countdownPrecisionDigits : 0;
 
   return (
     <section className={`panel timer-panel timer-shell phase-shell-${state.session.phase} ${isCelebrating ? "round-complete-burst" : ""}`}>
@@ -173,7 +177,7 @@ export function TimerPanel({
           {showsSegmentDisplay ? (
             <SevenSegmentDisplay value={countdownDisplay.headline} className="timer-value timer-value-segmented" />
           ) : (
-            <span className="timer-value timer-value-text">{countdownDisplay.headline}</span>
+            <span className={`timer-value timer-value-text timer-value-precision-${countdownPrecisionDigits}`}>{countdownDisplay.headline}</span>
           )}
           <span className="timer-subcopy">{countdownDisplay.subheadline}</span>
           {countdownDisplay.accentText ? <span className="timer-accent">{countdownDisplay.accentText}</span> : null}

@@ -42,7 +42,7 @@ export function LevelExitDoor({
   onActivateExit,
 }: {
   exit: LevelExitConfig;
-  onActivateExit: (targetLevelId: string) => void;
+  onActivateExit: (exit: LevelExitConfig) => void;
 }) {
   const groupRef = useRef<React.ElementRef<"group">>(null);
   const labelCanvas = useMemo(() => createDoorLabelCanvas(exit.label), [exit.label]);
@@ -51,8 +51,8 @@ export function LevelExitDoor({
     label: exit.label,
     objectRef: groupRef,
     modes: ["clickable" as const],
-    onActivate: () => onActivateExit(exit.targetLevelId),
-  }), [exit.id, exit.label, exit.targetLevelId, onActivateExit]);
+    onActivate: () => onActivateExit(exit),
+  }), [exit, onActivateExit]);
 
   useRegisterInteractable(registration);
 

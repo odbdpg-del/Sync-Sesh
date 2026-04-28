@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 interface UseReadyHoldOptions {
   enabled: boolean;
+  keyboardEnabled?: boolean;
   onHoldStart: () => void;
   onHoldEnd: () => void;
 }
@@ -15,7 +16,7 @@ function isInteractiveTarget(target: EventTarget | null) {
   return tagName === "input" || tagName === "textarea" || tagName === "select" || target.isContentEditable;
 }
 
-export function useReadyHold({ enabled, onHoldStart, onHoldEnd }: UseReadyHoldOptions) {
+export function useReadyHold({ enabled, keyboardEnabled = true, onHoldStart, onHoldEnd }: UseReadyHoldOptions) {
   const [isHolding, setIsHolding] = useState(false);
   const activeSourcesRef = useRef(new Set<"keyboard" | "pointer">());
 
@@ -27,7 +28,20 @@ export function useReadyHold({ enabled, onHoldStart, onHoldEnd }: UseReadyHoldOp
   }, [enabled]);
 
   useEffect(() => {
-    if (!enabled) {
+    if (keyboardEnabled || !activeSourcesRef.current.has("keyboard")) {
+      return;
+    }
+
+    activeSourcesRef.current.delete("keyboard");
+
+    if (activeSourcesRef.current.size === 0) {
+      setIsHolding(false);
+      onHoldEnd();
+    }
+  }, [keyboardEnabled, onHoldEnd]);
+
+  useEffect(() => {
+    if (!enabled || !keyboardEnabled) {
       return;
     }
 
@@ -92,7 +106,7 @@ export function useReadyHold({ enabled, onHoldStart, onHoldEnd }: UseReadyHoldOp
       window.removeEventListener("keyup", handleKeyUp, { capture: true });
       window.removeEventListener("blur", handleBlur);
     };
-  }, [enabled, onHoldEnd, onHoldStart]);
+  }, [enabled, keyboardEnabled, onHoldEnd, onHoldStart]);
 
   const bindHoldButton = useMemo(
     () => ({
