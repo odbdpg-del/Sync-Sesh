@@ -3909,6 +3909,339 @@ h2 {
   cursor: nesw-resize;
 }
 
+.debug-console-window {
+  height: 100%;
+  min-height: 0;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  gap: 8px;
+  color: #dce8ff;
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+}
+
+.debug-console-panel {
+  min-height: 0;
+  display: grid;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid rgba(87, 243, 255, 0.12);
+  border-radius: 10px;
+  background:
+    linear-gradient(180deg, rgba(5, 11, 20, 0.98), rgba(3, 8, 16, 0.98)),
+    linear-gradient(90deg, rgba(63, 233, 255, 0.025), rgba(161, 78, 255, 0.025));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.02);
+}
+
+.debug-console-log-panel {
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+.debug-console-panel-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.debug-console-panel-heading h2 {
+  margin: 0;
+  color: #effcff;
+  font-size: 0.72rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.debug-console-panel-heading span,
+.debug-console-snapshot-label,
+.debug-console-command span {
+  color: #8fa2c1;
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.debug-console-snapshot-toggle {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.debug-console-snapshot-toggle-label {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.debug-console-snapshot-toggle-label strong {
+  color: #effcff;
+  font-size: 0.72rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.debug-console-snapshot-toggle-label small,
+.debug-console-snapshot-toggle-meta {
+  color: #8fa2c1;
+  font-size: 0.68rem;
+  font-family: var(--font-mono);
+}
+
+.debug-console-snapshot-grid {
+  min-height: 0;
+  overflow: auto;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  padding-right: 4px;
+}
+
+.debug-console-snapshot-row {
+  display: grid;
+  gap: 3px;
+  padding: 6px 8px;
+  border: 1px solid rgba(87, 243, 255, 0.08);
+  border-radius: 8px;
+  background: rgba(4, 10, 22, 0.58);
+}
+
+.debug-console-snapshot-value,
+.debug-console-log-message {
+  color: #effcff;
+  font-size: 0.78rem;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.debug-console-log-status {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+
+.debug-console-live-indicator,
+.debug-console-log-filter {
+  border: 1px solid rgba(87, 243, 255, 0.14);
+  border-radius: 999px;
+  padding: 2px 7px;
+  background: rgba(6, 14, 24, 0.9);
+  color: #b9c8e4;
+  font-size: 0.66rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.debug-console-live-indicator-live {
+  color: #73ff4c;
+  border-color: rgba(115, 255, 76, 0.22);
+}
+
+.debug-console-live-indicator-paused {
+  color: #ffb21f;
+  border-color: rgba(255, 178, 31, 0.22);
+}
+
+.debug-console-log-list {
+  min-height: 0;
+  overflow: auto;
+  display: grid;
+  align-content: start;
+  gap: 4px;
+  padding-right: 4px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(87, 243, 255, 0.34) rgba(4, 10, 22, 0.36);
+}
+
+.debug-console-log-line {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 110px minmax(0, 1fr);
+  gap: 8px;
+  align-items: start;
+  padding: 1px 0;
+  border-bottom: 1px solid rgba(87, 243, 255, 0.04);
+}
+
+.debug-console-log-terminal-copy {
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: baseline;
+}
+
+.debug-console-log-time,
+.debug-console-log-tag {
+  font-size: 0.72rem;
+  line-height: 1.35;
+}
+
+.debug-console-log-time {
+  color: #7f90b2;
+  white-space: nowrap;
+}
+
+.debug-console-log-tag {
+  color: #3fe9ff;
+  flex: 0 0 auto;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.debug-console-log-detail,
+.debug-console-log-empty {
+  color: #93a7c8;
+  font-size: 0.76rem;
+  line-height: 1.35;
+  white-space: pre-wrap;
+}
+
+.debug-console-log-prompt,
+.debug-console-log-command {
+  font-size: 0.78rem;
+  line-height: 1.35;
+}
+
+.debug-console-log-prompt {
+  color: #73ff4c;
+}
+
+.debug-console-log-command {
+  color: #effcff;
+  overflow-wrap: anywhere;
+}
+
+.debug-console-log-level-warn .debug-console-log-message,
+.debug-console-log-level-warn .debug-console-log-detail {
+  color: #ffd37d;
+}
+
+.debug-console-log-level-error .debug-console-log-message,
+.debug-console-log-level-error .debug-console-log-detail {
+  color: #ffb2c5;
+}
+
+.debug-console-log-tag-auth {
+  color: #ffb21f;
+}
+
+.debug-console-log-tag-sdk {
+  color: #57f3ff;
+}
+
+.debug-console-log-tag-profile {
+  color: #73ff4c;
+}
+
+.debug-console-log-tag-sync {
+  color: #89a6ff;
+}
+
+.debug-console-log-tag-network {
+  color: #ffd37d;
+}
+
+.debug-console-log-tag-ui {
+  color: #d8b6ff;
+}
+
+.debug-console-log-tag-command {
+  color: #ff8a5b;
+}
+
+.debug-console-command {
+  display: grid;
+  gap: 4px;
+}
+
+.debug-console-command-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.debug-console-command-prompt {
+  color: #73ff4c;
+  font-size: 0.86rem;
+}
+
+.debug-console-command input {
+  width: 100%;
+  min-height: 38px;
+  border: 1px solid rgba(87, 243, 255, 0.14);
+  border-radius: 8px;
+  padding: 8px 10px;
+  background: rgba(4, 10, 22, 0.94);
+  color: #effcff;
+  font-family: inherit;
+}
+
+.debug-console-command input:focus-visible {
+  outline: 1px solid rgba(87, 243, 255, 0.7);
+  outline-offset: 0;
+  border-color: rgba(87, 243, 255, 0.6);
+}
+
+.debug-console-command-submit {
+  min-width: 70px;
+  min-height: 38px;
+  border: 1px solid rgba(87, 243, 255, 0.18);
+  border-radius: 8px;
+  padding: 8px 12px;
+  background: linear-gradient(180deg, rgba(7, 18, 31, 0.98), rgba(4, 10, 22, 0.98));
+  color: #e9fbff;
+  font-family: inherit;
+  cursor: pointer;
+  transition: transform 120ms ease, border-color 120ms ease, box-shadow 120ms ease;
+}
+
+.debug-console-command-submit:hover {
+  transform: translateY(-1px);
+  border-color: rgba(87, 243, 255, 0.56);
+  box-shadow: 0 0 16px rgba(63, 233, 255, 0.12);
+}
+
+.debug-console-command input::placeholder {
+  color: #7182a3;
+}
+
+@media (max-width: 640px) {
+  .debug-console-snapshot-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .debug-console-log-line {
+    grid-template-columns: 1fr;
+    gap: 2px;
+  }
+
+  .debug-console-command-row {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .debug-console-command-submit {
+    grid-column: 1 / -1;
+  }
+}
+
 .admin-panel {
   position: fixed;
   top: 24px;

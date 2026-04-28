@@ -17,8 +17,10 @@ For multi-client local sync testing:
 ## Environment variables
 
 ```bash
-VITE_ENABLE_DISCORD_SDK=false
+VITE_ENABLE_DISCORD_SDK=true
 VITE_DISCORD_CLIENT_ID=your_discord_application_id
+VITE_DISCORD_REDIRECT_URI=https://127.0.0.1
+DISCORD_CLIENT_ID=your_discord_application_id
 DISCORD_CLIENT_SECRET=your_discord_client_secret
 DISCORD_REDIRECT_URI=https://127.0.0.1
 VITE_SYNC_MODE=mock
@@ -27,12 +29,42 @@ VITE_SYNC_SESSION_ID=dabsync-room
 ```
 
 Notes:
+
 - `VITE_ENABLE_DISCORD_SDK` defaults to `false` for browser-only local work.
+- `VITE_DISCORD_CLIENT_ID` is read by the frontend Discord Activity runtime.
+- `VITE_DISCORD_REDIRECT_URI` is read by the frontend when it requests authorization from Discord.
+- `DISCORD_CLIENT_ID` and `DISCORD_CLIENT_SECRET` are read by the sync server for OAuth code exchange.
 - `DISCORD_CLIENT_SECRET` is read only by the sync server for OAuth token exchange. Do not expose it publicly.
-- `DISCORD_REDIRECT_URI` should match the placeholder Redirect URI configured in the Discord Developer Portal. Discord’s Activity guide uses `https://127.0.0.1`.
+- `DISCORD_REDIRECT_URI` should match the placeholder Redirect URI configured in the Discord Developer Portal exactly. Discord's Activity guide uses `https://127.0.0.1`.
+- The sync server falls back from `DISCORD_CLIENT_ID` to `VITE_DISCORD_CLIENT_ID`, and from `DISCORD_REDIRECT_URI` to `VITE_DISCORD_REDIRECT_URI`, but production setup should still provide the server-side variables explicitly.
 - Set `VITE_SYNC_MODE=ws` to use the local WebSocket sync server.
 - `VITE_SYNC_SESSION_ID` lets multiple browser windows join the same room.
 - In hosted environments, the frontend now derives the Discord token-exchange endpoint from `VITE_SYNC_SERVER_URL`, so your deployed sync server should be the service that exposes `/api/discord/token`.
+
+Recommended split:
+
+- Frontend Activity env:
+  - `VITE_ENABLE_DISCORD_SDK`
+  - `VITE_DISCORD_CLIENT_ID`
+  - `VITE_DISCORD_REDIRECT_URI`
+  - `VITE_SYNC_SERVER_URL`
+- Sync server env:
+  - `DISCORD_CLIENT_ID`
+  - `DISCORD_CLIENT_SECRET`
+  - `DISCORD_REDIRECT_URI`
+
+## Discord Activity setup
+
+1. Create or open your Discord application in the Discord Developer Portal.
+2. Copy the Discord application ID into both:
+   - `VITE_DISCORD_CLIENT_ID`
+   - `DISCORD_CLIENT_ID`
+3. Add the redirect URI in the Developer Portal exactly as configured in:
+   - `VITE_DISCORD_REDIRECT_URI`
+   - `DISCORD_REDIRECT_URI`
+4. Set `DISCORD_CLIENT_SECRET` only on the sync server.
+5. Make sure the deployed sync server used by `VITE_SYNC_SERVER_URL` exposes `POST /api/discord/token`.
+6. Start the Activity with `VITE_ENABLE_DISCORD_SDK=true`.
 
 ## GitHub Pages legal pages
 

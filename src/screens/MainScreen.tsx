@@ -1,6 +1,7 @@
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AdminPanel } from "../components/AdminPanel";
 import { AppHeader } from "../components/AppHeader";
+import { DebugConsoleWindow } from "../components/DebugConsoleWindow";
 import { LobbyPanel } from "../components/LobbyPanel";
 import { SoundCloudDeckPanel } from "../components/SoundCloudDeckPanel";
 import { type SoundCloudPanelMode } from "../components/SoundCloudModeToggle";
@@ -18,11 +19,14 @@ import type {
 import { useAdminPanelHotkey } from "../hooks/useAdminPanelHotkey";
 import { useAppViewportControls } from "../hooks/useAppViewportControls";
 import { useCountdownDisplay } from "../hooks/useCountdownDisplay";
+import { useDebugConsoleState } from "../hooks/useDebugConsoleState";
+import { useDebugConsoleTrigger } from "../hooks/useDebugConsoleTrigger";
 import { useDabSyncSession } from "../hooks/useDabSyncSession";
 import { useSecretCodeUnlock } from "../hooks/useSecretCodeUnlock";
 import { useSoundCloudGridController } from "../hooks/useSoundCloudGridController";
 import { useSoundCloudPlayer, type SoundCloudAcceptedBpmState } from "../hooks/useSoundCloudPlayer";
 import { useSoundEffects } from "../hooks/useSoundEffects";
+import type { DebugConsoleEventInput, DebugLogCategory } from "../lib/debug/debugConsole";
 import backgroundVideo from "../../media/202587-918431513.mp4";
 
 const RenderingStackSpike = lazy(() =>
@@ -149,7 +153,25 @@ function formatSoundCloudGridBurstLength(milliseconds: number) {
   return milliseconds >= 1000 ? `${milliseconds / 1000}S` : `${milliseconds}MS`;
 }
 
+function getDiscordIdentityBannerMessage(sdkState: ReturnType<typeof useDabSyncSession>["sdkState"]) {
+  if (sdkState.authStage && sdkState.authStage !== "idle" && sdkState.authStage !== "ready" && !sdkState.authError) {
+    return `Discord identity refresh is in progress (${sdkState.authStage.replace(/_/g, " ")}).`;
+  }
+
+  if (sdkState.identitySource === "participant_discord") {
+    return sdkState.authError
+      ? `Using a Discord participant profile for now, but the full identity refresh failed: ${sdkState.authError}`
+      : "Using a Discord participant profile, but full authenticated identity has not completed yet.";
+  }
+
+  return sdkState.authError
+    ? sdkState.authError
+    : "The activity is running, but Discord name/avatar resolution fell back to a local profile.";
+}
+
 export function MainScreen() {
+  const [isDebugConsoleOpen, setIsDebugConsoleOpen] = useState(false);
+  const debugEventHandlerRef = useRef<((event: DebugConsoleEventInput) => void) | undefined>();
   const [isRenderingSpikeOpen, setIsRenderingSpikeOpen] = useState(hasRenderingSpikeParam);
   const [isThreeDModeOpen, setIsThreeDModeOpen] = useState(false);
   const [soundCloudPanelMode, setSoundCloudPanelMode] = useState<SoundCloudPanelMode>("radio");
@@ -166,6 +188,9 @@ export function MainScreen() {
   const previousSoundCloudTrackUrlRef = useRef<Record<SoundCloudDeckId, string | null>>({ A: null, B: null });
   const previousSoundCloudWidgetReadyRef = useRef<Record<SoundCloudDeckId, boolean>>({ A: false, B: false });
   const previousSoundCloudErrorRef = useRef<Record<SoundCloudDeckId, string | null>>({ A: null, B: null });
+  const handleDebugEvent = useCallback((event: DebugConsoleEventInput) => {
+    debugEventHandlerRef.current?.(event);
+  }, []);
   const {
     state,
     lobbyState,
@@ -199,7 +224,120 @@ export function MainScreen() {
     broadcastDawLiveSound,
     pickupStudioGuitar,
     dropStudioGuitar,
-  } = useDabSyncSession();
+  } = useDabSyncSession({
+    onDebugEvent: handleDebugEvent,
+  });
+  const openDebugConsole = useCallback(() => setIsDebugConsoleOpen(true), []);
+  useDebugConsoleTrigger(openDebugConsole);
+  const debugConsoleState = useDebugConsoleState({
+    isOpen: isDebugConsoleOpen,
+    sdkState,
+    syncStatus: state.syncStatus,
+    localProfile: state.localProfile,
+  });
+  useEffect(() => {
+    debugEventHandlerRef.current = debugConsoleState.appendLog;
+
+    return () => {
+      debugEventHandlerRef.current = undefined;
+    };
+  }, [debugConsoleState.appendLog]);
+  const handleDebugConsoleCommand = useCallback((rawCommand: string) => {
+    const normalizedCommand = rawCommand.trim().toLowerCase().replace(/\s+/g, " ");
+    debugConsoleState.appendCommandInput(rawCommand);
+
+    if (normalizedCommand === "hide") {
+      debugConsoleState.appendCommandOutput({
+        level: "info",
+        label: "command:hide",
+        detail: "Closing debug console.",
+      });
+      setIsDebugConsoleOpen(false);
+      return;
+    }
+
+    if (normalizedCommand === "clear") {
+      debugConsoleState.clearLogs();
+      debugConsoleState.appendCommandInput(rawCommand);
+      debugConsoleState.appendCommandOutput({
+        level: "info",
+        label: "command:clear",
+        detail: "Log buffer cleared.",
+      });
+      return;
+    }
+
+    if (normalizedCommand === "help") {
+      debugConsoleState.appendCommandOutput({
+        level: "info",
+        label: "command:help",
+        detail: "Available commands: hide, clear, help, copy, snapshot, filter all, filter auth, filter sdk, filter profile, filter sync, filter network, filter ui, filter command.",
+      });
+      return;
+    }
+
+    if (normalizedCommand === "copy") {
+      const visibleLogText = debugConsoleState.getVisibleLogText();
+
+      void navigator.clipboard
+        .writeText(visibleLogText)
+        .then(() => {
+          debugConsoleState.appendCommandOutput({
+            level: "info",
+            label: "command:copy",
+            detail: "Visible console output copied to clipboard.",
+          });
+        })
+        .catch((error) => {
+          debugConsoleState.appendCommandOutput({
+            level: "error",
+            label: "command:copy:failed",
+            detail: error instanceof Error ? error.message : "Clipboard write failed.",
+          });
+        });
+      return;
+    }
+
+    if (normalizedCommand === "snapshot") {
+      debugConsoleState.appendCommandOutput({
+        level: "info",
+        label: "command:snapshot",
+        detail: debugConsoleState.getSnapshotText(),
+      });
+      return;
+    }
+
+    if (normalizedCommand === "filter all") {
+      debugConsoleState.setActiveFilter("all");
+      debugConsoleState.appendCommandOutput({
+        level: "info",
+        label: "command:filter",
+        detail: "Showing all log categories.",
+      });
+      return;
+    }
+
+    if (normalizedCommand.startsWith("filter ")) {
+      const filterName = normalizedCommand.slice("filter ".length) as DebugLogCategory;
+      const allowedFilters: DebugLogCategory[] = ["auth", "sdk", "profile", "sync", "network", "ui", "command"];
+
+      if (allowedFilters.includes(filterName)) {
+        debugConsoleState.setActiveFilter(filterName);
+        debugConsoleState.appendCommandOutput({
+          level: "info",
+          label: "command:filter",
+          detail: `Showing ${filterName} log events.`,
+        });
+        return;
+      }
+    }
+
+    debugConsoleState.appendCommandOutput({
+      level: "warn",
+      label: "command:unknown",
+      detail: `Unknown command: ${rawCommand}. Available now: filter all, filter auth, filter sdk, filter profile, filter sync, filter network, filter ui, filter command.`,
+    });
+  }, [debugConsoleState]);
   const countdownDisplay = useCountdownDisplay(state);
   const { playCue, playSecretCodeStep } = useSoundEffects(state, lobbyState, countdownDisplay);
   const { isOpen: isAdminOpen, setIsOpen: setIsAdminOpen } = useAdminPanelHotkey(lobbyState.canUseAdminTools);
@@ -731,14 +869,11 @@ export function MainScreen() {
           </div>
         ) : null}
 
-        {sdkState.enabled && (sdkState.authError || sdkState.identitySource === "local") ? (
+        {sdkState.enabled && (sdkState.authError || sdkState.identitySource === "local_fallback" || sdkState.identitySource === "participant_discord") ? (
           <div className="panel sync-banner sync-banner-alert discord-identity-banner">
             <div className="discord-identity-banner-copy">
-              <strong>Discord identity unavailable.</strong>{" "}
-              {sdkState.authError ??
-                (sdkState.authStage && sdkState.authStage !== "ready"
-                  ? `Discord identity refresh is in progress (${sdkState.authStage.replace(/_/g, " ")}).`
-                  : "The activity is running, but Discord name/avatar resolution fell back to a local profile.")}
+              <strong>{sdkState.identitySource === "participant_discord" ? "Discord identity degraded." : "Discord identity unavailable."}</strong>{" "}
+              {getDiscordIdentityBannerMessage(sdkState)}
             </div>
             <button type="button" className="ghost-button discord-identity-retry" onClick={() => void retryDiscordProfile()}>
               Retry Discord Identity
@@ -828,6 +963,15 @@ export function MainScreen() {
         />
 
         <StatusFooter syncStatus={state.syncStatus} sdkState={sdkState} />
+
+        <DebugConsoleWindow
+          isOpen={isDebugConsoleOpen}
+          onClose={() => setIsDebugConsoleOpen(false)}
+          snapshot={debugConsoleState.snapshot}
+          logs={debugConsoleState.visibleLogs}
+          activeFilter={debugConsoleState.activeFilter}
+          onSubmitCommand={handleDebugConsoleCommand}
+        />
 
         {isThreeDModeOpen ? (
           <Suspense fallback={<HiddenWorldLoadingPanel label="Loading 3D world" />}>

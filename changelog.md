@@ -8,6 +8,63 @@ Entries must be in reverse chronological order. New entries go at the top, above
 
 Use a level-two heading for every entry so the editor can fold each change.
 
+## [2344] - 2026-04-28 10:42 - `codex/merge-ui-and-3d-world / Terminal-Style Debug Console`
+
+- Reworked the Discord Activity debug console from a card-style event panel into a denser terminal-style live stream with inline command echoes, collapsed snapshot header, and live versus paused auto-scroll behavior.
+- Added command-store helpers for terminal output formatting plus snapshot/log text export, and expanded the command handler so `hide`, `clear`, `help`, `copy`, `snapshot`, and filter commands all behave like inline console operations.
+- Touched `src/lib/debug/debugConsole.ts`, `src/hooks/useDebugConsoleState.ts`, `src/components/DebugConsoleWindow.tsx`, `src/screens/MainScreen.tsx`, and `src/styles/global.css`.
+- Build/test: `npm.cmd run build` passed.
+
+## [2343] - 2026-04-28 10:14 - `codex/merge-ui-and-3d-world / DAC-5 Filter Commands And Readability`
+
+- Added category filter handling for the debug console so `filter all`, `filter auth`, `filter sdk`, `filter profile`, `filter sync`, `filter network`, `filter ui`, and `filter command` narrow the visible log stream without mutating the underlying buffer.
+- Upgraded the console window with a real command input, category-colored log tags, improved scroll/readability polish, and auto-scroll-to-newest behavior for active debugging sessions.
+- Touched `src/hooks/useDebugConsoleState.ts`, `src/components/DebugConsoleWindow.tsx`, `src/screens/MainScreen.tsx`, `src/styles/global.css`, and `docs/discord-activity-debug-console-vision.md`.
+- Build/test: `npm.cmd run build` passed.
+
+## [2342] - 2026-04-28 10:14 - `codex/merge-ui-and-3d-world / DAC-3 Lifecycle Instrumentation`
+
+- Threaded debug-event callbacks from `MainScreen` through `useDabSyncSession` into the Discord embedded-app bootstrap so the console now captures real SDK, auth, profile, identity, retry, and sync lifecycle events.
+- Added a shared debug-event contract module, instrumented the Discord bootstrap with sanitized stage labels and details, and deduped identity/sync transition logging on the session side.
+- Touched `src/lib/debug/debugConsole.ts`, `src/hooks/useDebugConsoleState.ts`, `src/lib/discord/embeddedApp.ts`, `src/hooks/useDabSyncSession.ts`, `src/screens/MainScreen.tsx`, and `docs/discord-activity-debug-console-vision.md`.
+- Build/test: `npm.cmd run build` passed.
+
+## [2341] - 2026-04-28 10:14 - `codex/merge-ui-and-3d-world / DAC-2 Snapshot And Log Store`
+
+- Replaced the debug console shell placeholders with a live snapshot panel and a capped in-memory log list, including seeded console lifecycle events and a render-only window fed from `MainScreen`.
+- Exported a small Discord debug-config snapshot helper so the console can reuse the real auth-endpoint, redirect, env-flag, and proxy-host resolution logic without duplicating it.
+- Touched `src/hooks/useDebugConsoleState.ts`, `src/lib/discord/embeddedApp.ts`, `src/components/DebugConsoleWindow.tsx`, `src/screens/MainScreen.tsx`, `src/styles/global.css`, and `docs/discord-activity-debug-console-vision.md`.
+- Build/test: `npm.cmd run build` passed.
+
+## [2340] - 2026-04-28 10:02 - `codex/merge-ui-and-3d-world / DAC-1 Debug Console Shell`
+
+- Added a hidden global `console` typed-sequence trigger that mirrors the existing secret-code input safety rules and opens a new floating Discord Activity debug console shell from the main app screen.
+- Added the first-pass `FloatingWindow`-based console UI with placeholder Snapshot, Log, and Command sections, then marked DAC-1 complete in the vision doc.
+- Touched `src/hooks/useDebugConsoleTrigger.ts`, `src/components/DebugConsoleWindow.tsx`, `src/screens/MainScreen.tsx`, `src/styles/global.css`, and `docs/discord-activity-debug-console-vision.md`.
+- Build/test: `npm.cmd run build` passed.
+
+## [2339] - 2026-04-28 08:09 - `codex/merge-ui-and-3d-world / DAI-3 Identity Source Split`
+
+- Split the Discord identity state into explicit `authenticated_discord`, `participant_discord`, and `local_fallback` modes so the app no longer treats every Discord-derived profile as equally healthy.
+- Threaded the real identity source through the Discord bootstrap callbacks, updated the main identity banner to distinguish degraded participant-only identity from full local fallback, and updated the footer readout to show the actual identity mode directly.
+- Touched `src/lib/discord/embeddedApp.ts`, `src/hooks/useDabSyncSession.ts`, `src/screens/MainScreen.tsx`, `src/components/StatusFooter.tsx`, and `docs/discord-activity-identity-vision.md`.
+- Build/test: `npm.cmd run build` passed.
+
+## [2338] - 2026-04-28 08:02 - `codex/merge-ui-and-3d-world / DAI-2 OAuth Diagnostics Tightening`
+
+- Tightened Discord Activity auth diagnostics by making the frontend surface missing `VITE_DISCORD_CLIENT_ID` and token-exchange failures with clearer endpoint, build, attempt, missing-config, and redirect-mismatch context.
+- Expanded the sync server's OAuth diagnostics so `/api/discord/token` and `/health` report missing server-side config more explicitly without exposing secrets.
+- Rewrote the README Discord setup section so the frontend Activity env and sync-server env responsibilities are documented separately and match the implemented code paths.
+- Touched `src/lib/discord/embeddedApp.ts`, `server/sync-server.ts`, `README.md`, and `docs/discord-activity-identity-vision.md`.
+- Build/test: `npm.cmd run build` passed.
+
+## [2337] - 2026-04-28 07:56 - `codex/merge-ui-and-3d-world / DAI-1 First-Run Discord Consent`
+
+- Fixed the Discord Activity identity bootstrap so startup now tries silent authorization first and escalates to interactive consent when the silent authorize step fails, matching the expected first-run Activity flow.
+- Updated the manual Discord identity retry path to request interactive consent directly instead of repeating the same silent-only authorization attempt.
+- Touched `src/lib/discord/embeddedApp.ts`, `src/hooks/useDabSyncSession.ts`, and `docs/discord-activity-identity-vision.md`.
+- Build/test: `npm.cmd run build` passed.
+
 ## [2336] - 2026-04-28 01:00 - `codex/merge-ui-and-3d-world / Header Shrink Before Wrap`
 
 - Tuned the top header so the status cards shrink narrower before the whole stats block wraps to a second row, keeping the title and data on one line longer.

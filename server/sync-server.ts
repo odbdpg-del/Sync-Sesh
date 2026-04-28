@@ -48,6 +48,29 @@ const discordClientSecret = process.env.DISCORD_CLIENT_SECRET;
 const discordRedirectUri = process.env.DISCORD_REDIRECT_URI ?? process.env.VITE_DISCORD_REDIRECT_URI ?? "https://127.0.0.1";
 const buildId = `${process.env.npm_package_version ?? "0.1.0"}-${(process.env.RENDER_GIT_COMMIT ?? "dev").slice(0, 7)}`;
 
+function getMissingDiscordOAuthConfig() {
+  const missing: string[] = [];
+
+  if (!discordClientId) {
+    missing.push("DISCORD_CLIENT_ID");
+  }
+
+  if (!discordClientSecret) {
+    missing.push("DISCORD_CLIENT_SECRET");
+  }
+
+  return missing;
+}
+
+function getDiscordOAuthConfigSummary() {
+  return {
+    has_client_id: Boolean(discordClientId),
+    has_client_secret: Boolean(discordClientSecret),
+    redirect_uri: discordRedirectUri,
+    missing: getMissingDiscordOAuthConfig(),
+  };
+}
+
 function loadEnvFile(filename: string) {
   const filePath = join(process.cwd(), filename);
 
@@ -247,17 +270,27 @@ async function handleDiscordTokenExchange(request: import("node:http").IncomingM
 
   console.log("Discord token exchange requested.", {
     attemptId,
+    build_id: buildId,
     method: request.method,
     origin: request.headers.origin ?? null,
     referer: request.headers.referer ?? null,
     user_agent: request.headers["user-agent"] ?? null,
   });
 
-  if (!discordClientId || !discordClientSecret) {
+  const missingDiscordOAuthConfig = getMissingDiscordOAuthConfig();
+
+  if (missingDiscordOAuthConfig.length > 0) {
+    console.error("Discord OAuth is not configured on the sync server.", {
+      attemptId,
+      build_id: buildId,
+      missing: missingDiscordOAuthConfig,
+      redirect_uri: discordRedirectUri,
+    });
     sendJson(response, 500, {
-      error: "Discord OAuth is not configured on the sync server.",
+      error: `Discord OAuth is not configured on the sync server. Missing ${missingDiscordOAuthConfig.join(", ")}.`,
       attemptId,
       buildId,
+      missing: missingDiscordOAuthConfig,
     });
     return;
   }
@@ -297,9 +330,13 @@ async function handleDiscordTokenExchange(request: import("node:http").IncomingM
       typeof payload?.error_description === "string" ? payload.error_description : undefined;
     const responseError =
       discordErrorDescription ?? (typeof payload?.message === "string" ? payload.message : undefined) ?? discordError;
+    const configHint = discordError === "invalid_grant"
+      ? " Check that DISCORD_REDIRECT_URI exactly matches the Discord Developer Portal redirect URI."
+      : "";
 
     console.error("Discord token exchange failed.", {
       attemptId,
+      build_id: buildId,
       status: tokenResponse.status,
       error: discordError,
       error_description: discordErrorDescription,
@@ -309,7 +346,7 @@ async function handleDiscordTokenExchange(request: import("node:http").IncomingM
     });
 
     sendJson(response, 502, {
-      error: `Discord token exchange failed: ${responseError}`,
+      error: `Discord token exchange failed: ${responseError}.${configHint}`.trim(),
       attemptId,
       buildId,
       discordError,
@@ -348,11 +385,7 @@ const httpServer = createServer((request, response) => {
         ok: true,
         service: "sync-sesh-sync",
         build_id: buildId,
-        discord_oauth: {
-          has_client_id: Boolean(discordClientId),
-          has_client_secret: Boolean(discordClientSecret),
-          redirect_uri: discordRedirectUri,
-        },
+        discord_oauth: getDiscordOAuthConfigSummary(),
       }),
     );
     return;
@@ -472,9 +505,7 @@ setInterval(() => {
 httpServer.listen(port, "0.0.0.0", () => {
   console.log("Discord OAuth config at startup.", {
     build_id: buildId,
-    has_client_id: Boolean(discordClientId),
-    has_client_secret: Boolean(discordClientSecret),
-    redirect_uri: discordRedirectUri,
+    ...getDiscordOAuthConfigSummary(),
   });
   console.log(`DabSync sync server listening on port ${port}`);
 });

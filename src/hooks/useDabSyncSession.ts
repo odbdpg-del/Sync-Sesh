@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { DebugConsoleEventInput } from "../lib/debug/debugConsole";
 import {
   createDiscordAuthAttemptId,
   initializeEmbeddedApp,
@@ -21,7 +22,12 @@ import { deriveLobbyState } from "../lib/lobby/sessionState";
 
 const DISCORD_RETRY_TIMEOUT_MS = 20_000;
 
-export function useDabSyncSession() {
+interface UseDabSyncSessionOptions {
+  onDebugEvent?: (event: DebugConsoleEventInput) => void;
+}
+
+export function useDabSyncSession(options: UseDabSyncSessionOptions = {}) {
+  const { onDebugEvent } = options;
   const [sdkState, setSdkState] = useState<EmbeddedAppState>({ enabled: false, buildId: __APP_BUILD_ID__, authStage: "idle" });
   const [generatedDisplayNames, setGeneratedDisplayNames] = useState<string[]>(GENERATED_PROFILE_NAMES);
   const [syncClient] = useState(() => createSyncClient());
@@ -29,6 +35,8 @@ export function useDabSyncSession() {
   const autoJoinAttemptKeyRef = useRef<string | null>(null);
   const embeddedCleanupRef = useRef<(() => void) | undefined>();
   const activeAuthAttemptIdRef = useRef<string | undefined>();
+  const previousIdentitySourceRef = useRef<EmbeddedAppState["identitySource"]>();
+  const previousSyncConnectionRef = useRef<DabSyncState["syncStatus"]["connection"]>();
 
   useEffect(() => {
     if (!sdkState.attemptId || !sdkState.authStage || sdkState.authStage === "idle" || sdkState.authStage === "ready" || sdkState.authError) {
@@ -48,6 +56,12 @@ export function useDabSyncSession() {
         }
 
         const message = `Discord identity refresh timed out while ${stalledStage.replace(/_/g, " ")}.`;
+        onDebugEvent?.({
+          level: "error",
+          category: "auth",
+          label: `auth:${stalledStage}:failed`,
+          detail: message,
+        });
 
         return {
           ...current,
@@ -62,7 +76,82 @@ export function useDabSyncSession() {
     return () => {
       window.clearTimeout(timeoutId);
     };
-  }, [sdkState.attemptId, sdkState.authError, sdkState.authStage]);
+  }, [onDebugEvent, sdkState.attemptId, sdkState.authError, sdkState.authStage]);
+
+  useEffect(() => {
+    const currentIdentitySource = sdkState.identitySource;
+
+    if (!currentIdentitySource || previousIdentitySourceRef.current === currentIdentitySource) {
+      return;
+    }
+
+    previousIdentitySourceRef.current = currentIdentitySource;
+
+    const level = currentIdentitySource === "authenticated_discord" ? "info" : currentIdentitySource === "participant_discord" ? "warn" : "error";
+    const detail =
+      currentIdentitySource === "authenticated_discord"
+        ? "Using authenticated Discord identity."
+        : currentIdentitySource === "participant_discord"
+          ? "Using participant-only Discord identity."
+          : sdkState.authError ?? sdkState.startupError ?? "Using local fallback identity.";
+
+    onDebugEvent?.({
+      level,
+      category: "profile",
+      label: `identity:${currentIdentitySource}`,
+      detail,
+    });
+  }, [onDebugEvent, sdkState.authError, sdkState.identitySource, sdkState.startupError]);
+
+  useEffect(() => {
+    const currentConnection = state.syncStatus.connection;
+    const previousConnection = previousSyncConnectionRef.current;
+
+    if (previousConnection === currentConnection) {
+      return;
+    }
+
+    previousSyncConnectionRef.current = currentConnection;
+
+    if (currentConnection === "connecting") {
+      onDebugEvent?.({
+        level: "info",
+        category: "sync",
+        label: "sync:connect:start",
+        detail: state.syncStatus.mode === "ws" ? "Connecting to sync server." : "Starting mock sync transport.",
+      });
+      return;
+    }
+
+    if (currentConnection === "connected") {
+      onDebugEvent?.({
+        level: "info",
+        category: "sync",
+        label: "sync:connect:success",
+        detail: state.syncStatus.latencyMs !== undefined ? `${state.syncStatus.mode} ${state.syncStatus.latencyMs}ms` : `${state.syncStatus.mode} connected`,
+      });
+      return;
+    }
+
+    if (currentConnection === "error") {
+      onDebugEvent?.({
+        level: "error",
+        category: "sync",
+        label: "sync:connect:failed",
+        detail: state.syncStatus.warning ?? "Sync connection entered error state.",
+      });
+      return;
+    }
+
+    if (currentConnection === "offline" && previousConnection !== undefined) {
+      onDebugEvent?.({
+        level: "warn",
+        category: "sync",
+        label: "sync:disconnect",
+        detail: state.syncStatus.warning ?? "Sync transport disconnected.",
+      });
+    }
+  }, [onDebugEvent, state.syncStatus.connection, state.syncStatus.latencyMs, state.syncStatus.mode, state.syncStatus.warning]);
 
   useEffect(() => {
     const unsubscribe = syncClient.subscribe(setState);
@@ -91,7 +180,8 @@ export function useDabSyncSession() {
 
     void initializeEmbeddedApp({
       attemptId: initialAttemptId,
-      onProfileUpdate: (localProfile) => {
+      onDebugEvent,
+      onProfileUpdate: (localProfile, identitySource) => {
         if (disposed) {
           return;
         }
@@ -108,7 +198,14 @@ export function useDabSyncSession() {
         }
 
         syncClient.setLocalProfile(localProfile);
-        setSdkState((current) => ({ ...current, localProfile, identitySource: "discord", authError: undefined, startupError: undefined, authStage: "ready" }));
+        setSdkState((current) => ({
+          ...current,
+          localProfile,
+          identitySource,
+          authError: undefined,
+          startupError: undefined,
+          authStage: "ready",
+        }));
 
         if (syncClient.getSnapshot().users.some((user) => user.id === localProfile.id)) {
           syncClient.send({ type: "join_session" });
@@ -147,7 +244,7 @@ export function useDabSyncSession() {
           enabled: false,
           buildId: __APP_BUILD_ID__,
           attemptId: initialAttemptId,
-          identitySource: "local",
+          identitySource: "local_fallback",
           authStage: "idle",
           startupStage: "sdk_init",
           startupError: "Discord startup failed before initialization completed.",
@@ -162,11 +259,17 @@ export function useDabSyncSession() {
       unsubscribe();
       syncClient.disconnect();
     };
-  }, [syncClient]);
+  }, [onDebugEvent, syncClient]);
 
   const retryDiscordProfile = useCallback(async () => {
     const attemptId = createDiscordAuthAttemptId();
     activeAuthAttemptIdRef.current = attemptId;
+    onDebugEvent?.({
+      level: "info",
+      category: "ui",
+      label: "ui:retry-discord-profile",
+      detail: `attempt ${attemptId.slice(-8)}`,
+    });
 
     const handleAuthProgress = (incomingAttemptId: string, authStage: DiscordAuthStage, authError?: string) => {
       setSdkState((current) => {
@@ -198,7 +301,9 @@ export function useDabSyncSession() {
       const nextSdkState = await Promise.race([
         initializeEmbeddedApp({
           attemptId,
-          onProfileUpdate: (localProfile) => {
+          authPrompt: "interactive",
+          onDebugEvent,
+          onProfileUpdate: (localProfile, identitySource) => {
             const previousLocalProfile = syncClient.getSnapshot().localProfile;
             const profileChanged =
               previousLocalProfile.id !== localProfile.id ||
@@ -214,7 +319,7 @@ export function useDabSyncSession() {
             setSdkState((current) => ({
               ...current,
               localProfile,
-              identitySource: "discord",
+              identitySource,
               authError: undefined,
               startupError: undefined,
               authStage: "ready",
@@ -255,17 +360,17 @@ export function useDabSyncSession() {
       const message =
         error instanceof Error ? error.message : "Discord identity refresh failed before authorization completed.";
 
-      setSdkState((current) => ({
-        ...current,
-        attemptId,
-        authStage: "idle",
-        startupStage: "auth",
-        startupError: message,
-        authError: message,
-        identitySource: current.identitySource ?? "local",
-      }));
+        setSdkState((current) => ({
+          ...current,
+          attemptId,
+          authStage: "idle",
+          startupStage: "auth",
+          startupError: message,
+          authError: message,
+          identitySource: current.identitySource ?? "local_fallback",
+        }));
     }
-  }, [syncClient]);
+  }, [onDebugEvent, syncClient]);
   useEffect(() => {
     const controller = new AbortController();
 

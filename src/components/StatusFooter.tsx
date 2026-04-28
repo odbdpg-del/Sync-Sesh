@@ -22,6 +22,18 @@ function getSyncSummary(syncStatus: SyncStatus) {
   return syncStatus.warning ?? "Sync offline";
 }
 
+function getIdentitySummary(sdkState: EmbeddedAppState) {
+  if (sdkState.identitySource === "authenticated_discord") {
+    return "discord authenticated";
+  }
+
+  if (sdkState.identitySource === "participant_discord") {
+    return "discord participant";
+  }
+
+  return "local fallback";
+}
+
 export function StatusFooter({ syncStatus, sdkState }: StatusFooterProps) {
   const shortAttemptId = sdkState.attemptId ? sdkState.attemptId.slice(-8) : "n/a";
 
@@ -40,7 +52,7 @@ export function StatusFooter({ syncStatus, sdkState }: StatusFooterProps) {
         Startup: <strong>{sdkState.startupStage ?? "unknown"}</strong>
       </span>
       <span>
-        Identity: <strong>{sdkState.identitySource === "discord" ? "discord" : "local fallback"}</strong>
+        Identity: <strong>{getIdentitySummary(sdkState)}</strong>
       </span>
       <span>
         Auth stage: <strong>{sdkState.authStage ?? "idle"}</strong>

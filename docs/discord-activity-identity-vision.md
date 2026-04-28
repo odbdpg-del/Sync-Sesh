@@ -215,9 +215,9 @@ This can stay internal if UI copy is simpler, but the code should model the dist
 
 ## Phase Plan
 
-- [ ] DAI-1: Make First-Run Discord Consent Work.
-- [ ] DAI-2: Tighten Deployment And Runtime Diagnostics.
-- [ ] DAI-3: Clarify Identity Source State And UI Messaging.
+- [x] DAI-1: Make First-Run Discord Consent Work.
+- [x] DAI-2: Tighten Deployment And Runtime Diagnostics.
+- [x] DAI-3: Clarify Identity Source State And UI Messaging.
 - [ ] DAI-4: Validate Activity Runtime End To End.
 
 ## Manager Execution Plan
@@ -249,7 +249,7 @@ Files to avoid unless a phase explicitly requires them:
 
 ## DAI-1: Make First-Run Discord Consent Work
 
-Status: `[ ]` not started.
+Status: `[x]` complete.
 
 ### Summary
 
@@ -310,9 +310,24 @@ Non-goals:
 - Do not change sync/session reducer behavior.
 - Do not add new scopes unless required.
 
+Checklist Items Achieved:
+
+- Kept the existing embedded Discord identity architecture in place.
+- Added a silent-first, interactive-second identity bootstrap path for startup.
+- Limited the automatic escalation path to silent authorize failures instead of all Discord auth failures.
+- Changed the manual Retry path to request interactive consent immediately.
+- Preserved local fallback behavior when Discord identity still cannot be established.
+
+Completed Implementation:
+
+- `src/lib/discord/embeddedApp.ts` now routes identity setup through a shared helper that tries silent authorization first and retries interactively when the silent authorize step fails.
+- `src/hooks/useDabSyncSession.ts` now sends `authPrompt: "interactive"` for the manual Retry flow so the retry button performs a real escalation.
+- `changelog.md` includes the DAI-1 completion entry.
+- Build result: `npm.cmd run build` passed with the existing Vite chunk-size warning.
+
 ## DAI-2: Tighten Deployment And Runtime Diagnostics
 
-Status: `[ ]` not started.
+Status: `[x]` complete.
 
 ### Summary
 
@@ -328,34 +343,106 @@ Expected files:
 
 Expected work:
 
-- Audit the exact env variable contract for frontend and sync server.
+- Audit and tighten the exact env variable contract for frontend and sync server.
 - Ensure the docs include both `VITE_DISCORD_REDIRECT_URI` and `DISCORD_REDIRECT_URI`.
-- Make startup and token exchange logs easier to correlate by attempt ID.
-- Distinguish config failures from consent failures in surfaced messages.
-- Verify hosted/proxied `/api/discord/token` expectations are documented clearly.
+- Ensure the docs include both frontend and backend client-id expectations explicitly:
+  - `VITE_DISCORD_CLIENT_ID`
+  - `DISCORD_CLIENT_ID`
+  - `DISCORD_CLIENT_SECRET`
+  - `VITE_ENABLE_DISCORD_SDK`
+  - `VITE_SYNC_SERVER_URL`
+- Clarify in docs that the frontend currently reads `VITE_DISCORD_REDIRECT_URI`, while the sync server reads `DISCORD_REDIRECT_URI` with fallback support from `VITE_DISCORD_REDIRECT_URI`.
+- Make startup and token exchange logs easier to correlate by `attemptId`, build id, and auth stage.
+- Distinguish these failure buckets in surfaced frontend errors:
+  - SDK disabled or missing client ID
+  - authorize failure
+  - token exchange failure
+  - authenticate failure
+  - server-side OAuth not configured
+  - redirect mismatch or Discord OAuth response error
+- Verify hosted/proxied `/api/discord/token` expectations are documented clearly for Discord Activity deployments.
+
+Code seams to use:
+
+- `src/lib/discord/embeddedApp.ts`
+  - `resolveDiscordAuthEndpoint()`
+  - `resolveDiscordRedirectUri()`
+  - `exchangeDiscordAuthCode()`
+  - `resolveDiscordIdentity()`
+  - startup error return paths in `initializeEmbeddedApp()` and `retryDiscordIdentity()`
+- `server/sync-server.ts`
+  - env loading near `loadEnvFile(".env")` and `loadEnvFile(".env.local")`
+  - server env resolution for `discordClientId`, `discordClientSecret`, and `discordRedirectUri`
+  - `handleDiscordTokenExchange()`
+  - `/health` response payload
+  - startup console logging in `httpServer.listen(...)`
+- `README.md`
+  - `Environment variables`
+  - `Discord Activity wiring`
+
+Expected implementation boundaries:
+
+- Keep this phase focused on diagnostics and docs.
+- Avoid changing the authorization product flow introduced in DAI-1 unless a diagnostic fix strictly requires it.
+- Avoid changing lobby rendering or session state.
+- Avoid adding a large new UI surface; prefer improving existing banner/error text and server logs.
+
+Recommended implementation details:
+
+- Add a small frontend helper to classify Discord auth errors by stage/source instead of only passing raw strings through.
+- Preserve the current `attemptId` threading and add it anywhere error paths currently drop context.
+- Expand the `/health` payload only if it helps deployment debugging without exposing secrets.
+- Update the README example block so it reflects the actual dual frontend/backend env setup instead of the partial current example.
+- Document the expected Discord Developer Portal redirect URI match requirement in one explicit setup sequence.
 
 Acceptance criteria:
 
 - Missing frontend env vars are clearly reported.
 - Missing backend secret or redirect mismatch is clearly reported.
 - README setup steps match the implemented env-variable names.
+- The sync server logs make it obvious whether the token exchange route received the request and which attempt failed.
+- Frontend auth errors retain enough context to tell whether the failure happened before or after token exchange.
+- Discord Activity deployment docs explain how `/api/discord/token` is reached from the embedded runtime.
 
 Build and manual checks:
 
 - Run `npm.cmd run build`.
 - Run the sync server with deliberately missing Discord secrets and verify the surfaced error is actionable.
+- Run the app with `VITE_ENABLE_DISCORD_SDK=false` and verify the startup error remains explicit and accurate.
+- Run the app with a bad or missing `VITE_DISCORD_CLIENT_ID` and verify the frontend failure is distinguishable from server OAuth failure.
+- Run the sync server with an intentionally wrong `DISCORD_REDIRECT_URI` and verify the returned token-exchange error is specific enough to diagnose.
+- Hit `/health` and verify the reported OAuth config summary matches the configured environment without leaking secrets.
 
 Risks:
 
 - Logging too much detail could create noisy output.
+- Surfacing raw Discord OAuth response text without normalization could create confusing user-facing copy.
+- It is easy to accidentally document browser-only local development and Discord Activity deployment as if they are the same thing.
 
 Non-goals:
 
 - Do not add a full admin diagnostics panel.
+- Do not redesign the Discord identity banner beyond what is necessary for clearer diagnostics.
+- Do not change identity-source modeling yet; that belongs to DAI-3.
+
+Checklist Items Achieved:
+
+- Tightened the frontend Discord auth config errors so missing Activity env values point to the expected variable names and auth endpoint.
+- Expanded token-exchange failure messages to carry build id, attempt id, missing server config, and redirect-mismatch hints back to the frontend.
+- Tightened sync-server OAuth diagnostics with explicit missing-variable reporting, richer token-exchange logs, and a more useful `/health` summary.
+- Rewrote the README Discord setup section so the frontend and sync-server env responsibilities are documented separately and consistently.
+
+Completed Implementation:
+
+- `src/lib/discord/embeddedApp.ts` now includes clearer frontend config diagnostics plus richer token-exchange error propagation with endpoint, attempt, build, missing-config, and redirect-mismatch context.
+- `server/sync-server.ts` now reports missing OAuth config keys explicitly, includes build and attempt IDs in token-exchange diagnostics, adds redirect-mismatch hints for `invalid_grant`, and exposes a fuller non-secret OAuth summary from `/health`.
+- `README.md` now documents the real frontend/backend Discord env split and the expected Discord Activity setup flow.
+- `changelog.md` includes the DAI-2 completion entry.
+- Build result: `npm.cmd run build` passed with the existing Vite chunk-size warning.
 
 ## DAI-3: Clarify Identity Source State And UI Messaging
 
-Status: `[ ]` not started.
+Status: `[x]` complete.
 
 ### Summary
 
@@ -377,11 +464,77 @@ Expected work:
   - full Discord auth
   - partial Discord identity only
   - local fallback only
+- Update footer/status wording so it no longer collapses all Discord-backed states into one `discord` bucket.
+
+Code seams to use:
+
+- `src/lib/discord/embeddedApp.ts`
+  - `EmbeddedAppState`
+  - return paths in `initializeEmbeddedApp()`
+  - return paths in `retryDiscordIdentity()`
+  - best-effort participant profile handling near `resolveBestEffortDiscordProfile()`
+- `src/hooks/useDabSyncSession.ts`
+  - places that currently set `identitySource: "discord"`
+  - startup `onProfileUpdate`
+  - manual retry `onProfileUpdate`
+  - catch/fallback state updates that preserve `identitySource`
+- `src/screens/MainScreen.tsx`
+  - Discord identity warning banner logic around `sdkState.enabled && (sdkState.authError || sdkState.identitySource === "local")`
+- `src/components/StatusFooter.tsx`
+  - current `Identity:` label output
+
+Current state issues to fix:
+
+- `EmbeddedAppState.identitySource` is currently only `"discord" | "local"`, which merges:
+  - fully authenticated Discord identity
+  - best-effort participant/current-user identity gathered before full auth
+- `useDabSyncSession` sets `identitySource: "discord"` in `onProfileUpdate`, even though that callback may fire from either:
+  - full authenticated profile updates
+  - best-effort Discord profile updates
+- `MainScreen` currently shows one warning bucket for `authError || identitySource === "local"`, which cannot distinguish:
+  - full auth failure with partial Discord identity still available
+  - full local fallback
+- `StatusFooter` currently renders `discord` vs `local fallback`, which hides the degraded middle state.
+
+Recommended state shape:
+
+```ts
+type EmbeddedIdentitySource =
+  | "authenticated_discord"
+  | "participant_discord"
+  | "local_fallback";
+```
+
+Recommended behavior:
+
+- Use `authenticated_discord` only after the full authorize -> token exchange -> authenticate path succeeds.
+- Use `participant_discord` when the app has a Discord-derived profile from SDK participant/current-user data but full auth is not yet complete or has failed.
+- Use `local_fallback` only when the app is using the generated/local profile path.
+
+Recommended UI behavior:
+
+- No warning banner for `authenticated_discord`.
+- A softer degraded-state banner for `participant_discord` when `authError` exists, explaining that the visible name/avatar came from Discord but full identity refresh did not finish.
+- The existing stronger warning banner for `local_fallback`.
+- Footer wording should surface the real identity source label directly:
+  - `discord authenticated`
+  - `discord participant`
+  - `local fallback`
+
+Implementation boundaries:
+
+- Keep this phase focused on identity-source modeling and messaging.
+- Do not change the OAuth setup logic from DAI-1 or DAI-2 unless strictly required by the new state names.
+- Do not redesign the app shell or add a new diagnostics panel.
+- Prefer updating existing components and types over introducing a large new abstraction layer.
 
 Acceptance criteria:
 
 - The UI no longer collapses partial Discord identity and full Discord auth into the same mental bucket.
 - Developers can tell which layer succeeded when debugging.
+- `StatusFooter` shows the correct identity mode for all three cases.
+- `MainScreen` banner copy differs between participant-only Discord identity and full local fallback.
+- Existing retry controls still work without behavior regressions.
 
 Build and manual checks:
 
@@ -390,14 +543,36 @@ Build and manual checks:
   - full auth success
   - participant-only identity
   - local fallback
+- Verify the footer identity label changes across those same three cases.
+- Verify startup and retry flows still update `authStage`, `authError`, and `startupError` coherently after the identity-source split.
 
 Risks:
 
 - Too much state detail could confuse the UX if surfaced poorly.
+- Changing the `identitySource` enum can ripple through several existing optimistic state updates in `useDabSyncSession`.
+- Best-effort participant profile updates may race with later authenticated updates if the transition rules are not explicit.
 
 Non-goals:
 
 - Do not redesign the rest of the app shell.
+- Do not change server-side OAuth behavior.
+- Do not add new Discord scopes.
+
+Checklist Items Achieved:
+
+- Replaced the old two-state `discord | local` model with explicit authenticated, participant-only, and local-fallback identity states.
+- Threaded the identity source through the Discord bootstrap profile callbacks so best-effort participant profiles and authenticated profiles no longer reuse the same optimistic state label.
+- Updated the main warning banner to distinguish participant-only degraded Discord identity from full local fallback.
+- Updated the footer identity readout so developers can see the real identity source mode directly.
+
+Completed Implementation:
+
+- `src/lib/discord/embeddedApp.ts` now exports `EmbeddedIdentitySource`, uses the three-way identity source across startup/retry return paths, and tags `onProfileUpdate` callbacks with the real source of the resolved profile.
+- `src/hooks/useDabSyncSession.ts` now preserves the explicit identity source coming from the Discord bootstrap during startup and retry updates instead of collapsing everything into `discord`.
+- `src/screens/MainScreen.tsx` now renders distinct banner copy for participant-only degraded Discord identity versus full local fallback, while keeping the existing retry control.
+- `src/components/StatusFooter.tsx` now shows `discord authenticated`, `discord participant`, or `local fallback`.
+- `changelog.md` includes the DAI-3 completion entry.
+- Build result: `npm.cmd run build` passed with the existing Vite chunk-size warning.
 
 ## DAI-4: Validate Activity Runtime End To End
 
@@ -454,4 +629,3 @@ Non-goals:
 - No build was run for this docs-only vision write-up.
 - Implementation phases should use `npm.cmd run build`.
 - Real validation must happen inside the Discord Activity runtime, not only in a normal browser tab.
-
