@@ -8,6 +8,13 @@ Entries must be in reverse chronological order. New entries go at the top, above
 
 Use a level-two heading for every entry so the editor can fold each change.
 
+## [2348] - 2026-04-28 11:56 - `codex/merge-ui-and-3d-world / DAV-4 Identify-Only Scope Probe`
+
+- Temporarily reduced the Discord Activity OAuth scope request from `identify` plus `guilds.members.read` down to `identify` only so the next runtime test can isolate whether `guilds.members.read` is triggering the immediate OAuth `5000` authorize failure.
+- Recorded the scope-reduction experiment in the authorization vision doc so the next Discord console trace can be interpreted against a clear hypothesis.
+- Touched `src/lib/discord/embeddedApp.ts` and `docs/discord-activity-authorization-vision.md`.
+- Build/test: `npm.cmd run build` passed.
+
 ## [2347] - 2026-04-28 11:46 - `codex/merge-ui-and-3d-world / Retry SDK Ready Timeout Fix`
 
 - Fixed the Discord identity retry state machine so it no longer marks itself as `authorizing` before the SDK is actually ready, preventing `sdk.ready()` stalls from being mislabeled as OAuth authorization failures.

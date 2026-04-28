@@ -146,7 +146,7 @@ export function getDiscordDebugConfigSnapshot() {
   };
 }
 
-const DISCORD_IDENTITY_SCOPES = ["identify", "guilds.members.read"] as const;
+const DISCORD_IDENTITY_SCOPES = ["identify"] as const;
 
 interface DiscordTokenExchangeResponse {
   access_token: string;

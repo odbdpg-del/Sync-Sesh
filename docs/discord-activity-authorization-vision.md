@@ -552,6 +552,15 @@ Required preconditions before testing:
   - `/sync` -> backend service
   - `/api` -> backend service
 
+Current live experiment:
+
+- Temporarily reduce requested Discord scopes from `identify + guilds.members.read` to `identify` only.
+- Goal:
+  - determine whether `guilds.members.read` is the trigger for the immediate Discord OAuth `5000` authorize failure.
+- Expected interpretation:
+  - if `identify`-only auth succeeds or at least opens consent, `guilds.members.read` is the likely blocker
+  - if `identify`-only auth still fails immediately with the same `5000`, the problem is more likely Discord app/context specific than scope specific
+
 Required test procedure for every matrix row:
 
 1. Launch the Activity from Discord.
