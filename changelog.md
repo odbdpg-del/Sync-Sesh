@@ -8,6 +8,20 @@ Entries must be in reverse chronological order. New entries go at the top, above
 
 Use a level-two heading for every entry so the editor can fold each change.
 
+## [2350] - 2026-04-28 13:02 - `codex/merge-ui-and-3d-world / Bug 1 Attempt 2 Skip Silent Auth`
+
+- Reverted the unsupported explicit-consent prompt idea, documented Attempt 1 as blocked by the embedded SDK contract, and switched the default Discord identity bootstrap path to start directly with the supported interactive auth request instead of trying silent auth first.
+- This Attempt 2 experiment isolates whether the silent-first path was contributing to the immediate OAuth `5000` authorize failure while staying fully inside the Discord SDK’s supported authorize input shape.
+- Touched `src/lib/discord/embeddedApp.ts`, `docs/bugs/bug_1.md`, and `changelog.md`.
+- Build/test: `npm.cmd run build` passed.
+
+## [2349] - 2026-04-28 12:49 - `codex/merge-ui-and-3d-world / Bug 1 Attempt 1 Explicit Consent Prompt`
+
+- Documented Bug 1 Attempt 1 in `docs/bugs/bug_1.md` and changed the Discord Activity interactive authorize request to explicitly send `prompt: "consent"` instead of relying on an omitted prompt field.
+- Kept silent auth on `prompt: "none"` so the next runtime test can isolate whether explicit consent prompting changes the immediate OAuth `5000` failure behavior.
+- Touched `src/lib/discord/embeddedApp.ts` and `docs/bugs/bug_1.md`.
+- Build/test: `npm.cmd run build` passed.
+
 ## [2348] - 2026-04-28 11:56 - `codex/merge-ui-and-3d-world / DAV-4 Identify-Only Scope Probe`
 
 - Temporarily reduced the Discord Activity OAuth scope request from `identify` plus `guilds.members.read` down to `identify` only so the next runtime test can isolate whether `guilds.members.read` is triggering the immediate OAuth `5000` authorize failure.

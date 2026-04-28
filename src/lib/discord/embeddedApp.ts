@@ -726,7 +726,7 @@ async function resolveDiscordIdentityWithFallbackPrompt(
   options: Pick<InitializeEmbeddedAppOptions, "onProfileUpdate" | "authPrompt" | "attemptId" | "onAuthProgress" | "onDebugEvent"> = {},
 ): Promise<{ localProfile: LocalProfile; cleanup: () => void }> {
   const attemptId = options.attemptId ?? createDiscordAuthAttemptId();
-  const initialPrompt = options.authPrompt ?? "none";
+  const initialPrompt = options.authPrompt ?? "interactive";
 
   try {
     return await resolveDiscordIdentity(
