@@ -8,6 +8,13 @@ Entries must be in reverse chronological order. New entries go at the top, above
 
 Use a level-two heading for every entry so the editor can fold each change.
 
+## [2356] - 2026-04-28 14:31 - `codex/merge-ui-and-3d-world / Bug 1 Attempt 7 Static Probe`
+
+- Documented Attempt 7 in the bug tracker and added a standalone `public/static-probe.html` page with no React, no app bundle, and no Discord SDK so the next Activity override test can isolate whether Discord can render any static HTML from this deployment at all.
+- The static probe includes a visible attempt label, explanatory text, and simple query/timestamp markers so Discord launches can confirm fresh content without depending on the normal app startup path.
+- Touched `docs/bugs/bug_1.md`, `public/static-probe.html`, and `changelog.md`.
+- Build/test: `npm.cmd run build` passed.
+
 ## [2355] - 2026-04-28 14:20 - `codex/merge-ui-and-3d-world / Bug 1 Attempt 6 HTML Boot Probe`
 
 - Added an Attempt 6 HTML-level boot probe in `index.html` so the Discord harness can report raw pre-React execution phases, top-level script errors, and pre-mount timeouts before the Vite bundle or Discord SDK startup path takes over.

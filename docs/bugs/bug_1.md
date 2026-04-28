@@ -514,6 +514,79 @@ If Attempt 6 still shows only a white box, the remaining problem is likely even 
 
 If Attempt 6 proves the page never reaches visible inline script execution inside Discord, stop changing OAuth logic and focus on Discord runtime/embed diagnostics instead.
 
+## Attempt 7
+
+### Name
+
+Standalone Static HTML Probe
+
+### Goal
+
+Find out whether Discord can render any page from this deployment at all when the Activity override points at a file that does not depend on React, Vite bundle startup, or the Discord SDK.
+
+### Why This Attempt Exists
+
+Attempt 6 still produced only a white box inside Discord, even after adding:
+
+- inline `index.html` text
+- raw top-level error handling
+- pre-React boot-phase reporting
+
+At that point, the next useful simplification is to stop testing the app entrypoint entirely.
+
+The next question becomes:
+
+- "can Discord render a completely static HTML file from this deployment?"
+
+### Change
+
+Add a standalone static probe page served directly from the deployment, for example:
+
+- `/static-probe.html`
+
+This page must use:
+
+- plain HTML
+- inline CSS
+- optional tiny inline JavaScript only for timestamp or query-string display
+
+This page must not use:
+
+- React
+- the app bundle
+- `index.html` app startup
+- Discord SDK
+- any imported scripts
+
+### Success Criteria
+
+Any of the following count as success:
+
+- Discord shows the static probe text clearly
+- Discord renders the page background and text without a white box
+- the page can display a simple query-string marker for cache-busting confirmation
+
+### Failure Criteria
+
+This attempt should be considered failed if:
+
+- Discord still shows only a blank white iframe
+- the static probe page also fails to appear
+
+### Interpretation
+
+If Attempt 7 succeeds, then Discord can render static HTML from the deployment, and the bug remains somewhere in the app/bootstrap/runtime path.
+
+If Attempt 7 fails with the same white box, the remaining problem is very likely outside the app code and closer to Discord embed/runtime behavior, Activity override handling, or deployment-level response handling.
+
+### Recommended Follow-Up
+
+If Attempt 7 also fails, stop iterating on OAuth and React debugging first. Move to:
+
+- Discord Activity override behavior checks
+- deployment/header/response inspection
+- Discord developer support or Activities troubleshooting with the static repro
+
 ## Related Docs
 
 - [discord-activity-authorization-vision.md](C:/Users/Rubbe/Desktop/farding/Sync-Sesh/docs/discord-activity-authorization-vision.md)

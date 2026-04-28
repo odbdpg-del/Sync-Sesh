@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Sync Sesh Static Probe</title>
+    <style>
+      :root {
+        color-scheme: dark;
+      }
+
+      html,
+      body {
+        margin: 0;
+        min-height: 100%;
+        background:
+          radial-gradient(circle at top, rgba(50, 120, 255, 0.18), transparent 34%),
+          #050914;
+        color: #eef6ff;
+        font-family: "Segoe UI", Arial, sans-serif;
+      }
+
+      body {
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        padding: 24px;
+      }
+
+      .probe-card {
+        width: min(760px, 100%);
+        display: grid;
+        gap: 14px;
+        padding: 24px;
+        border: 1px solid rgba(90, 220, 255, 0.28);
+        border-radius: 20px;
+        background: rgba(7, 14, 28, 0.96);
+        box-shadow:
+          0 0 0 1px rgba(90, 220, 255, 0.06),
+          0 18px 48px rgba(0, 0, 0, 0.42);
+      }
+
+      .kicker,
+      .meta {
+        color: #59e8ff;
+        font-family: "Courier New", monospace;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .kicker {
+        font-size: 0.9rem;
+      }
+
+      h1 {
+        margin: 0;
+        font-size: clamp(2rem, 5vw, 3.6rem);
+        line-height: 1;
+      }
+
+      p {
+        margin: 0;
+        color: #cfdef7;
+        font-size: 1.02rem;
+        line-height: 1.55;
+      }
+
+      .meta-grid {
+        display: grid;
+        gap: 10px;
+        margin-top: 8px;
+      }
+
+      .meta-row {
+        display: grid;
+        gap: 4px;
+        padding: 12px 14px;
+        border-radius: 14px;
+        background: rgba(10, 18, 34, 0.9);
+        border: 1px solid rgba(90, 220, 255, 0.14);
+      }
+
+      .meta-row strong {
+        color: #eff7ff;
+        font-size: 1rem;
+      }
+    </style>
+  </head>
+  <body>
+    <main class="probe-card">
+      <span class="kicker">Bug 1 Attempt 7</span>
+      <h1>Static Probe Loaded</h1>
+      <p>
+        This page is a pure static HTML file. It does not use React, the Vite app bundle,
+        or the Discord SDK. If Discord can show this page, then the white-box bug is
+        happening later in the normal app/bootstrap path.
+      </p>
+
+      <section class="meta-grid">
+        <div class="meta-row">
+          <span class="meta">Path</span>
+          <strong id="probe-path">/static-probe.html</strong>
+        </div>
+        <div class="meta-row">
+          <span class="meta">Query</span>
+          <strong id="probe-query">none</strong>
+        </div>
+        <div class="meta-row">
+          <span class="meta">Loaded At</span>
+          <strong id="probe-time">pending</strong>
+        </div>
+      </section>
+    </main>
+
+    <script>
+      (function () {
+        var query = window.location.search || "none";
+        var loadedAt = new Date().toISOString();
+        var queryNode = document.getElementById("probe-query");
+        var timeNode = document.getElementById("probe-time");
+
+        if (queryNode) {
+          queryNode.textContent = query;
+        }
+
+        if (timeNode) {
+          timeNode.textContent = loadedAt;
+        }
+      })();
+    </script>
+  </body>
+</html>
