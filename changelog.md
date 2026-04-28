@@ -8,6 +8,13 @@ Entries must be in reverse chronological order. New entries go at the top, above
 
 Use a level-two heading for every entry so the editor can fold each change.
 
+## [2347] - 2026-04-28 11:46 - `codex/merge-ui-and-3d-world / Retry SDK Ready Timeout Fix`
+
+- Fixed the Discord identity retry state machine so it no longer marks itself as `authorizing` before the SDK is actually ready, preventing `sdk.ready()` stalls from being mislabeled as OAuth authorization failures.
+- Added a dedicated retry watchdog for `sdk.ready()` during identity refresh, with an SDK-specific timeout message and debug-console event when the refresh stalls before auth ever starts.
+- Touched `src/hooks/useDabSyncSession.ts`.
+- Build/test: `npm.cmd run build` passed.
+
 ## [2346] - 2026-04-28 11:11 - `codex/merge-ui-and-3d-world / DAV-3 Authorize Diagnostics`
 
 - Expanded Discord Activity authorize diagnostics so immediate `sdk.commands.authorize(...)` failures now capture safe raw SDK error fields plus runtime hints like auth mode, attempt suffix, redirect URI, auth endpoint, host mode, build id, and Discord context identifiers.

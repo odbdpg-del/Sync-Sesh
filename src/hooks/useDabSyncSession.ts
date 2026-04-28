@@ -20,6 +20,7 @@ import type {
 } from "../types/session";
 import { deriveLobbyState } from "../lib/lobby/sessionState";
 
+const DISCORD_SDK_READY_TIMEOUT_MS = 30_000;
 const DISCORD_AUTHORIZING_TIMEOUT_MS = 60_000;
 const DISCORD_FOLLOW_UP_STAGE_TIMEOUT_MS = 30_000;
 
@@ -65,6 +66,45 @@ export function useDabSyncSession(options: UseDabSyncSessionOptions = {}) {
   const activeAuthAttemptIdRef = useRef<string | undefined>();
   const previousIdentitySourceRef = useRef<EmbeddedAppState["identitySource"]>();
   const previousSyncConnectionRef = useRef<DabSyncState["syncStatus"]["connection"]>();
+
+  useEffect(() => {
+    if (sdkState.startupStage !== "sdk_ready" || sdkState.authStage !== "idle" || sdkState.startupError) {
+      return;
+    }
+
+    const attemptId = sdkState.attemptId;
+    const timeoutId = window.setTimeout(() => {
+      setSdkState((current) => {
+        if (
+          current.attemptId !== attemptId ||
+          current.startupStage !== "sdk_ready" ||
+          current.authStage !== "idle" ||
+          current.startupError
+        ) {
+          return current;
+        }
+
+        const message = "Discord SDK startup timed out while waiting for sdk.ready() during identity refresh.";
+        onDebugEvent?.({
+          level: "error",
+          category: "sdk",
+          label: "sdk:ready:failed",
+          detail: message,
+        });
+
+        return {
+          ...current,
+          startupStage: "sdk_ready",
+          startupError: message,
+          authError: message,
+        };
+      });
+    }, DISCORD_SDK_READY_TIMEOUT_MS);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [onDebugEvent, sdkState.attemptId, sdkState.authStage, sdkState.startupError, sdkState.startupStage]);
 
   useEffect(() => {
     if (!sdkState.attemptId || !sdkState.authStage || sdkState.authStage === "idle" || sdkState.authStage === "ready" || sdkState.authError) {
@@ -325,8 +365,8 @@ export function useDabSyncSession(options: UseDabSyncSessionOptions = {}) {
     setSdkState((current) => ({
       ...current,
       attemptId,
-      authStage: "authorizing",
-      startupStage: "auth",
+      authStage: "idle",
+      startupStage: "sdk_ready",
       startupError: undefined,
       authError: undefined,
     }));
@@ -391,7 +431,7 @@ export function useDabSyncSession(options: UseDabSyncSessionOptions = {}) {
           ...current,
           attemptId,
           authStage: "idle",
-          startupStage: "auth",
+          startupStage: current.authStage && current.authStage !== "idle" ? "auth" : current.startupStage ?? "sdk_ready",
           startupError: message,
           authError: message,
           identitySource: current.identitySource ?? "local_fallback",
