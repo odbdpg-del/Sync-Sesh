@@ -587,6 +587,140 @@ If Attempt 7 also fails, stop iterating on OAuth and React debugging first. Move
 - deployment/header/response inspection
 - Discord developer support or Activities troubleshooting with the static repro
 
+### Actual Outcome
+
+- A standalone static HTML probe page was added at:
+  - `/static-probe.html`
+- The page contains:
+  - plain HTML
+  - inline CSS
+  - tiny inline JavaScript only for query/timestamp display
+- It does not use:
+  - React
+  - the app bundle
+  - the Discord SDK
+- In a normal browser, the static probe renders correctly.
+- In Discord Activity launch using the override URL, the result was still:
+  - a blank white box
+
+### What We Learned From Attempt 7
+
+- the white-box failure is not specific to:
+  - React
+  - Vite app startup
+  - the embedded auth harness
+  - the Discord SDK auth path
+- the failure still happens even for a plain static page served from the same deployment
+- this strongly shifts the likely root cause away from app auth code and toward:
+  - Discord Activity override handling
+  - Discord iframe/runtime behavior
+  - deployment-level response or embedding behavior
+  - or another platform-side issue outside the Sync Sesh app bundle
+
+## Attempt 8
+
+### Name
+
+Embed And Response Diagnostics
+
+### Goal
+
+Determine whether the deployment response or Discord embed environment is preventing even static HTML from being shown inside the Activity iframe.
+
+### Why This Attempt Exists
+
+Attempt 7 is the strongest simplification so far:
+
+- a public HTTPS static HTML file
+- no React
+- no bundle
+- no Discord SDK
+- still a white box in Discord
+
+That means the next useful investigation is no longer about app logic at all.
+
+The next question becomes:
+
+- "what is different about the deployment response or Discord embedding path compared to a normal browser?"
+
+### Change
+
+Do not change OAuth logic for this attempt.
+
+Instead:
+
+1. Inspect the deployed response headers for:
+   - `Content-Security-Policy`
+   - `X-Frame-Options`
+   - `Cross-Origin-Embedder-Policy`
+   - `Cross-Origin-Opener-Policy`
+   - `Cross-Origin-Resource-Policy`
+2. Verify whether Discord Activity override is honoring:
+   - the exact public URL
+   - query-string cache-busting
+3. Compare normal browser behavior versus Discord Activity behavior for:
+   - root app page
+   - harness page
+   - static probe page
+4. If no deployment issue is found, prepare a minimal external repro for Discord support:
+   - Activity app
+   - override URL
+   - public static page
+   - white-box result in Discord
+
+### Success Criteria
+
+Any of the following count as success:
+
+- a suspicious header or embed policy issue is identified
+- a Discord override/path-handling issue is identified
+- a minimal support-ready repro is prepared with enough evidence to escalate
+
+### Failure Criteria
+
+This attempt should be considered failed if:
+
+- no embed/deployment clues are found
+- Discord still white-boxes all tested public pages
+- no new differentiating signal appears
+
+### Recommended Follow-Up
+
+If Attempt 8 finds no deployment/header issue, stop app-code debugging and escalate using the Attempt 7 static repro as the primary evidence.
+
+### Implementation
+
+Attempt 8 is implemented as a standalone static diagnostics page served directly from the deployment:
+
+- `/embed-diagnostics.html`
+
+The page is intentionally outside the React app and does not use:
+
+- the app bundle
+- Discord SDK
+- OAuth logic
+
+Instead, it reports:
+
+- current URL
+- query string
+- referrer
+- user agent
+- whether the page believes it is inside an iframe
+- whether `window.top` access is blocked
+- same-origin response headers fetched from:
+  - `/`
+  - `/static-probe.html`
+  - `/embed-diagnostics.html`
+
+### Next Test
+
+Use the Activity override URL:
+
+- `/embed-diagnostics.html?v=attempt8`
+
+If Discord still shows only a white box for that page, Attempt 8 strongly supports escalation with the static repro instead of more app-code debugging.
+
 ## Related Docs
 
 - [discord-activity-authorization-vision.md](C:/Users/Rubbe/Desktop/farding/Sync-Sesh/docs/discord-activity-authorization-vision.md)

@@ -8,6 +8,13 @@ Entries must be in reverse chronological order. New entries go at the top, above
 
 Use a level-two heading for every entry so the editor can fold each change.
 
+## [2357] - 2026-04-28 14:43 - `codex/merge-ui-and-3d-world / Bug 1 Attempt 8 Embed Diagnostics`
+
+- Implemented Attempt 8 as a standalone `public/embed-diagnostics.html` page that reports iframe/runtime context and same-origin response headers for the root page, static probe page, and diagnostics page without using React, the app bundle, or the Discord SDK.
+- Extended the bug tracker notes with the exact Attempt 8 implementation and test URL so the next Discord override run can focus on embed/runtime evidence instead of more OAuth experimentation.
+- Touched `docs/bugs/bug_1.md`, `public/embed-diagnostics.html`, and `changelog.md`.
+- Build/test: `npm.cmd run build` passed.
+
 ## [2356] - 2026-04-28 14:31 - `codex/merge-ui-and-3d-world / Bug 1 Attempt 7 Static Probe`
 
 - Documented Attempt 7 in the bug tracker and added a standalone `public/static-probe.html` page with no React, no app bundle, and no Discord SDK so the next Activity override test can isolate whether Discord can render any static HTML from this deployment at all.
