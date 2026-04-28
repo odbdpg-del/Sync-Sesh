@@ -8,6 +8,13 @@ Entries must be in reverse chronological order. New entries go at the top, above
 
 Use a level-two heading for every entry so the editor can fold each change.
 
+## [2355] - 2026-04-28 14:20 - `codex/merge-ui-and-3d-world / Bug 1 Attempt 6 HTML Boot Probe`
+
+- Added an Attempt 6 HTML-level boot probe in `index.html` so the Discord harness can report raw pre-React execution phases, top-level script errors, and pre-mount timeouts before the Vite bundle or Discord SDK startup path takes over.
+- Wired `src/main.tsx` to forward its earliest boot phases into the same probe so we can distinguish `index.html loaded`, `main.tsx start`, and React render startup when the Activity is launched inside Discord.
+- Touched `index.html`, `src/main.tsx`, and `changelog.md`.
+- Build/test: `npm.cmd run build` passed.
+
 ## [2354] - 2026-04-28 14:08 - `codex/merge-ui-and-3d-world / Bug 1 Attempt 5 Visible Harness Bootstrap`
 
 - Hardened the Discord auth harness so Attempt 5 can no longer fail as a silent white box in Discord: the harness route now has a visible bootstrap status panel, a React error boundary, and runtime `window error` plus `unhandledrejection` reporting.

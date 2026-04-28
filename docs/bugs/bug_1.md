@@ -441,6 +441,79 @@ If Attempt 5 still reaches the same authorize failure after becoming visible, th
 
 If Attempt 5 shows a pre-authorize render/runtime crash, then the next fix should stay focused on harness observability rather than OAuth theory.
 
+## Attempt 6
+
+### Name
+
+HTML-Level Boot Probe Before React
+
+### Goal
+
+Find out whether the Discord Activity iframe is failing before the React bundle runs, or only after the app JavaScript begins executing.
+
+### Why This Attempt Exists
+
+Attempt 5 proved that:
+
+- the new harness is deployed
+- the harness renders in a normal browser
+- the harness still becomes a blank white box inside Discord, even after cache-busting the URL
+
+That means the next useful question is no longer:
+
+- "is OAuth failing?"
+
+The next useful question is:
+
+- "does the Activity page execute any app code at all inside Discord?"
+
+### Change
+
+Add a tiny inline probe directly in `index.html`, before the React bundle loads.
+
+The probe should:
+
+- write visible text into the page immediately
+- include a simple phase label such as:
+  - `index.html loaded`
+  - `inline script running`
+- register raw `window.onerror` handling
+- register raw `unhandledrejection` handling
+- update visible text if a top-level script error occurs before React mount
+
+This probe must not depend on:
+
+- React
+- Vite app startup
+- Discord SDK construction
+- harness route rendering
+
+### Success Criteria
+
+Any of the following count as success:
+
+- visible inline boot text appears inside Discord
+- a raw script error message appears inside Discord
+- the page proves that `index.html` executes even if React later fails
+
+### Failure Criteria
+
+This attempt should be considered failed if:
+
+- Discord still shows only a blank white iframe
+- no inline HTML-level text appears
+- no raw top-level error text appears
+
+### Interpretation
+
+If Attempt 6 shows inline boot text but React still does not render, the next bug is in bundle startup or runtime execution after HTML load.
+
+If Attempt 6 still shows only a white box, the remaining problem is likely even lower-level, such as Discord iframe/runtime behavior, response handling, or a platform-side embed issue outside the React app.
+
+### Recommended Follow-Up
+
+If Attempt 6 proves the page never reaches visible inline script execution inside Discord, stop changing OAuth logic and focus on Discord runtime/embed diagnostics instead.
+
 ## Related Docs
 
 - [discord-activity-authorization-vision.md](C:/Users/Rubbe/Desktop/farding/Sync-Sesh/docs/discord-activity-authorization-vision.md)

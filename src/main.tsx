@@ -19,6 +19,11 @@ declare global {
       setDetail: (detail: string) => void;
       setPhase: (phase: string) => void;
     };
+    __AUTH_HARNESS_HTML_PROBE__?: {
+      hide: () => void;
+      setDetail: (detail: string) => void;
+      setPhase: (phase: string) => void;
+    };
     __HIDE_BOOTSTRAP_STATUS__?: () => void;
   }
 }
@@ -34,9 +39,13 @@ function installAuthHarnessBootstrapStatus() {
     return;
   }
 
+  window.__AUTH_HARNESS_HTML_PROBE__?.setPhase("main.tsx:start");
+  window.__AUTH_HARNESS_HTML_PROBE__?.setDetail("React entry module loaded. Preparing harness bootstrap status.");
+
   const existing = document.getElementById("auth-harness-bootstrap-status");
 
   if (existing) {
+    window.__AUTH_HARNESS_BOOT_STATUS__ = window.__AUTH_HARNESS_HTML_PROBE__;
     return;
   }
 
@@ -59,21 +68,27 @@ function installAuthHarnessBootstrapStatus() {
   window.__AUTH_HARNESS_BOOT_STATUS__ = {
     hide: () => {
       status.remove();
+      window.__AUTH_HARNESS_HTML_PROBE__?.hide();
     },
     setPhase: (phase: string) => {
       if (phaseNode) {
         phaseNode.textContent = phase;
       }
+      window.__AUTH_HARNESS_HTML_PROBE__?.setPhase(phase);
     },
     setDetail: (detail: string) => {
       if (detailNode) {
         detailNode.textContent = detail;
       }
+      window.__AUTH_HARNESS_HTML_PROBE__?.setDetail(detail);
     },
   };
 }
 
 installAuthHarnessBootstrapStatus();
+
+window.__AUTH_HARNESS_BOOT_STATUS__?.setPhase("main.tsx:render");
+window.__AUTH_HARNESS_BOOT_STATUS__?.setDetail("Calling ReactDOM.createRoot().render().");
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>

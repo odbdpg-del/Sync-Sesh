@@ -18,10 +18,14 @@
         display: grid;
         place-items: center;
         padding: 24px;
-        background: radial-gradient(circle at top, rgba(54, 113, 255, 0.22), transparent 38%), #04070d;
+        background:
+          radial-gradient(circle at top, rgba(54, 113, 255, 0.14), transparent 34%),
+          rgba(3, 7, 14, 0.985);
+        backdrop-filter: blur(14px);
         font-family: "Trebuchet MS", sans-serif;
         white-space: pre-wrap;
         text-align: left;
+        z-index: 2147483647;
       }
 
       #bootstrap-status[hidden] {
@@ -33,8 +37,10 @@
         border: 1px solid rgba(87, 243, 255, 0.25);
         border-radius: 18px;
         padding: 18px;
-        background: rgba(8, 17, 35, 0.92);
-        box-shadow: 0 0 28px rgba(87, 243, 255, 0.14);
+        background: rgba(7, 15, 30, 0.995);
+        box-shadow:
+          0 0 0 1px rgba(87, 243, 255, 0.08),
+          0 0 28px rgba(87, 243, 255, 0.14);
       }
 
       #bootstrap-title {
@@ -59,35 +65,88 @@
     <div id="root"></div>
     <script>
       (function () {
+        const params = new URLSearchParams(window.location.search);
+        const isAuthHarness = params.get("authHarness") === "1" || window.location.pathname === "/auth-harness";
         const status = document.getElementById("bootstrap-status");
+        const title = document.getElementById("bootstrap-title");
         const copy = document.getElementById("bootstrap-copy");
         const setMessage = (message) => {
           if (copy) copy.textContent = message;
           if (status) status.hidden = false;
         };
+        const setTitle = (message) => {
+          if (title) title.textContent = message;
+        };
+
+        if (isAuthHarness) {
+          setTitle("Bug 1 Attempt 6");
+          setMessage("index.html loaded\ninline script running\nwaiting for module bundle");
+        }
+
+        const setHarnessProbe = (phase, detail) => {
+          if (!isAuthHarness) return;
+          setTitle("Bug 1 Attempt 6");
+          setMessage(phase + "\n" + detail);
+        };
 
         window.addEventListener("error", (event) => {
+          setHarnessProbe(
+            "window.onerror",
+            event.error?.stack || event.message || "Unknown error"
+          );
           setMessage("Bootstrap error:\n" + (event.error?.stack || event.message || "Unknown error"));
         });
 
         window.addEventListener("unhandledrejection", (event) => {
           const reason = event.reason;
+          setHarnessProbe(
+            "unhandledrejection",
+            reason?.stack || String(reason)
+          );
           setMessage("Unhandled promise rejection:\n" + (reason?.stack || String(reason)));
         });
 
         window.__HIDE_BOOTSTRAP_STATUS__ = function () {
           if (status) status.hidden = true;
         };
+        window.__AUTH_HARNESS_HTML_PROBE__ = {
+          hide: function () {
+            if (!isAuthHarness) return;
+            if (status) status.hidden = true;
+          },
+          setPhase: function (phase) {
+            if (!isAuthHarness) return;
+            const existing = copy ? copy.textContent || "" : "";
+            const detail = existing.includes("\n") ? existing.slice(existing.indexOf("\n") + 1) : existing;
+            setHarnessProbe(phase, detail || "waiting for next boot step");
+          },
+          setDetail: function (detail) {
+            if (!isAuthHarness) return;
+            const existing = copy ? copy.textContent || "" : "";
+            const phase = existing.includes("\n") ? existing.slice(0, existing.indexOf("\n")) : "inline script running";
+            setHarnessProbe(phase, detail);
+          },
+        };
 
         window.setTimeout(() => {
           const root = document.getElementById("root");
-          if (root && root.childElementCount === 0) {
+          if (root && root.childElementCount === 0 && !isAuthHarness) {
             setMessage(
               "The app is still loading.\n\nIf this stays visible in Discord, the embedded client is not finishing startup. " +
                 "That usually means a Discord SDK issue, a localhost test-mode mismatch, or a runtime error before React mounted."
             );
           }
         }, 4000);
+
+        window.setTimeout(() => {
+          const root = document.getElementById("root");
+          if (isAuthHarness && root && root.childElementCount === 0) {
+            setHarnessProbe(
+              "index.html timeout",
+              "React has not rendered yet. The module bundle may be failing before mount, or Discord may not be executing the app startup path."
+            );
+          }
+        }, 2500);
       })();
     </script>
     <script type="module" src="/src/main.tsx"></script>
