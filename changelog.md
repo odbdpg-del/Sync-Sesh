@@ -8,6 +8,13 @@ Entries must be in reverse chronological order. New entries go at the top, above
 
 Use a level-two heading for every entry so the editor can fold each change.
 
+## [2354] - 2026-04-28 14:08 - `codex/merge-ui-and-3d-world / Bug 1 Attempt 5 Visible Harness Bootstrap`
+
+- Hardened the Discord auth harness so Attempt 5 can no longer fail as a silent white box in Discord: the harness route now has a visible bootstrap status panel, a React error boundary, and runtime `window error` plus `unhandledrejection` reporting.
+- Updated the harness copy and bug tracker notes so Attempt 5 is explicitly about making the minimal Discord auth page observable inside the real Activity runtime before drawing more OAuth conclusions.
+- Touched `src/App.tsx`, `src/main.tsx`, `src/screens/AuthHarnessScreen.tsx`, `src/screens/AuthHarnessErrorBoundary.tsx`, `src/styles/global.css`, `docs/bugs/bug_1.md`, and `changelog.md`.
+- Build/test: `npm.cmd run build` passed.
+
 ## [2353] - 2026-04-28 13:33 - `codex/merge-ui-and-3d-world / Bug 1 Attempt 3 Harness One-Shot Fix`
 
 - Fixed the Attempt 3 auth harness so it no longer auto-runs in a loop after each completed authorization attempt; it now runs once on load and only reruns from the explicit button press.

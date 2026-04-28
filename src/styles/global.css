@@ -90,6 +90,51 @@ textarea {
   min-height: 100vh;
 }
 
+.auth-harness-bootstrap-status {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background:
+    radial-gradient(circle at top, rgba(19, 255, 146, 0.12), transparent 30%),
+    radial-gradient(circle at 80% 0%, rgba(157, 62, 255, 0.12), transparent 24%),
+    rgba(4, 9, 18, 0.94);
+}
+
+.auth-harness-bootstrap-card {
+  width: min(520px, 100%);
+  display: grid;
+  gap: 10px;
+  padding: 22px;
+  border: 1px solid rgba(87, 243, 255, 0.26);
+  border-radius: 20px;
+  background: rgba(5, 12, 21, 0.96);
+  box-shadow: var(--shadow-panel), 0 0 28px rgba(63, 233, 255, 0.1);
+}
+
+.auth-harness-bootstrap-card strong {
+  color: #effcff;
+  font-family: var(--font-display);
+  font-size: 1.5rem;
+}
+
+.auth-harness-bootstrap-phase {
+  color: var(--cyan);
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.auth-harness-bootstrap-detail {
+  margin: 0;
+  color: var(--text-soft);
+  font-family: var(--font-mono);
+  line-height: 1.5;
+}
+
 .auth-harness-stage {
   min-height: 100vh;
   display: grid;

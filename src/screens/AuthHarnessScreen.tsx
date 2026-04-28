@@ -78,6 +78,42 @@ export function AuthHarnessScreen() {
     ]);
   }, []);
 
+  useEffect(() => {
+    window.__AUTH_HARNESS_BOOT_STATUS__?.setPhase("react:mounted");
+    window.__AUTH_HARNESS_BOOT_STATUS__?.setDetail("Harness mounted. Installing runtime crash listeners.");
+  }, []);
+
+  useEffect(() => {
+    const handleWindowError = (event: ErrorEvent) => {
+      const detail = event.error instanceof Error
+        ? event.error.message
+        : event.message || "Unknown window error.";
+      appendLog("error", "window:error", detail);
+      window.__AUTH_HARNESS_BOOT_STATUS__?.setPhase("window:error");
+      window.__AUTH_HARNESS_BOOT_STATUS__?.setDetail(detail);
+    };
+
+    const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
+      const reason = event.reason;
+      const detail = reason instanceof Error
+        ? reason.message
+        : typeof reason === "string"
+          ? reason
+          : "Unhandled promise rejection.";
+      appendLog("error", "window:unhandledrejection", detail);
+      window.__AUTH_HARNESS_BOOT_STATUS__?.setPhase("window:unhandledrejection");
+      window.__AUTH_HARNESS_BOOT_STATUS__?.setDetail(detail);
+    };
+
+    window.addEventListener("error", handleWindowError);
+    window.addEventListener("unhandledrejection", handleUnhandledRejection);
+
+    return () => {
+      window.removeEventListener("error", handleWindowError);
+      window.removeEventListener("unhandledrejection", handleUnhandledRejection);
+    };
+  }, [appendLog]);
+
   const runHarness = useCallback(async () => {
     if (isRunningRef.current) {
       return;
@@ -89,9 +125,13 @@ export function AuthHarnessScreen() {
 
     const attemptId = createDiscordAuthAttemptId();
     appendLog("info", "harness:init:start", `attempt ${attemptId.slice(-8)}`);
+    window.__AUTH_HARNESS_BOOT_STATUS__?.setPhase("harness:init:start");
+    window.__AUTH_HARNESS_BOOT_STATUS__?.setDetail(`Starting minimal Discord auth attempt ${attemptId.slice(-8)}.`);
 
     if (!clientId) {
       appendLog("error", "harness:init:failed", "Missing VITE_DISCORD_CLIENT_ID.");
+      window.__AUTH_HARNESS_BOOT_STATUS__?.setPhase("harness:init:failed");
+      window.__AUTH_HARNESS_BOOT_STATUS__?.setDetail("Missing VITE_DISCORD_CLIENT_ID.");
       isRunningRef.current = false;
       setIsRunning(false);
       return;
@@ -104,8 +144,13 @@ export function AuthHarnessScreen() {
     try {
       sdk = new DiscordSDK(clientId);
       appendLog("info", "sdk:init:success", `attempt ${attemptId.slice(-8)}`);
+      window.__AUTH_HARNESS_BOOT_STATUS__?.setPhase("sdk:init:success");
+      window.__AUTH_HARNESS_BOOT_STATUS__?.setDetail("DiscordSDK constructed successfully.");
     } catch (error) {
-      appendLog("error", "sdk:init:failed", error instanceof Error ? error.message : "DiscordSDK construction failed.");
+      const message = error instanceof Error ? error.message : "DiscordSDK construction failed.";
+      appendLog("error", "sdk:init:failed", message);
+      window.__AUTH_HARNESS_BOOT_STATUS__?.setPhase("sdk:init:failed");
+      window.__AUTH_HARNESS_BOOT_STATUS__?.setDetail(message);
       isRunningRef.current = false;
       setIsRunning(false);
       return;
@@ -116,8 +161,13 @@ export function AuthHarnessScreen() {
     try {
       await sdk.ready();
       appendLog("info", "sdk:ready:success", sdk.instanceId ?? "no instance id");
+      window.__AUTH_HARNESS_BOOT_STATUS__?.setPhase("sdk:ready:success");
+      window.__AUTH_HARNESS_BOOT_STATUS__?.setDetail("Discord SDK handshake completed. Starting authorize request.");
     } catch (error) {
-      appendLog("error", "sdk:ready:failed", error instanceof Error ? error.message : "sdk.ready() failed.");
+      const message = error instanceof Error ? error.message : "sdk.ready() failed.";
+      appendLog("error", "sdk:ready:failed", message);
+      window.__AUTH_HARNESS_BOOT_STATUS__?.setPhase("sdk:ready:failed");
+      window.__AUTH_HARNESS_BOOT_STATUS__?.setDetail(message);
       isRunningRef.current = false;
       setIsRunning(false);
       return;
@@ -128,6 +178,8 @@ export function AuthHarnessScreen() {
       "auth:interactive:start",
       `build ${typeof __APP_BUILD_ID__ !== "undefined" ? __APP_BUILD_ID__ : "test-build"} | redirect ${config.redirectUri} | endpoint ${config.authEndpoint} | channel ${sdk.channelId ?? "n/a"} | guild ${sdk.guildId ?? "n/a"} | instance ${sdk.instanceId ?? "n/a"}`,
     );
+    window.__AUTH_HARNESS_BOOT_STATUS__?.setPhase("auth:interactive:start");
+    window.__AUTH_HARNESS_BOOT_STATUS__?.setDetail("Discord authorize request started. Waiting for popup or failure.");
 
     try {
       const authorizeOptions: HarnessAuthorizeRequest = {
@@ -150,18 +202,26 @@ export function AuthHarnessScreen() {
 
       if (!code) {
         appendLog("error", "auth:interactive:failed", `Authorize returned no usable code. ${debugSummary}`);
+        window.__AUTH_HARNESS_BOOT_STATUS__?.setPhase("auth:interactive:failed");
+        window.__AUTH_HARNESS_BOOT_STATUS__?.setDetail(`Authorize returned no usable code. ${debugSummary}`);
       } else {
         appendLog("info", "auth:interactive:success", `Authorization code received. ${debugSummary}`);
+        window.__AUTH_HARNESS_BOOT_STATUS__?.setPhase("auth:interactive:success");
+        window.__AUTH_HARNESS_BOOT_STATUS__?.setDetail("Authorization code received. The minimal authorize path is working.");
       }
     } catch (error) {
       const code = getSafeHarnessErrorCode(error);
       const message = error instanceof Error ? error.message : "Discord authorize request failed.";
+      const detail = code ? `${message} [code=${code}]` : message;
       appendLog(
         "error",
         "auth:interactive:failed",
-        code ? `${message} [code=${code}]` : message,
+        detail,
       );
+      window.__AUTH_HARNESS_BOOT_STATUS__?.setPhase("auth:interactive:failed");
+      window.__AUTH_HARNESS_BOOT_STATUS__?.setDetail(detail);
     } finally {
+      window.__AUTH_HARNESS_BOOT_STATUS__?.hide();
       isRunningRef.current = false;
       setIsRunning(false);
     }
@@ -176,9 +236,9 @@ export function AuthHarnessScreen() {
       <main className="auth-harness-shell panel">
         <header className="auth-harness-header">
           <div>
-            <span className="auth-harness-kicker">Bug 1 Attempt 3</span>
-            <h1>Minimal Discord Authorize Harness</h1>
-            <p>Runs only `sdk.ready()` and one interactive `authorize()` call.</p>
+            <span className="auth-harness-kicker">Bug 1 Attempt 5</span>
+            <h1>Discord Auth Diagnostic Harness</h1>
+            <p>Runs only `sdk.ready()` and one interactive `authorize()` call, with visible crash and boot status reporting.</p>
           </div>
           <button type="button" className="ghost-button" onClick={() => void runHarness()} disabled={isRunning}>
             {isRunning ? "Running..." : "Run Again"}

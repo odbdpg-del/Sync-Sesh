@@ -385,6 +385,62 @@ If Attempt 3 also fails unchanged, the next conclusion becomes:
 
 - the remaining blocker is very likely Discord platform/app/install state rather than the Sync Sesh code path
 
+## Attempt 5
+
+### Name
+
+Visible Harness Bootstrap And Crash Boundary
+
+### Goal
+
+Make the minimal auth harness useful inside Discord even when it fails before the normal on-screen log can render.
+
+### Why This Attempt Exists
+
+Attempt 3 isolated the app down to a minimal `sdk.ready()` plus `authorize()` flow, but Discord launches started showing a white box instead of visible harness output.
+
+That means the harness is no longer a trustworthy debugging surface inside the real Activity runtime until it can report:
+
+- whether React mounted at all
+- whether the Discord SDK constructor threw
+- whether `sdk.ready()` failed
+- whether a render-time crash happened before the harness log appeared
+
+### Change
+
+Add a new visible bootstrap and crash-reporting layer around the harness:
+
+- a top-level bootstrap status panel that appears before React mount
+- a React error boundary around the harness route
+- global `window error` and `unhandledrejection` logging in the harness
+- explicit bootstrap status updates during:
+  - app boot
+  - React mount
+  - SDK construction
+  - `sdk.ready()`
+  - interactive `authorize()`
+
+### Success Criteria
+
+Any of the following count as success:
+
+- the previous white box is replaced by visible status text
+- a React render crash is shown on screen instead of blank output
+- the harness reaches a visible `sdk:init:*`, `sdk:ready:*`, or `auth:interactive:*` line inside Discord
+
+### Failure Criteria
+
+This attempt should be considered failed if:
+
+- Discord still shows only a blank white iframe with no visible bootstrap text
+- the harness remains unreadable in the real Activity runtime
+
+### Interpretation
+
+If Attempt 5 still reaches the same authorize failure after becoming visible, that strengthens the conclusion that the blocker is not normal Sync Sesh app complexity.
+
+If Attempt 5 shows a pre-authorize render/runtime crash, then the next fix should stay focused on harness observability rather than OAuth theory.
+
 ## Related Docs
 
 - [discord-activity-authorization-vision.md](C:/Users/Rubbe/Desktop/farding/Sync-Sesh/docs/discord-activity-authorization-vision.md)
