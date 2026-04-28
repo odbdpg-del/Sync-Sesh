@@ -195,6 +195,8 @@ export interface SharedDawLiveSoundPayload {
   areaId: "recording-studio";
   kind: SharedDawLiveSoundKind;
   label: string;
+  clientTriggeredAt?: string;
+  scheduledAt?: string;
   frequency?: number;
   durationSeconds?: number;
   gainScale?: number;

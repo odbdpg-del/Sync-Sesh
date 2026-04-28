@@ -110,6 +110,14 @@ interface SoundCloudWaveformData {
   samples?: number[];
 }
 
+interface SoundCloudSeekTrace {
+  id: number;
+  requestedAtMs: number;
+  requestedPositionMs: number;
+  beforePositionMs: number;
+  playAfterSeek: boolean;
+}
+
 export interface SoundCloudTrackListItem {
   index: number;
   title: string;
@@ -251,6 +259,34 @@ function safeWidgetCall(callback: () => void) {
   } catch {
     // SoundCloud's widget can throw during teardown if the iframe is already gone.
   }
+}
+
+function getSoundCloudProgressPositionMs(event: unknown) {
+  if (!event || typeof event !== "object") {
+    return null;
+  }
+
+  const candidate = event as { currentPosition?: unknown; relativePosition?: unknown; loadedProgress?: unknown };
+
+  return typeof candidate.currentPosition === "number" && Number.isFinite(candidate.currentPosition)
+    ? candidate.currentPosition
+    : null;
+}
+
+function logSoundCloudSeekTrace(stage: string, trace: SoundCloudSeekTrace, reportedPositionMs?: number | null) {
+  if (!import.meta.env.DEV) {
+    return;
+  }
+
+  console.info("[Sync Sesh SoundCloud seek]", {
+    stage,
+    requestedPositionMs: Math.round(trace.requestedPositionMs),
+    beforePositionMs: Math.round(trace.beforePositionMs),
+    reportedPositionMs: typeof reportedPositionMs === "number" ? Math.round(reportedPositionMs) : null,
+    reportedDeltaMs: typeof reportedPositionMs === "number" ? Math.round(reportedPositionMs - trace.requestedPositionMs) : null,
+    elapsedMs: Math.round(performance.now() - trace.requestedAtMs),
+    playAfterSeek: trace.playAfterSeek,
+  });
 }
 
 function clampSoundCloudVolume(volume: number) {
@@ -475,6 +511,9 @@ export function useSoundCloudPlayer({ waveformBarCount, initialPlaylistId, initi
   const durationRef = useRef(0);
   const waveformRequestRef = useRef(0);
   const autoAcceptedMetaTrackKeyRef = useRef<string | null>(null);
+  const seekTraceIdRef = useRef(0);
+  const pendingSeekTraceRef = useRef<SoundCloudSeekTrace | null>(null);
+  const seekTraceTimeoutsRef = useRef<number[]>([]);
   const initialVolumeRef = useRef(clampSoundCloudVolume(initialVolume ?? DEFAULT_SOUNDCLOUD_VOLUME));
   const volumeRef = useRef(initialVolumeRef.current);
   const outputLevelRef = useRef(1);
@@ -534,8 +573,44 @@ export function useSoundCloudPlayer({ waveformBarCount, initialPlaylistId, initi
     }
 
     const clampedPosition = Math.max(0, Math.min(duration, nextPosition));
+    const trace: SoundCloudSeekTrace | null = import.meta.env.DEV
+      ? {
+          id: seekTraceIdRef.current + 1,
+          requestedAtMs: performance.now(),
+          requestedPositionMs: clampedPosition,
+          beforePositionMs: playbackPosition,
+          playAfterSeek: options?.playAfterSeek === true,
+        }
+      : null;
+
+    if (trace) {
+      seekTraceIdRef.current = trace.id;
+      pendingSeekTraceRef.current = trace;
+      logSoundCloudSeekTrace("request", trace, null);
+    }
+
     setPlaybackPosition(clampedPosition);
     widget.seekTo(clampedPosition);
+
+    if (trace) {
+      widget.getPosition((position) => {
+        logSoundCloudSeekTrace("position-callback", trace, position);
+      });
+
+      const timeoutId = window.setTimeout(() => {
+        seekTraceTimeoutsRef.current = seekTraceTimeoutsRef.current.filter((currentTimeoutId) => currentTimeoutId !== timeoutId);
+
+        if (widgetRef.current !== widget) {
+          return;
+        }
+
+        widget.getPosition((position) => {
+          logSoundCloudSeekTrace("position-delayed", trace, position);
+        });
+      }, 250);
+
+      seekTraceTimeoutsRef.current.push(timeoutId);
+    }
 
     if (options?.playAfterSeek) {
       widget.play();
@@ -755,6 +830,24 @@ export function useSoundCloudPlayer({ waveformBarCount, initialPlaylistId, initi
       updatePlaybackTiming();
     });
 
+    const playProgressEvent = window.SC.Widget.Events.PLAY_PROGRESS;
+
+    if (playProgressEvent) {
+      widget.bind(playProgressEvent, (event) => {
+        const trace = pendingSeekTraceRef.current;
+        const position = getSoundCloudProgressPositionMs(event);
+
+        if (typeof position === "number") {
+          setPlaybackPosition(position);
+        }
+
+        if (trace) {
+          logSoundCloudSeekTrace("play-progress", trace, position);
+          pendingSeekTraceRef.current = null;
+        }
+      });
+    }
+
     widget.bind(window.SC.Widget.Events.FINISH, () => {
       const count = trackCountRef.current;
 
@@ -782,9 +875,16 @@ export function useSoundCloudPlayer({ waveformBarCount, initialPlaylistId, initi
     return () => {
       window.clearInterval(timingInterval);
       window.clearTimeout(readyTimeoutId);
+      seekTraceTimeoutsRef.current.forEach((timeoutId) => window.clearTimeout(timeoutId));
+      seekTraceTimeoutsRef.current = [];
+      pendingSeekTraceRef.current = null;
 
       if (widgetRef.current === widget) {
         widgetRef.current = null;
+      }
+
+      if (playProgressEvent) {
+        safeWidgetCall(() => widget.unbind(playProgressEvent));
       }
 
       safeWidgetCall(() => widget.pause());

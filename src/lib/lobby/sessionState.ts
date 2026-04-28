@@ -533,6 +533,14 @@ function sanitizeSharedDawLiveSoundPayload(sound: SharedDawLiveSoundPayload): Sh
 
   const gainScale = sound.gainScale === undefined ? undefined : clampNumber(sound.gainScale, 0, 1);
   const durationSeconds = sound.durationSeconds === undefined ? undefined : clampNumber(sound.durationSeconds, 0.05, 2);
+  const clientTriggeredAtMs = parseTimestamp(sound.clientTriggeredAt);
+  const clientTriggeredAt = typeof clientTriggeredAtMs === "number" && Number.isFinite(clientTriggeredAtMs)
+    ? new Date(clientTriggeredAtMs).toISOString()
+    : undefined;
+  const scheduledAtMs = parseTimestamp(sound.scheduledAt);
+  const scheduledAt = typeof scheduledAtMs === "number" && Number.isFinite(scheduledAtMs)
+    ? new Date(scheduledAtMs).toISOString()
+    : undefined;
 
   if (sound.kind === "drum") {
     if (!isSharedDawLiveDrumKind(sound.drumKind)) {
@@ -543,6 +551,8 @@ function sanitizeSharedDawLiveSoundPayload(sound: SharedDawLiveSoundPayload): Sh
       areaId: sound.areaId,
       kind: "drum",
       label,
+      clientTriggeredAt,
+      scheduledAt,
       drumKind: sound.drumKind,
       gainScale,
     };
@@ -553,6 +563,8 @@ function sanitizeSharedDawLiveSoundPayload(sound: SharedDawLiveSoundPayload): Sh
       areaId: sound.areaId,
       kind: "bass-pattern",
       label,
+      clientTriggeredAt,
+      scheduledAt,
       gainScale,
       bassMachinePatch,
     };
@@ -569,6 +581,8 @@ function sanitizeSharedDawLiveSoundPayload(sound: SharedDawLiveSoundPayload): Sh
       areaId: sound.areaId,
       kind: "piano",
       label,
+      clientTriggeredAt,
+      scheduledAt,
       frequency,
       durationSeconds,
       gainScale,
@@ -586,6 +600,8 @@ function sanitizeSharedDawLiveSoundPayload(sound: SharedDawLiveSoundPayload): Sh
     areaId: sound.areaId,
     kind: sound.kind,
     label,
+    clientTriggeredAt,
+    scheduledAt,
     frequency,
     durationSeconds,
     gainScale,

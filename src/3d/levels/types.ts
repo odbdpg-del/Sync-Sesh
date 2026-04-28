@@ -138,6 +138,9 @@ export interface LevelExitConfig {
   id: string;
   label: string;
   targetLevelId: string;
+  transitionStyle?: "reveal" | "instant";
+  targetSpawnPosition?: Vec3;
+  targetCameraTarget?: Vec3;
   position: Vec3;
   rotation: Euler3;
   size: {

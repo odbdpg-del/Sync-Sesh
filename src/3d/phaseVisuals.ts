@@ -123,7 +123,7 @@ export function getPhaseVisuals(phase: SessionPhase, isUrgent: boolean): PhaseVi
         monitorGlow: "#1e6a3f",
         pulseSpeed: 1.6,
         pulseAmount: 0.18,
-        showCompletionBurst: true,
+        showCompletionBurst: false,
       };
     case "lobby":
     default:

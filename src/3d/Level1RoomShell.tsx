@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useRef, useState } from "react";
 import { useFrame } from "@react-three/fiber";
-import type { LevelConfig, LightConfig } from "./levels";
+import type { LevelConfig, LevelExitConfig, LightConfig } from "./levels";
 import { ControlRoomWallDisplays } from "./ControlRoomWallDisplays";
 import { ComputerStation } from "./ComputerStation";
 import { FreeRoamPresenceMarker } from "./FreeRoamPresenceMarker";
@@ -48,6 +48,45 @@ type StudioGuitarRecordingStatus = {
 
 function isSimRoamingDisabledByQuery() {
   return new URLSearchParams(window.location.search).get("simRoam") === "0";
+}
+
+function isControlRoomHubLevel(levelConfig: LevelConfig) {
+  return levelConfig.id === "level-1";
+}
+
+function isStandaloneStudioLevel(levelConfig: LevelConfig) {
+  return levelConfig.id === "level-3-recording-studio";
+}
+
+function getActiveLevelArea(levelConfig: LevelConfig, areaId: string, kind: NonNullable<LevelConfig["areas"]>[number]["kind"]) {
+  return levelConfig.areas?.find((area) => (
+    area.id === areaId &&
+    area.kind === kind &&
+    area.status === "active"
+  ));
+}
+
+function isControlRoomToStudioOpening(opening: NonNullable<LevelConfig["openings"]>[number]) {
+  return (
+    opening.id === "control-room-recording-studio-opening" &&
+    opening.fromAreaId === "control-room" &&
+    opening.toAreaId === "recording-studio"
+  );
+}
+
+function isStandaloneStudioReturnOpening(opening: NonNullable<LevelConfig["openings"]>[number]) {
+  return (
+    opening.id === "level-3-recording-studio-return-opening" &&
+    opening.fromAreaId === "recording-studio" &&
+    opening.toAreaId === "control-room"
+  );
+}
+
+function getActiveRecordingStudioOpening(levelConfig: LevelConfig) {
+  return levelConfig.openings?.find((opening) => (
+    (isControlRoomToStudioOpening(opening) || isStandaloneStudioReturnOpening(opening)) &&
+    opening.status === "active"
+  ));
 }
 
 function LevelLight({ light, phaseVisuals }: { light: LightConfig; phaseVisuals: PhaseVisuals }) {
@@ -485,201 +524,6 @@ function ControlRoomKitchenIslandProps({ phaseVisuals }: { phaseVisuals: PhaseVi
           <meshBasicMaterial args={[{ color: "#f8d36a" }]} />
         </mesh>
       </group>
-    </group>
-  );
-}
-
-function createAudioWorkbenchReadoutCanvas(phaseVisuals: PhaseVisuals) {
-  const canvas = document.createElement("canvas");
-  canvas.width = 1024;
-  canvas.height = 512;
-
-  const context = canvas.getContext("2d");
-
-  if (!context) {
-    return canvas;
-  }
-
-  context.fillStyle = "#040914";
-  context.fillRect(0, 0, canvas.width, canvas.height);
-  context.strokeStyle = phaseVisuals.gridPrimary;
-  context.lineWidth = 12;
-  context.strokeRect(24, 24, canvas.width - 48, canvas.height - 48);
-  context.strokeStyle = "rgba(87, 243, 255, 0.24)";
-  context.lineWidth = 3;
-
-  for (let x = 78; x < canvas.width - 70; x += 82) {
-    context.beginPath();
-    context.moveTo(x, 84);
-    context.lineTo(x, canvas.height - 72);
-    context.stroke();
-  }
-
-  context.fillStyle = phaseVisuals.gridPrimary;
-  context.font = "700 58px monospace";
-  context.fillText("AUDIO WORKBENCH", 70, 112);
-  context.fillStyle = "#f8d36a";
-  context.font = "700 42px monospace";
-  context.fillText("PATCHBAY OFFLINE", 74, 188);
-  context.fillStyle = "#73ff4c";
-  context.font = "700 34px monospace";
-  context.fillText("FM VOICE: STANDBY", 74, 262);
-  context.fillStyle = "#f64fff";
-  context.fillText("NO AUDIO ENGINE", 74, 326);
-
-  context.fillStyle = "rgba(87, 243, 255, 0.18)";
-  context.fillRect(72, 382, 880, 34);
-  context.fillStyle = phaseVisuals.timerAccent;
-  [0.08, 0.2, 0.34, 0.48, 0.62, 0.78].forEach((position, index) => {
-    context.fillRect(84 + position * 820, 374 - (index % 3) * 18, 24, 76 + (index % 3) * 18);
-  });
-
-  return canvas;
-}
-
-function createAudioWorkbenchLabelCanvas(label: string, color: string) {
-  const canvas = document.createElement("canvas");
-  canvas.width = 384;
-  canvas.height = 192;
-
-  const context = canvas.getContext("2d");
-
-  if (!context) {
-    return canvas;
-  }
-
-  context.fillStyle = "#050914";
-  context.fillRect(0, 0, canvas.width, canvas.height);
-  context.strokeStyle = color;
-  context.lineWidth = 10;
-  context.strokeRect(16, 16, canvas.width - 32, canvas.height - 32);
-  context.fillStyle = color;
-  context.font = "700 72px monospace";
-  context.textAlign = "center";
-  context.textBaseline = "middle";
-  context.fillText(label, canvas.width / 2, canvas.height / 2 + 4);
-
-  return canvas;
-}
-
-function AudioWorkbenchLabel({
-  label,
-  color,
-  position,
-}: {
-  label: string;
-  color: string;
-  position: [number, number, number];
-}) {
-  const labelCanvas = useMemo(() => createAudioWorkbenchLabelCanvas(label, color), [color, label]);
-
-  return (
-    <mesh position={position} rotation={[-0.52, 0, 0]}>
-      <planeGeometry args={[0.34, 0.16]} />
-      <meshBasicMaterial args={[{ transparent: true, toneMapped: false }]}>
-        <canvasTexture key={`audio-workbench-label-${label}-${color}`} attach="map" args={[labelCanvas]} />
-      </meshBasicMaterial>
-    </mesh>
-  );
-}
-
-function ControlRoomAudioWorkbench({ phaseVisuals }: { phaseVisuals: PhaseVisuals }) {
-  const readoutCanvas = useMemo(() => createAudioWorkbenchReadoutCanvas(phaseVisuals), [
-    phaseVisuals.gridPrimary,
-    phaseVisuals.timerAccent,
-  ]);
-  const readoutTextureKey = `audio-workbench-readout-${phaseVisuals.gridPrimary}-${phaseVisuals.timerAccent}`;
-  const modules = [
-    { id: "clock", label: "CLOCK", x: -0.72, color: phaseVisuals.gridPrimary },
-    { id: "fm", label: "FM", x: -0.36, color: "#73ff4c" },
-    { id: "seq", label: "SEQ", x: 0, color: "#f8d36a" },
-    { id: "gain", label: "GAIN", x: 0.36, color: "#f64fff" },
-    { id: "out", label: "OUT", x: 0.72, color: phaseVisuals.timerAccent },
-  ];
-  const sequencerPads = Array.from({ length: 8 }, (_, index) => index);
-
-  return (
-    <group position={[-8.85, 0, -4.6]} rotation={[0, Math.PI / 2, 0]}>
-      <mesh position={[0, 0.42, 0]}>
-        <boxGeometry args={[2.28, 0.84, 0.78]} />
-        <meshStandardMaterial args={[{ color: "#07101e", emissive: "#050914", emissiveIntensity: 0.18, roughness: 0.74, metalness: 0.08 }]} />
-      </mesh>
-      <mesh position={[0, 0.91, 0.02]} rotation={[-0.18, 0, 0]}>
-        <boxGeometry args={[2.42, 0.14, 0.96]} />
-        <meshStandardMaterial args={[{ color: "#131d30", emissive: "#08111e", emissiveIntensity: 0.22, roughness: 0.66, metalness: 0.12 }]} />
-      </mesh>
-      <mesh position={[0, 1.42, -0.24]} rotation={[0.08, 0, 0]}>
-        <boxGeometry args={[1.36, 0.74, 0.08]} />
-        <meshStandardMaterial args={[{ color: "#03060d", emissive: "#07111f", emissiveIntensity: 0.28, roughness: 0.62, metalness: 0.1 }]} />
-      </mesh>
-      <mesh position={[0, 1.42, -0.19]} rotation={[0.08, 0, 0]}>
-        <planeGeometry args={[1.16, 0.52]} />
-        <meshBasicMaterial args={[{ transparent: false, toneMapped: false }]}>
-          <canvasTexture key={readoutTextureKey} attach="map" args={[readoutCanvas]} />
-        </meshBasicMaterial>
-      </mesh>
-
-      <mesh position={[-0.88, 1.2, -0.18]} rotation={[0.08, 0, 0]}>
-        <boxGeometry args={[0.34, 0.42, 0.06]} />
-        <meshBasicMaterial args={[{ color: "#0b3143" }]} />
-      </mesh>
-      <mesh position={[0.88, 1.2, -0.18]} rotation={[0.08, 0, 0]}>
-        <boxGeometry args={[0.34, 0.42, 0.06]} />
-        <meshBasicMaterial args={[{ color: "#31123e" }]} />
-      </mesh>
-
-      {modules.map((module) => (
-        <group key={module.id} position={[module.x, 0.98, 0.12]}>
-          <mesh>
-            <boxGeometry args={[0.28, 0.08, 0.28]} />
-            <meshStandardMaterial args={[{ color: "#050914", emissive: module.color, emissiveIntensity: 0.1, roughness: 0.62, metalness: 0.12 }]} />
-          </mesh>
-          <AudioWorkbenchLabel label={module.label} color={module.color} position={[0, 0.07, -0.03]} />
-          {[-0.07, 0.07].map((portX) => (
-            <mesh key={portX} position={[portX, 0.07, 0.15]} rotation={[Math.PI / 2, 0, 0]}>
-              <cylinderGeometry args={[0.035, 0.035, 0.035, 18]} />
-              <meshBasicMaterial args={[{ color: module.color }]} />
-            </mesh>
-          ))}
-        </group>
-      ))}
-
-      {[-0.54, -0.18, 0.18, 0.54].map((x, index) => (
-        <mesh key={`wire-${x}`} position={[x, 1.035, 0.27]} rotation={[0, 0, index % 2 === 0 ? 0.16 : -0.16]}>
-          <boxGeometry args={[0.34, 0.025, 0.025]} />
-          <meshBasicMaterial args={[{ color: index % 2 === 0 ? phaseVisuals.gridPrimary : "#f64fff" }]} />
-        </mesh>
-      ))}
-
-      <mesh position={[0, 0.88, 0.42]}>
-        <boxGeometry args={[1.54, 0.045, 0.22]} />
-        <meshStandardMaterial args={[{ color: "#050914", roughness: 0.7, metalness: 0.08 }]} />
-      </mesh>
-      {sequencerPads.map((pad) => (
-        <mesh key={pad} position={[-0.63 + pad * 0.18, 0.925, 0.42]}>
-          <boxGeometry args={[0.12, 0.035, 0.14]} />
-          <meshStandardMaterial args={[{
-            color: pad % 2 === 0 ? "#123143" : "#1f2037",
-            emissive: pad % 3 === 0 ? phaseVisuals.gridPrimary : "#111827",
-            emissiveIntensity: pad % 3 === 0 ? 0.28 : 0.12,
-            roughness: 0.62,
-            metalness: 0.1,
-          }]} />
-        </mesh>
-      ))}
-
-      <mesh position={[0, 0.68, 0.49]}>
-        <boxGeometry args={[1.88, 0.04, 0.035]} />
-        <meshBasicMaterial args={[{ color: phaseVisuals.gridSecondary }]} />
-      </mesh>
-      <mesh position={[-1.18, 0.7, 0.02]}>
-        <boxGeometry args={[0.045, 0.54, 0.8]} />
-        <meshBasicMaterial args={[{ color: phaseVisuals.gridPrimary }]} />
-      </mesh>
-      <mesh position={[1.18, 0.7, 0.02]}>
-        <boxGeometry args={[0.045, 0.54, 0.8]} />
-        <meshBasicMaterial args={[{ color: phaseVisuals.timerAccent }]} />
-      </mesh>
     </group>
   );
 }
@@ -1502,7 +1346,7 @@ interface Level1RoomShellProps {
   roundNumber: number;
   rangeScoreboard: RangeScoreResult[];
   onSubmitRangeScore: (result: RangeScoreSubmission) => void;
-  onLevelExit: (targetLevelId: string) => void;
+  onLevelExit: (exit: LevelExitConfig) => void;
   freeRoamPresence: FreeRoamPresenceState[];
   onActivateLocalDashboard: () => void;
   localStationId?: string;
@@ -1585,33 +1429,18 @@ export function Level1RoomShell({
   showLayoutGrabBoxes = true,
 }: Level1RoomShellProps) {
   const { dimensions, exits, lighting, openings, stations, timerDisplay } = levelConfig;
-  const activeControlRoomArea = levelConfig.areas?.find((area) => (
-    area.id === "control-room" &&
-    area.kind === "control-room" &&
-    area.status === "active"
-  ));
+  const shouldRenderStandaloneStudioShell = isStandaloneStudioLevel(levelConfig);
+  const shouldRenderHubShell = !shouldRenderStandaloneStudioShell;
+  const activeControlRoomArea = getActiveLevelArea(levelConfig, "control-room", "control-room");
   const activeControlRoomOpening = openings?.find((opening) => (
     opening.id === "control-room-range-opening" &&
     opening.fromAreaId === "control-room" &&
     opening.toAreaId === "shooting-range" &&
     opening.status === "active"
   ));
-  const activeShootingRangeArea = levelConfig.areas?.find((area) => (
-    area.id === "shooting-range" &&
-    area.kind === "shooting-range" &&
-    area.status === "active"
-  ));
-  const activeRecordingStudioArea = levelConfig.areas?.find((area) => (
-    area.id === "recording-studio" &&
-    area.kind === "recording-studio" &&
-    area.status === "active"
-  ));
-  const activeRecordingStudioOpening = openings?.find((opening) => (
-    opening.id === "control-room-recording-studio-opening" &&
-    opening.fromAreaId === "control-room" &&
-    opening.toAreaId === "recording-studio" &&
-    opening.status === "active"
-  ));
+  const activeShootingRangeArea = getActiveLevelArea(levelConfig, "shooting-range", "shooting-range");
+  const activeRecordingStudioArea = getActiveLevelArea(levelConfig, "recording-studio", "recording-studio");
+  const activeRecordingStudioOpening = getActiveRecordingStudioOpening(levelConfig);
   const halfWidth = dimensions.width / 2;
   const halfDepth = dimensions.depth / 2;
   const wallCenterY = dimensions.height / 2;
@@ -1620,7 +1449,7 @@ export function Level1RoomShell({
   const roomEastWallX = activeControlRoomArea?.bounds.max[0] ?? halfWidth;
   const connectorEndX = activeShootingRangeArea?.bounds.min[0] ?? levelConfig.collisionBounds.room.max[0];
   const phaseVisuals = getPhaseVisuals(countdownDisplay.phase, countdownDisplay.isUrgent);
-  const shouldRenderControlRoomDisplays = levelConfig.id === "level-1" && Boolean(activeControlRoomArea);
+  const shouldRenderControlRoomDisplays = isControlRoomHubLevel(levelConfig) && Boolean(activeControlRoomArea);
   const freshPresenceByUserId = new Map(
     freeRoamPresence
       .filter((presence) => presence.levelId === levelConfig.id && Date.now() - Date.parse(presence.updatedAt) <= FREE_ROAM_PRESENCE_TTL_MS)
@@ -1670,45 +1499,53 @@ export function Level1RoomShell({
         <LevelLight key={light.id} light={light} phaseVisuals={phaseVisuals} />
       ))}
 
-      <TimerAreaPulse phaseVisuals={phaseVisuals} />
+      {shouldRenderHubShell ? <TimerAreaPulse phaseVisuals={phaseVisuals} /> : null}
 
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, 0]}>
-        <planeGeometry args={[dimensions.width, dimensions.depth]} />
-        <meshStandardMaterial args={[{ color: phaseVisuals.floor, roughness: 0.86, metalness: 0.02 }]} />
-      </mesh>
+      {shouldRenderHubShell ? (
+        <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, 0]}>
+          <planeGeometry args={[dimensions.width, dimensions.depth]} />
+          <meshStandardMaterial args={[{ color: phaseVisuals.floor, roughness: 0.86, metalness: 0.02 }]} />
+        </mesh>
+      ) : null}
 
-      <gridHelper args={[gridSize, 14, phaseVisuals.gridPrimary, phaseVisuals.gridSecondary]} position={[0, 0.015, 0]} />
+      {shouldRenderHubShell ? (
+        <gridHelper args={[gridSize, 14, phaseVisuals.gridPrimary, phaseVisuals.gridSecondary]} position={[0, 0.015, 0]} />
+      ) : null}
 
-      <Wall position={[0, wallCenterY, -halfDepth]} args={[dimensions.width, dimensions.height, WALL_THICKNESS]} color={phaseVisuals.wall} />
-      <Wall position={[0, wallCenterY, halfDepth]} args={[dimensions.width, dimensions.height, WALL_THICKNESS]} color={phaseVisuals.wall} />
-      {activeRecordingStudioOpening ? (
-        <ControlRoomWestOpeningWall
-          opening={activeRecordingStudioOpening}
-          roomWestWallX={roomWestWallX}
-          wallCenterY={wallCenterY}
-          wallColor={phaseVisuals.wall}
-          roomHeight={dimensions.height}
-          roomMinZ={activeControlRoomArea?.bounds.min[2] ?? -halfDepth}
-          roomMaxZ={activeControlRoomArea?.bounds.max[2] ?? halfDepth}
-        />
-      ) : (
-        <Wall position={[-halfWidth, wallCenterY, 0]} args={[WALL_THICKNESS, dimensions.height, dimensions.depth]} color={phaseVisuals.wall} />
-      )}
-      {activeControlRoomOpening ? (
-        <ControlRoomOpeningStub
-          opening={activeControlRoomOpening}
-          roomEastWallX={roomEastWallX}
-          connectorEndX={connectorEndX}
-          wallCenterY={wallCenterY}
-          wallColor={phaseVisuals.wall}
-          roomMinZ={activeControlRoomArea?.bounds.min[2] ?? -halfDepth}
-          roomMaxZ={activeControlRoomArea?.bounds.max[2] ?? halfDepth}
-        />
-      ) : (
-        <Wall position={[halfWidth, wallCenterY, 0]} args={[WALL_THICKNESS, dimensions.height, dimensions.depth]} color={phaseVisuals.wall} />
-      )}
+      {shouldRenderHubShell ? (
+        <>
+          <Wall position={[0, wallCenterY, -halfDepth]} args={[dimensions.width, dimensions.height, WALL_THICKNESS]} color={phaseVisuals.wall} />
+          <Wall position={[0, wallCenterY, halfDepth]} args={[dimensions.width, dimensions.height, WALL_THICKNESS]} color={phaseVisuals.wall} />
+          {activeRecordingStudioOpening ? (
+            <ControlRoomWestOpeningWall
+              opening={activeRecordingStudioOpening}
+              roomWestWallX={roomWestWallX}
+              wallCenterY={wallCenterY}
+              wallColor={phaseVisuals.wall}
+              roomHeight={dimensions.height}
+              roomMinZ={activeControlRoomArea?.bounds.min[2] ?? -halfDepth}
+              roomMaxZ={activeControlRoomArea?.bounds.max[2] ?? halfDepth}
+            />
+          ) : (
+            <Wall position={[-halfWidth, wallCenterY, 0]} args={[WALL_THICKNESS, dimensions.height, dimensions.depth]} color={phaseVisuals.wall} />
+          )}
+          {activeControlRoomOpening ? (
+            <ControlRoomOpeningStub
+              opening={activeControlRoomOpening}
+              roomEastWallX={roomEastWallX}
+              connectorEndX={connectorEndX}
+              wallCenterY={wallCenterY}
+              wallColor={phaseVisuals.wall}
+              roomMinZ={activeControlRoomArea?.bounds.min[2] ?? -halfDepth}
+              roomMaxZ={activeControlRoomArea?.bounds.max[2] ?? halfDepth}
+            />
+          ) : (
+            <Wall position={[halfWidth, wallCenterY, 0]} args={[WALL_THICKNESS, dimensions.height, dimensions.depth]} color={phaseVisuals.wall} />
+          )}
+        </>
+      ) : null}
 
-      {stations.map((station) => (
+      {shouldRenderHubShell ? stations.map((station) => (
         <ComputerStation
           key={station.id}
           station={station}
@@ -1721,7 +1558,7 @@ export function Level1RoomShell({
           isLocalStation={localStationSource !== "emergency" && station.id === localStationId}
           onActivateLocalDashboard={onActivateLocalDashboard}
         />
-      ))}
+      )) : null}
 
       {stationOccupants.filter(({ user }) => !roamingSimUserIds.has(user.id)).map(({ user, station, isLocal, isHost }) => (
         <StationOccupantMarker key={user.id} user={user} station={station} isLocal={isLocal} isHost={isHost} />
@@ -1769,11 +1606,7 @@ export function Level1RoomShell({
         <ControlRoomKitchenIslandProps phaseVisuals={phaseVisuals} />
       ) : null}
 
-      {shouldRenderControlRoomDisplays && activeControlRoomArea ? (
-        <ControlRoomAudioWorkbench phaseVisuals={phaseVisuals} />
-      ) : null}
-
-      {levelConfig.id === "level-1" && activeRecordingStudioArea && activeRecordingStudioOpening ? (
+      {shouldRenderStandaloneStudioShell && activeRecordingStudioArea && activeRecordingStudioOpening ? (
         <Level1RecordingStudioRoom
           area={activeRecordingStudioArea}
           opening={activeRecordingStudioOpening}
@@ -1822,7 +1655,7 @@ export function Level1RoomShell({
         />
       ) : null}
 
-      {!shouldRenderControlRoomDisplays ? (
+      {!shouldRenderControlRoomDisplays && shouldRenderHubShell ? (
         <WorldTimerDisplay countdownDisplay={countdownDisplay} phaseVisuals={phaseVisuals} timerDisplay={timerDisplay} />
       ) : null}
       {exits?.map((exit) => (

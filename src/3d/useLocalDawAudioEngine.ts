@@ -20,6 +20,7 @@ export interface LocalDawFmSynthNote {
   durationSeconds?: number;
   gainScale?: number;
   fmSynthPatch?: LocalDawFmSynthPatch;
+  scheduledStartTimeSeconds?: number;
 }
 
 export interface LocalDawDrumHit {
@@ -64,6 +65,7 @@ export interface LocalDawBassNote {
   durationSeconds?: number;
   gainScale?: number;
   bassMachinePatch?: LocalDawBassMachinePatch;
+  scheduledStartTimeSeconds?: number;
 }
 
 export interface LocalDawPianoLiveNote {
@@ -75,8 +77,28 @@ export interface LocalDawPianoLiveNote {
   bassMachinePatch?: LocalDawBassMachinePatch;
 }
 
+export interface LocalDawLatencyTrace {
+  source: string;
+  pointerDownAtMs?: number;
+  activatedAtMs?: number;
+  handlerAtMs?: number;
+  frameDeltaMs?: number;
+  raycastDurationMs?: number;
+  raycastObjectCount?: number;
+  scheduledStartDelayMs?: number;
+  remoteLateByMs?: number;
+}
+
 export interface LocalDawGeneratedSoundOptions {
   allowSound?: boolean;
+  latencyTrace?: LocalDawLatencyTrace;
+  scheduledStartDelaySeconds?: number;
+}
+
+export interface LocalDawAudioContextInfo {
+  audioContextState: AudioContextState | "missing";
+  baseLatencyMs: number | null;
+  outputLatencyMs: number | null;
 }
 
 export interface LocalDawAudioEngineState {
@@ -85,6 +107,7 @@ export interface LocalDawAudioEngineState {
   isMuted: boolean;
   masterVolume: number;
   errorMessage: string | null;
+  audioContextInfo: LocalDawAudioContextInfo | null;
   fmSynthPatch: LocalDawFmSynthPatch;
   lastFmSynthNoteLabel: string | null;
   activeFmSynthVoiceCount: number;
@@ -211,6 +234,7 @@ const INITIAL_AUDIO_ENGINE_STATE: LocalDawAudioEngineState = {
   isMuted: true,
   masterVolume: 0,
   errorMessage: null,
+  audioContextInfo: null,
   fmSynthPatch: INITIAL_FM_SYNTH_PATCH,
   lastFmSynthNoteLabel: null,
   activeFmSynthVoiceCount: 0,
@@ -246,6 +270,108 @@ function getStatusFromAudioContext(audioContext: AudioContext): LocalDawAudioEng
   }
 
   return "ready";
+}
+
+function getAudioContextLatencyMs(audioContext: AudioContext | null) {
+  if (!audioContext) {
+    return { baseLatencyMs: null, outputLatencyMs: null };
+  }
+
+  const outputLatency = (audioContext as AudioContext & { outputLatency?: number }).outputLatency;
+
+  return {
+    baseLatencyMs: Number.isFinite(audioContext.baseLatency) ? Math.round(audioContext.baseLatency * 1000) : null,
+    outputLatencyMs: typeof outputLatency === "number" && Number.isFinite(outputLatency) ? Math.round(outputLatency * 1000) : null,
+  };
+}
+
+function getAudioContextInfo(audioContext: AudioContext | null): LocalDawAudioContextInfo | null {
+  if (!audioContext) {
+    return null;
+  }
+
+  return {
+    audioContextState: audioContext.state,
+    ...getAudioContextLatencyMs(audioContext),
+  };
+}
+
+function warmAudioOutputGraph(audioContext: AudioContext, outputNode: AudioNode) {
+  try {
+    const oscillator = audioContext.createOscillator();
+    const gain = audioContext.createGain();
+    const now = audioContext.currentTime;
+
+    oscillator.frequency.setValueAtTime(20, now);
+    gain.gain.setValueAtTime(0.000001, now);
+    gain.gain.exponentialRampToValueAtTime(0.000001, now + 0.03);
+    oscillator.connect(gain);
+    gain.connect(outputNode);
+    oscillator.onended = () => {
+      try {
+        oscillator.disconnect();
+        gain.disconnect();
+      } catch {
+        // Warmup cleanup is best-effort.
+      }
+    };
+    oscillator.start(now);
+    oscillator.stop(now + 0.035);
+  } catch {
+    // Warmup must never block playable audio.
+  }
+}
+
+function getLatencyDeltaMs(startAtMs: number | undefined, endAtMs: number) {
+  return typeof startAtMs === "number" ? Math.round((endAtMs - startAtMs) * 10) / 10 : null;
+}
+
+function logPianoLatencyTrace({
+  audioContext,
+  allowSound,
+  gainScale,
+  isAudibleReady,
+  noteLabel,
+  target,
+  trace,
+}: {
+  audioContext: AudioContext | null;
+  allowSound: boolean;
+  gainScale: number;
+  isAudibleReady: boolean;
+  noteLabel: string;
+  target: LocalDawPianoLiveTarget;
+  trace?: LocalDawLatencyTrace;
+}) {
+  if (!import.meta.env.DEV || !trace) {
+    return;
+  }
+
+  const audioCallAtMs = performance.now();
+  const latency = getAudioContextLatencyMs(audioContext);
+
+  console.info("[Sync Sesh piano latency]", {
+    source: trace.source,
+    note: noteLabel,
+    target,
+    allowSound,
+    gainScale,
+    audioContextState: audioContext?.state ?? "missing",
+    isAudibleReady,
+    audioContextTimeSeconds: audioContext ? Math.round(audioContext.currentTime * 1000) / 1000 : null,
+    scheduledStartTimeSeconds: audioContext && isAudibleReady
+      ? Math.round((audioContext.currentTime + (trace.scheduledStartDelayMs ?? 0) / 1000) * 1000) / 1000
+      : null,
+    ...latency,
+    pointerToAudioCallMs: getLatencyDeltaMs(trace.pointerDownAtMs, audioCallAtMs),
+    activationToAudioCallMs: getLatencyDeltaMs(trace.activatedAtMs, audioCallAtMs),
+    handlerToAudioCallMs: getLatencyDeltaMs(trace.handlerAtMs, audioCallAtMs),
+    frameDeltaMs: trace.frameDeltaMs ?? null,
+    raycastDurationMs: trace.raycastDurationMs ?? null,
+    raycastObjectCount: trace.raycastObjectCount ?? null,
+    scheduledStartDelayMs: trace.scheduledStartDelayMs ?? null,
+    remoteLateByMs: trace.remoteLateByMs ?? null,
+  });
 }
 
 function clampMasterVolume(volume: number) {
@@ -636,6 +762,12 @@ export function useLocalDawAudioEngine() {
           await existingAudioContext.resume();
         }
 
+        const existingMasterGain = masterGainRef.current;
+
+        if (existingMasterGain) {
+          warmAudioOutputGraph(existingAudioContext, existingMasterGain);
+        }
+
         setState((currentState) => {
           const nextState = {
             ...currentState,
@@ -644,6 +776,7 @@ export function useLocalDawAudioEngine() {
             isMuted: false,
             masterVolume: currentState.masterVolume > 0 ? currentState.masterVolume : ENGINE_START_MASTER_VOLUME,
             errorMessage: null,
+            audioContextInfo: getAudioContextInfo(existingAudioContext),
           };
 
           applyGain(nextState);
@@ -672,7 +805,7 @@ export function useLocalDawAudioEngine() {
     }
 
     try {
-      const audioContext = new AudioContextClass();
+      const audioContext = new AudioContextClass({ latencyHint: "interactive" });
       const masterGain = audioContext.createGain();
       const filterNode = audioContext.createBiquadFilter();
       const filterPatch = getClampedFilterEffectPatch(stateRef.current.filterEffectPatch);
@@ -751,6 +884,7 @@ export function useLocalDawAudioEngine() {
       }
 
       autopanLfo.start();
+      warmAudioOutputGraph(audioContext, masterGain);
 
       setState((currentState) => ({
         ...currentState,
@@ -759,6 +893,7 @@ export function useLocalDawAudioEngine() {
         isMuted: false,
         masterVolume: ENGINE_START_MASTER_VOLUME,
         errorMessage: null,
+        audioContextInfo: getAudioContextInfo(audioContext),
       }));
     } catch (error) {
       closeAudioContext();
@@ -766,6 +901,7 @@ export function useLocalDawAudioEngine() {
         ...currentState,
         status: "error",
         errorMessage: error instanceof Error ? error.message : "Unable to initialize local audio engine.",
+        audioContextInfo: null,
       }));
     }
   }, [applyGain, closeAudioContext]);
@@ -943,7 +1079,9 @@ export function useLocalDawAudioEngine() {
       const noteFrequencyRatio = (note.frequency || FM_SYNTH_C3_FREQUENCY) / FM_SYNTH_C3_FREQUENCY;
       const frequency = clamp(patch.carrierFrequency * noteFrequencyRatio, MIN_FM_FREQUENCY, MAX_FM_FREQUENCY);
       const envelope = getFmEnvelopeTimings(patch.envelopePreset, note.durationSeconds);
-      const now = audioContext.currentTime;
+      const now = typeof note.scheduledStartTimeSeconds === "number" && note.scheduledStartTimeSeconds > audioContext.currentTime
+        ? note.scheduledStartTimeSeconds
+        : audioContext.currentTime;
       const carrier = audioContext.createOscillator();
       const modulator = audioContext.createOscillator();
       const modulationGain = audioContext.createGain();
@@ -1233,7 +1371,9 @@ export function useLocalDawAudioEngine() {
       const patch = getClampedBassMachinePatch(note.bassMachinePatch ?? currentState.bassMachinePatch);
       const frequency = clamp(note.frequency, MIN_BASS_FREQUENCY, MAX_BASS_FREQUENCY);
       const durationSeconds = clamp(note.durationSeconds ?? patch.decaySeconds + 0.16, MIN_BASS_DURATION_SECONDS, MAX_BASS_DURATION_SECONDS);
-      const now = audioContext.currentTime;
+      const now = typeof note.scheduledStartTimeSeconds === "number" && note.scheduledStartTimeSeconds > audioContext.currentTime
+        ? note.scheduledStartTimeSeconds
+        : audioContext.currentTime;
       const oscillator = audioContext.createOscillator();
       const filter = audioContext.createBiquadFilter();
       const voiceGain = audioContext.createGain();
@@ -1297,8 +1437,23 @@ export function useLocalDawAudioEngine() {
     const currentState = stateRef.current;
     const resolvedTarget: LocalDawPianoLiveTarget = target === "bass" ? "bass" : "fm-synth";
     const shouldAllowSound = options?.allowSound ?? true;
+    const gainScale = getClampedVoiceGainScale(note.gainScale);
+    const isAudibleReady = Boolean(audioContext && masterGain && isAudioEngineAudibleReady(audioContext, masterGain, currentState));
+    const scheduledStartTimeSeconds = audioContext && typeof options?.scheduledStartDelaySeconds === "number"
+      ? audioContext.currentTime + Math.max(0, options.scheduledStartDelaySeconds)
+      : undefined;
 
-    if (!shouldAllowSound || !audioContext || !masterGain || !isAudioEngineAudibleReady(audioContext, masterGain, currentState)) {
+    logPianoLatencyTrace({
+      audioContext,
+      allowSound: shouldAllowSound,
+      gainScale,
+      isAudibleReady,
+      noteLabel: note.label,
+      target: resolvedTarget,
+      trace: options?.latencyTrace,
+    });
+
+    if (!shouldAllowSound || !audioContext || !masterGain || !isAudibleReady) {
       setState((nextState) => ({
         ...nextState,
         lastPianoLiveNoteLabel: note.label,
@@ -1314,6 +1469,7 @@ export function useLocalDawAudioEngine() {
         durationSeconds: note.durationSeconds ?? 0.34,
         gainScale: note.gainScale,
         bassMachinePatch: note.bassMachinePatch,
+        scheduledStartTimeSeconds,
       });
     } else {
       playFmSynthNote({
@@ -1322,6 +1478,7 @@ export function useLocalDawAudioEngine() {
         durationSeconds: note.durationSeconds ?? 0.38,
         gainScale: note.gainScale,
         fmSynthPatch: note.fmSynthPatch,
+        scheduledStartTimeSeconds,
       });
     }
 
@@ -1384,6 +1541,11 @@ export function useLocalDawAudioEngine() {
     setState({
       ...INITIAL_AUDIO_ENGINE_STATE,
       status: "closed",
+      audioContextInfo: {
+        audioContextState: "closed",
+        baseLatencyMs: null,
+        outputLatencyMs: null,
+      },
     });
   }, [closeAudioContext]);
   const actions = useMemo<LocalDawAudioEngineActions>(() => ({

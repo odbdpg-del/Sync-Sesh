@@ -50,6 +50,7 @@ interface SoundCloudWidgetStatic {
     READY: string;
     PLAY: string;
     PAUSE: string;
+    PLAY_PROGRESS?: string;
     FINISH: string;
     ERROR: string;
   };

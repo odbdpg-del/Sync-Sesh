@@ -255,6 +255,7 @@ export function ComputerStation({
     label: isLocalStation ? "Return to dashboard" : `${station.label} dashboard`,
     objectRef: monitorRef,
     modes: ["clickable" as const],
+    allowedInputs: ["keyboard" as const],
     enabled: isLocalStation,
     onActivate: () => {
       onActivateLocalDashboard?.();

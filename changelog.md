@@ -8,6 +8,60 @@ Entries must be in reverse chronological order. New entries go at the top, above
 
 Use a level-two heading for every entry so the editor can fold each change.
 
+## [2255] - 2026-04-27 22:55 - `DJ-branch / Keyboard-Only Monitor Return`
+
+- Summary: Removed left-click monitor re-entry on the local computer station by making the dashboard return interaction keyboard-only, while preserving the existing `E` activation path.
+- Areas touched: `src/3d/ComputerStation.tsx`, `src/3d/interactions.tsx`.
+- Verification: `npm.cmd run build` passed with the existing Vite chunk-size warning.
+
+## [2254] - 2026-04-27 22:54 - `DJ-branch / Reveal Spacebar Skip`
+
+- Summary: Added a `Space` keyboard shortcut that skips the initial 3D camera pullback reveal by reusing the existing reveal-complete path while the intro animation is still playing.
+- Areas touched: `src/3d/ThreeDModeShell.tsx`.
+- Verification: `npm.cmd run build` passed with the existing Vite chunk-size warning.
+
+## [2251] - 2026-04-27 22:51 - `DJ-branch / Studio Area Feedback Flicker Fix`
+
+- Summary: Stopped the standalone Recording Studio area banner from re-triggering during pure camera-look updates by limiting area detection to meaningful position changes instead of every local pose refresh.
+- Areas touched: `src/3d/ThreeDModeShell.tsx`.
+- Verification: `npm.cmd run build` passed with the existing Vite chunk-size warning.
+
+## [0910] - 2026-04-23 09:10 - `DJ-branch / Vision 25 Interaction Raycast Performance`
+
+- Summary: Optimized 3D interaction raycasting with cached active targets, parent-chain hit resolution, fresh pointerdown activation, current-area filtering, deduped child hits, and FPS-overlay interaction/render diagnostics.
+- Areas touched: `src/3d/interactions.tsx`, `src/3d/ThreeDModeShell.tsx`, `docs/3d/3dvision25-interaction-raycast-performance.md`, `docs/3d/manual-test-checklist.md`.
+- Verification: `npm.cmd run build` passed with the existing Vite large chunk warning. Manual local/Discord Activity interaction QA remains pending.
+
+## [0750] - 2026-04-23 07:50 - `DJ-branch / Vision 24 Phase 5 - SoundCloud Seek Diagnostics`
+
+- Summary: Added dev-only SoundCloud seek diagnostics around widget cue/seek requests, including immediate, delayed, and optional play-progress position reporting.
+- Areas touched: `src/env.d.ts`, `src/hooks/useSoundCloudPlayer.ts`, `docs/3d/3dvision24-audio-latency-and-sync.md`.
+- Verification: `npm.cmd run build` passed with the existing Vite large chunk warning.
+
+## [0748] - 2026-04-23 07:48 - `DJ-branch / Vision 24 Phase 4 - Remote Piano Scheduling`
+
+- Summary: Added live piano timing metadata and receiver-side scheduled Web Audio playback so remote piano notes use a shared-time lookahead instead of raw packet arrival.
+- Areas touched: `src/types/session.ts`, `src/lib/lobby/sessionState.ts`, `src/3d/Level1RecordingStudioRoom.tsx`, `src/3d/ThreeDModeShell.tsx`, `src/3d/useLocalDawAudioEngine.ts`, `docs/3d/3dvision24-audio-latency-and-sync.md`.
+- Verification: `npm.cmd run build` passed with the existing Vite large chunk warning.
+
+## [0743] - 2026-04-23 07:43 - `DJ-branch / Vision 24 Phase 3 - Interaction Timing`
+
+- Summary: Added frame delta, raycast duration, and raycast object count to piano latency traces so Discord Activity input delay can be separated from render/raycast pressure.
+- Areas touched: `src/3d/interactions.tsx`, `src/3d/Level1RecordingStudioRoom.tsx`, `src/3d/useLocalDawAudioEngine.ts`, `docs/3d/3dvision24-audio-latency-and-sync.md`.
+- Verification: `npm.cmd run build` passed with the existing Vite large chunk warning.
+
+## [0742] - 2026-04-23 07:42 - `DJ-branch / Vision 24 Phase 2 - Local Piano Latency`
+
+- Summary: Added DAW audio context latency telemetry, a silent engine warmup after initialize/resume, and a compact Studio-tab latency readout for base/output latency.
+- Areas touched: `src/3d/useLocalDawAudioEngine.ts`, `src/3d/ThreeDModeShell.tsx`, `docs/3d/3dvision24-audio-latency-and-sync.md`.
+- Verification: `npm.cmd run build` passed with the existing Vite large chunk warning.
+
+## [0738] - 2026-04-23 07:38 - `DJ-branch / Vision 24 Phase 1 - Piano Latency Instrumentation`
+
+- Summary: Added dev-only piano latency tracing from 3D pointer activation through the local DAW audio engine, plus low-latency `AudioContext` construction for the DAW engine.
+- Areas touched: `src/3d/interactions.tsx`, `src/3d/Level1RecordingStudioRoom.tsx`, `src/3d/ThreeDModeShell.tsx`, `src/3d/useLocalDawAudioEngine.ts`, `docs/3d/3dvision24-audio-latency-and-sync.md`.
+- Verification: `npm.cmd run build` passed with the existing Vite large chunk warning.
+
 ## [0112] - 2026-04-23 01:12 - `DJ-branch / Waveform Clamp Nudge Controls`
 
 - Summary: Moved the 3D continuous clamp nudge controls out of the grid settings row and up beside the waveform, and added timeline-only `S-`/`S+` and `E-`/`E+` waveform buttons for independently nudging the start and end clamps.

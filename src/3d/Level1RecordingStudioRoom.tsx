@@ -137,6 +137,8 @@ type StudioOverviewScreenId =
   | "mixer-view"
   | "studio-truth";
 
+type StudioOverviewMonitorPowerState = Partial<Record<StudioOverviewScreenId, boolean>>;
+
 interface StudioMixerStripSpec {
   accentColor: string;
   label: string;
@@ -208,6 +210,9 @@ interface StudioOverviewScreenSpec {
   title: string;
   lines: string[];
   accentColor: string;
+  areAllMonitorsPowered: boolean;
+  isPoweredOn: boolean;
+  onTogglePower: () => void;
   position: Vec3;
   rotation: Vec3;
   size: [number, number];
@@ -1963,6 +1968,45 @@ function StudioTransportControl({ control }: { control: StudioTransportControlSp
         <planeGeometry args={[control.size[0] * 0.78, control.size[2] * 0.72]} />
         <meshBasicMaterial args={[{ transparent: true, opacity: 0.78, toneMapped: false }]}>
           <canvasTexture key={`studio-transport-control-${control.id}-${control.label}-${control.isActive ? "active" : "idle"}-${control.isEnabled === false ? "disabled" : "enabled"}`} attach="map" args={[labelCanvas]} />
+        </meshBasicMaterial>
+      </mesh>
+    </group>
+  );
+}
+
+function StudioWallSwitchControl({ control }: { control: StudioTransportControlSpec }) {
+  const controlRef = useRef<React.ElementRef<"mesh">>(null);
+  const labelCanvas = useMemo(() => createStudioTransportControlCanvas(control), [control]);
+
+  useRegisterInteractable(useMemo(() => ({
+    id: `studio-wall-switch-${control.id}`,
+    label: control.caption,
+    objectRef: controlRef,
+    modes: ["clickable" as const],
+    enabled: control.isEnabled ?? true,
+    onActivate: control.onActivate,
+  }), [control.caption, control.id, control.isEnabled, control.onActivate]));
+
+  return (
+    <group position={control.position} rotation={[0, -Math.PI / 2, 0]}>
+      <mesh position={[0, 0, -0.012]}>
+        <boxGeometry args={[control.size[0] + 0.08, control.size[1] + 0.08, 0.03]} />
+        <meshBasicMaterial args={[{ color: control.accentColor, transparent: true, opacity: control.isEnabled === false ? 0.06 : control.isActive ? 0.22 : 0.12, toneMapped: false }]} />
+      </mesh>
+      <mesh ref={controlRef}>
+        <boxGeometry args={[control.size[0], control.size[1], control.size[2]]} />
+        <meshStandardMaterial args={[{
+          color: control.isEnabled === false ? "#111722" : control.isActive ? "#17243a" : "#10192b",
+          emissive: control.accentColor,
+          emissiveIntensity: control.isEnabled === false ? 0.05 : control.isActive ? 0.18 : 0.1,
+          roughness: 0.66,
+          metalness: 0.05,
+        }]} />
+      </mesh>
+      <mesh position={[0, 0, control.size[2] / 2 + 0.004]}>
+        <planeGeometry args={[control.size[0] * 0.84, control.size[1] * 0.72]} />
+        <meshBasicMaterial args={[{ transparent: true, opacity: 0.82, toneMapped: false }]}>
+          <canvasTexture key={`studio-wall-switch-${control.id}-${control.label}-${control.isActive ? "active" : "idle"}-${control.isEnabled === false ? "disabled" : "enabled"}`} attach="map" args={[labelCanvas]} />
         </meshBasicMaterial>
       </mesh>
     </group>
@@ -9054,17 +9098,30 @@ function StudioPianoKey({
     objectRef: keyRef,
     modes: ["clickable" as const],
     enabled: Boolean(localDawAudioActions || localDawActions),
-    onActivate: () => {
+    onActivate: (activation) => {
+      const handlerAtMs = performance.now();
       localDawAudioActions?.playPianoLiveNote({
         ...note,
         gainScale,
-      }, target, { allowSound });
+      }, target, {
+        allowSound,
+        latencyTrace: {
+          source: "studio-piano-key",
+          pointerDownAtMs: activation.pointerDownAtMs,
+          activatedAtMs: activation.activatedAtMs,
+          handlerAtMs,
+          frameDeltaMs: activation.frameDeltaMs,
+          raycastDurationMs: activation.raycastDurationMs,
+          raycastObjectCount: activation.raycastObjectCount,
+        },
+      });
       localDawActions?.recordDawNoteEvent(note);
       if (allowSound && gainScale > 0) {
         onBroadcastDawLiveSound?.({
           areaId: "recording-studio",
           kind: "piano",
           label: note.label,
+          clientTriggeredAt: new Date().toISOString(),
           frequency: note.frequency,
           durationSeconds: note.durationSeconds,
           gainScale,
@@ -9842,23 +9899,47 @@ function createStudioOverviewScreenCanvas(screen: StudioOverviewScreenSpec) {
 }
 
 function StudioOverviewScreen({ screen }: { screen: StudioOverviewScreenSpec }) {
-  const screenCanvas = useMemo(() => createStudioOverviewScreenCanvas(screen), [screen]);
+  const screenRef = useRef<React.ElementRef<"mesh">>(null);
+  const screenCanvas = useMemo(() => {
+    if (!screen.isPoweredOn) {
+      return null;
+    }
+
+    return createStudioOverviewScreenCanvas(screen);
+  }, [screen]);
+  const bezelEmissiveIntensity = screen.isPoweredOn ? 0.16 : 0.03;
+  const screenOpacity = screen.isPoweredOn ? 0.78 : 1;
+  const statusBarOpacity = screen.isPoweredOn ? 0.22 : 0.08;
+  const offPanelColor = screen.areAllMonitorsPowered ? "#02060c" : "#010304";
+
+  useRegisterInteractable(useMemo(() => ({
+    id: `studio-overview-monitor-${screen.id}`,
+    label: `${screen.title} ${screen.isPoweredOn ? "Off" : "On"}`,
+    objectRef: screenRef,
+    modes: ["clickable" as const],
+    enabled: screen.areAllMonitorsPowered,
+    onActivate: screen.onTogglePower,
+  }), [screen.areAllMonitorsPowered, screen.id, screen.isPoweredOn, screen.onTogglePower, screen.title]));
 
   return (
     <group position={screen.position} rotation={screen.rotation}>
       <mesh position={[0, 0, -0.026]}>
         <boxGeometry args={[screen.size[0] + 0.14, screen.size[1] + 0.12, 0.05]} />
-        <meshStandardMaterial args={[{ color: "#07111f", emissive: "#03070f", emissiveIntensity: 0.16, roughness: 0.72, metalness: 0.08 }]} />
+        <meshStandardMaterial args={[{ color: "#07111f", emissive: "#03070f", emissiveIntensity: bezelEmissiveIntensity, roughness: 0.72, metalness: 0.08 }]} />
       </mesh>
-      <mesh position={[0, 0, 0.008]}>
+      <mesh ref={screenRef} position={[0, 0, 0.008]}>
         <planeGeometry args={screen.size} />
-        <meshBasicMaterial args={[{ transparent: true, opacity: 0.78, toneMapped: false }]}>
-          <canvasTexture key={`studio-overview-${screen.id}`} attach="map" args={[screenCanvas]} />
-        </meshBasicMaterial>
+        {screenCanvas ? (
+          <meshBasicMaterial args={[{ transparent: true, opacity: screenOpacity, toneMapped: false }]}>
+            <canvasTexture key={`studio-overview-${screen.id}`} attach="map" args={[screenCanvas]} />
+          </meshBasicMaterial>
+        ) : (
+          <meshBasicMaterial args={[{ color: offPanelColor, toneMapped: false }]} />
+        )}
       </mesh>
       <mesh position={[0, -screen.size[1] / 2 + 0.06, 0.02]}>
         <boxGeometry args={[screen.size[0] * 0.72, 0.026, 0.018]} />
-        <meshBasicMaterial args={[{ color: screen.accentColor, transparent: true, opacity: 0.22, toneMapped: false }]} />
+        <meshBasicMaterial args={[{ color: screen.accentColor, transparent: true, opacity: statusBarOpacity, toneMapped: false }]} />
       </mesh>
     </group>
   );
@@ -11186,15 +11267,6 @@ export function Level1RecordingStudioRoom({
   const centerX = area.bounds.min[0] + width / 2;
   const centerZ = area.bounds.min[2] + depth / 2;
   const centerY = area.bounds.min[1] + height / 2;
-  const doorwayHalfWidth = opening.size.width / 2;
-  const doorwayMinZ = opening.position[2] - doorwayHalfWidth;
-  const doorwayMaxZ = opening.position[2] + doorwayHalfWidth;
-  const eastLowerDepth = doorwayMinZ - area.bounds.min[2];
-  const eastUpperDepth = area.bounds.max[2] - doorwayMaxZ;
-  const thresholdMinX = opening.clearanceBounds?.min[0] ?? area.bounds.max[0];
-  const thresholdMaxX = opening.clearanceBounds?.max[0] ?? opening.position[0];
-  const thresholdWidth = thresholdMaxX - thresholdMinX;
-  const thresholdCenterX = thresholdMinX + thresholdWidth / 2;
   const guitarHolderUser = users.find((user) => user.id === studioGuitar?.holderUserId);
   const guitarHolderLabel = guitarHolderUser?.displayName ?? (studioGuitar?.holderUserId ? "Someone" : null);
   const isLocalHoldingGuitar = studioGuitar?.holderUserId === localUserId;
@@ -11206,12 +11278,35 @@ export function Level1RecordingStudioRoom({
     [localDawAudioState, localDawState, sharedDawTransport],
   );
   const mixerMonitor = useMemo(() => createStudioMixerMonitor(localDawState, localDawAudioState), [localDawAudioState, localDawState]);
+  const [areStudioOverviewMonitorsPowered, setAreStudioOverviewMonitorsPowered] = useState(true);
+  const [studioOverviewMonitorPowerState, setStudioOverviewMonitorPowerState] = useState<StudioOverviewMonitorPowerState>({});
   const [layoutState, setLayoutState] = useState<StudioLayoutState>(() => loadStudioLayoutState());
   const [layoutMoveState, setLayoutMoveState] = useState<StudioLayoutMoveState | null>(null);
   const layoutMoveStateRef = useRef<StudioLayoutMoveState | null>(null);
   const aimContextRef = useRef(aimContext);
   const activeLayoutStationId = getStationIdFromLayoutHitId(activeHit?.id);
   const movingLayoutStationId = layoutMoveState?.stationId ?? null;
+  const isStudioOverviewMonitorPowered = useCallback((screenId: StudioOverviewScreenId) => (
+    areStudioOverviewMonitorsPowered && studioOverviewMonitorPowerState[screenId] !== false
+  ), [areStudioOverviewMonitorsPowered, studioOverviewMonitorPowerState]);
+  const toggleStudioOverviewMonitorsPower = useCallback(() => {
+    setAreStudioOverviewMonitorsPowered((currentValue) => !currentValue);
+  }, []);
+  const toggleStudioOverviewMonitorPower = useCallback((screenId: StudioOverviewScreenId) => {
+    setStudioOverviewMonitorPowerState((currentState) => ({
+      ...currentState,
+      [screenId]: currentState[screenId] === false,
+    }));
+  }, []);
+  const studioOverviewMonitorPowerControl = useMemo<StudioTransportControlSpec>(() => ({
+    id: "studio-overview-monitor-power",
+    label: "Overview Monitor Power",
+    caption: areStudioOverviewMonitorsPowered ? "MONITORS ON" : "MONITORS OFF",
+    position: [area.bounds.max[0] - 0.06, 1.44, opening.position[2] + 1.36],
+    size: [0.86, 0.28, 0.08],
+    accentColor: areStudioOverviewMonitorsPowered ? "#73ff4c" : "#6f86a3",
+    onActivate: toggleStudioOverviewMonitorsPower,
+  }), [areStudioOverviewMonitorsPowered, area.bounds.max, opening.position, toggleStudioOverviewMonitorsPower]);
 
   useEffect(() => {
     layoutMoveStateRef.current = layoutMoveState;
@@ -11494,6 +11589,9 @@ export function Level1RecordingStudioRoom({
         recordingStatus: studioGuitarRecordingStatus,
       }),
       accentColor: getStudioTruthPanelAccentColor(localDawState, localDawAudioState),
+      areAllMonitorsPowered: areStudioOverviewMonitorsPowered,
+      isPoweredOn: isStudioOverviewMonitorPowered("big-status"),
+      onTogglePower: () => toggleStudioOverviewMonitorPower("big-status"),
       position: [-22.18, 3.56, -5.25],
       rotation: [0, Math.PI / 2, 0],
       size: [4.3, 1.34],
@@ -11503,6 +11601,9 @@ export function Level1RecordingStudioRoom({
       title: "Transport",
       lines: formatDawTransportLines(localDawState),
       accentColor: phaseVisuals.gridSecondary,
+      areAllMonitorsPowered: areStudioOverviewMonitorsPowered,
+      isPoweredOn: isStudioOverviewMonitorPowered("transport"),
+      onTogglePower: () => toggleStudioOverviewMonitorPower("transport"),
       position: [-22.18, 2.76, -0.02],
       rotation: [0, Math.PI / 2, 0],
       size: [2.28, 0.82],
@@ -11512,6 +11613,9 @@ export function Level1RecordingStudioRoom({
       title: "Sequence View",
       lines: sequenceMonitor.lines,
       accentColor: phaseVisuals.gridPrimary,
+      areAllMonitorsPowered: areStudioOverviewMonitorsPowered,
+      isPoweredOn: isStudioOverviewMonitorPowered("sequence-grid"),
+      onTogglePower: () => toggleStudioOverviewMonitorPower("sequence-grid"),
       position: [-22.18, 1.66, -6.86],
       rotation: [0, Math.PI / 2, 0],
       size: [2.84, 1.26],
@@ -11523,6 +11627,9 @@ export function Level1RecordingStudioRoom({
       title: "Arrangement Timeline",
       lines: arrangementMonitor.lines,
       accentColor: phaseVisuals.gridPrimary,
+      areAllMonitorsPowered: areStudioOverviewMonitorsPowered,
+      isPoweredOn: isStudioOverviewMonitorPowered("arrangement-timeline"),
+      onTogglePower: () => toggleStudioOverviewMonitorPower("arrangement-timeline"),
       position: [-16.88, 5.04, -8.58],
       rotation: [0, 0, 0],
       size: [5.38, 2.16],
@@ -11534,6 +11641,9 @@ export function Level1RecordingStudioRoom({
       title: "Track List",
       lines: formatDawTrackLines(localDawState),
       accentColor: "#73ff4c",
+      areAllMonitorsPowered: areStudioOverviewMonitorsPowered,
+      isPoweredOn: isStudioOverviewMonitorPowered("track-list"),
+      onTogglePower: () => toggleStudioOverviewMonitorPower("track-list"),
       position: [-22.18, 2.58, -2.86],
       rotation: [0, Math.PI / 2, 0],
       size: [2.32, 0.84],
@@ -11543,6 +11653,9 @@ export function Level1RecordingStudioRoom({
       title: "Device Rack",
       lines: formatDawDeviceLines(localDawState),
       accentColor: phaseVisuals.timerAccent,
+      areAllMonitorsPowered: areStudioOverviewMonitorsPowered,
+      isPoweredOn: isStudioOverviewMonitorPowered("device-rack"),
+      onTogglePower: () => toggleStudioOverviewMonitorPower("device-rack"),
       position: [-16.88, 2.24, -8.58],
       rotation: [0, 0, 0],
       size: [2.4, 0.84],
@@ -11552,6 +11665,9 @@ export function Level1RecordingStudioRoom({
       title: "Mixer View",
       lines: mixerMonitor.lines,
       accentColor: phaseVisuals.gridSecondary,
+      areAllMonitorsPowered: areStudioOverviewMonitorsPowered,
+      isPoweredOn: isStudioOverviewMonitorPowered("mixer-view"),
+      onTogglePower: () => toggleStudioOverviewMonitorPower("mixer-view"),
       position: [-16.88, 3.18, -8.58],
       rotation: [0, 0, 0],
       size: [3.38, 1.3],
@@ -11572,6 +11688,9 @@ export function Level1RecordingStudioRoom({
         sharedDawTransport,
       }),
       accentColor: getStudioTruthPanelAccentColor(localDawState, localDawAudioState),
+      areAllMonitorsPowered: areStudioOverviewMonitorsPowered,
+      isPoweredOn: isStudioOverviewMonitorPowered("studio-truth"),
+      onTogglePower: () => toggleStudioOverviewMonitorPower("studio-truth"),
       position: [-22.18, 1.44, -2.88],
       rotation: [0, Math.PI / 2, 0],
       size: [2.34, 0.96],
@@ -11588,11 +11707,14 @@ export function Level1RecordingStudioRoom({
     guitarHolderLabel,
     isGuitarHeldByAnyone,
     isLocalHoldingGuitar,
+    areStudioOverviewMonitorsPowered,
     mixerMonitor.lines,
     mixerMonitor.lastSoundLine,
     mixerMonitor.silenceLine,
     mixerMonitor.engineLine,
     studioGuitarRecordingStatus,
+    isStudioOverviewMonitorPowered,
+    toggleStudioOverviewMonitorPower,
     sequenceMonitor.lines,
     sequenceMonitor.sequence,
     mixerMonitor,
@@ -11612,34 +11734,7 @@ export function Level1RecordingStudioRoom({
       <Wall position={[centerX, centerY, area.bounds.min[2]]} args={[width, height, WALL_THICKNESS]} color="#08111f" />
       <Wall position={[centerX, centerY, area.bounds.max[2]]} args={[width, height, WALL_THICKNESS]} color="#08111f" />
       <Wall position={[area.bounds.min[0], centerY, centerZ]} args={[WALL_THICKNESS, height, depth]} color="#08111f" />
-      <Wall
-        position={[area.bounds.max[0], centerY, area.bounds.min[2] + eastLowerDepth / 2]}
-        args={[WALL_THICKNESS, height, eastLowerDepth]}
-        color="#08111f"
-      />
-      <Wall
-        position={[area.bounds.max[0], centerY, doorwayMaxZ + eastUpperDepth / 2]}
-        args={[WALL_THICKNESS, height, eastUpperDepth]}
-        color="#08111f"
-      />
-      <Wall
-        position={[area.bounds.max[0], opening.size.height + (height - opening.size.height) / 2, opening.position[2]]}
-        args={[WALL_THICKNESS, height - opening.size.height, opening.size.width]}
-        color="#08111f"
-      />
-
-      <mesh position={[thresholdCenterX, 0.024, opening.position[2]]}>
-        <boxGeometry args={[thresholdWidth, 0.048, opening.size.width]} />
-        <meshStandardMaterial args={[{ color: "#101f33", emissive: "#07111f", emissiveIntensity: 0.18, roughness: 0.8 }]} />
-      </mesh>
-      <mesh position={[thresholdCenterX, 0.07, doorwayMinZ]}>
-        <boxGeometry args={[thresholdWidth, 0.05, 0.045]} />
-        <meshBasicMaterial args={[{ color: phaseVisuals.gridSecondary }]} />
-      </mesh>
-      <mesh position={[thresholdCenterX, 0.07, doorwayMaxZ]}>
-        <boxGeometry args={[thresholdWidth, 0.05, 0.045]} />
-        <meshBasicMaterial args={[{ color: phaseVisuals.gridPrimary }]} />
-      </mesh>
+      <Wall position={[area.bounds.max[0], centerY, centerZ]} args={[WALL_THICKNESS, height, depth]} color="#08111f" />
 
       <mesh position={[centerX, 3.72, centerZ]}>
         <boxGeometry args={[2.35, 0.055, 0.08]} />
@@ -11833,6 +11928,7 @@ export function Level1RecordingStudioRoom({
           </StudioLayoutStationGroup>
         );
       })}
+      <StudioWallSwitchControl control={studioOverviewMonitorPowerControl} />
 
       <StudioLayoutMoveStatus
         moveState={layoutMoveState}
@@ -11851,8 +11947,6 @@ export function Level1RecordingStudioRoom({
 
       <MarkerPost position={[area.bounds.min[0] + 0.48, 0.17, area.bounds.min[2] + 0.48]} color={phaseVisuals.gridPrimary} />
       <MarkerPost position={[area.bounds.min[0] + 0.48, 0.17, area.bounds.max[2] - 0.48]} color={phaseVisuals.gridSecondary} />
-      <MarkerPost position={[area.bounds.max[0] - 0.48, 0.17, doorwayMinZ - 0.32]} color="#f8d36a" />
-      <MarkerPost position={[area.bounds.max[0] - 0.48, 0.17, doorwayMaxZ + 0.32]} color="#f64fff" />
     </group>
   );
 }

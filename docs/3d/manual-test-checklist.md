@@ -1,5 +1,20 @@
 # 3D Hidden World Manual Test Checklist
 
+## Vision 25 - Interaction Raycast Performance
+
+- Enter the 3D world, open the escape menu, enable Show FPS, and verify the overlay shows FPS plus `IR` interaction stats and `GL` renderer stats.
+- Stand in the control room and verify the `IR` object count is lower than when standing inside the recording studio.
+- Enter the recording studio, aim across dense studio controls, and verify `IR` raycast duration remains stable without large repeated spikes.
+- Click several piano keys and verify each note sounds promptly and the piano latency trace still includes pointer, activation, frame, and raycast timing fields.
+- Click Deck A/B Play, Cue, hot cues, grid pads, and seek controls; verify they activate from the click and still add expected console/booth feedback.
+- Drag the SoundCloud crossfader, deck waveform scrubber, grid clamp handles, and platter scrub control; verify drag starts, updates, and ends normally.
+- Use the studio layout movement flow to pick up, rotate, place, and reset at least one movable studio station.
+- Aim at the local station monitor and press E; verify dashboard return still works.
+- Use Level 1 RANGE and Level 2 BACK doors; verify level exits still activate.
+- In Level 2 range, click once to focus controls, then shoot range targets; verify shootable fallback still works and top-down mode disables shooting.
+- Toggle Show FPS off and verify interaction/render performance stats disappear and no normal 2D UI affordance was added.
+- Repeat the piano, DJ click, and range shooting checks inside Discord Activity with a friend when available.
+
 ## Vision 3 Final Manual Test And Recovery Pass
 
 ### Normal 2D Baseline
@@ -43,6 +58,7 @@
 ### Expanded Control Room
 
 - Verify Level 1 opens into the expanded Control Room.
+- Verify Level 1 no longer renders the attached Recording Studio footprint west of the Control Room.
 - Verify the hero monitor wall renders with the large main dashboard, side/status screens, timer ribbon, and smaller surrounding monitors.
 - Verify wall monitors do not show obvious overlap, z-fighting, doubled screens, or backwards-facing screen content.
 - Aim at the configured session/status wall panel and press E; verify it cycles only the existing session panel behavior.
@@ -56,9 +72,25 @@
 - Verify the old Control Room east range opening is sealed or physically blocked in Level 1.
 - Verify Level 1 does not render range lanes, targets, HITS display, or local range challenge UI.
 - Locate the Level 1 east-wall RANGE door/panel and verify it is readable in first-person and top-down views.
+- Locate the Level 1 west-wall STUDIO door/panel and verify it is readable in first-person and top-down views.
 - Click once to focus controls and verify this does not activate the RANGE door.
+- Click once to focus controls and verify this does not activate the STUDIO door.
 - Aim at the Level 1 RANGE door and press E; verify the shell switches to `data-level-id="level-2-range"`.
+- Aim at the Level 1 STUDIO door and press E; verify the shell switches to `data-level-id="level-3-recording-studio"`.
+- Verify the Level 1 STUDIO door now switches instantly with no reveal fly-in.
+- Verify Level 3 control focus works immediately after the instant studio transfer.
+- In Level 3, aim at the BACK door and press E; verify returning to Level 1 still works.
+- Verify the Level 3 BACK door now switches instantly with no reveal fly-in.
+- Verify returning from Level 3 lands just inside Level 1 in front of the west-wall STUDIO door, facing into the Control Room.
+- In Level 3, locate the `MONITORS` power control and press E; verify the overview monitor bank goes dark.
+- While global monitor power is off, aim at an individual overview monitor and verify it does not toggle independently.
+- Press E on the global monitor power control again and verify overview monitors come back on.
+- Aim at one overview monitor and press E; verify only that monitor turns off.
+- Aim at a different overview monitor and verify it remains on.
+- Turn global monitor power off and back on again; verify the individually disabled monitor stays off while the others restore.
+- Verify layout move targeting for overview monitor stations still works after using the monitor power controls.
 - Return to Level 1 from the Level 2 BACK door and verify the Level 1 east wall remains a blocked wall with only the door interaction active.
+- Verify Level 1 now uses the west-wall STUDIO door to reach the standalone studio instead of a walk-through attached room.
 - Open with `?level=level-2-range`, type `syncsesh`, and verify the standalone range loads.
 - Click once to focus controls and verify this does not immediately fire a target.
 - Aim at targets and primary-click; verify shooting still works in Level 2.

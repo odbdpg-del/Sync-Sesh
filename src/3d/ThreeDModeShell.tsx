@@ -4,8 +4,9 @@ import type { CSSProperties, ElementRef, MutableRefObject } from "react";
 import { Level1RoomShell } from "./Level1RoomShell";
 import { ThreeDModeErrorBoundary } from "./ThreeDModeErrorBoundary";
 import { AimInteractionController, InteractionProvider, InteractionReticle, useInteractionRegistry } from "./interactions";
+import type { InteractionPerformanceSample } from "./interactions";
 import { DEFAULT_LEVEL_ID, getLevelConfig } from "./levels";
-import type { LevelConfig } from "./levels";
+import type { LevelConfig, LevelExitConfig } from "./levels";
 import { useLocalDawAudioEngine } from "./useLocalDawAudioEngine";
 import type { LocalDawAudioEngineActions, LocalDawAudioEngineState, LocalDawFmSynthNote, LocalDawFmSynthPatch } from "./useLocalDawAudioEngine";
 import { useLocalDawState } from "./useLocalDawState";
@@ -47,6 +48,11 @@ type AreaFeedbackState = { id: string; label: string; key: number };
 type HeldStudioInstrument = "guitar" | null;
 type StudioGuitarInputSource = "click" | "keyboard";
 type StudioGuitarAudioReadiness = { label: "AUDIBLE" | "SILENT"; reason: string };
+type TransitionArrivalOverride = {
+  levelId: string;
+  spawnPosition?: Vec3;
+  cameraTarget?: Vec3;
+};
 type StudioGuitarFeedbackState = {
   noteIndex: number;
   source: StudioGuitarInputSource;
@@ -214,6 +220,13 @@ interface ThreeDSettingsState {
   showFps: boolean;
 }
 
+interface RendererPerformanceSample {
+  drawCalls: number;
+  triangles: number;
+  textures: number;
+  geometries: number;
+}
+
 const ESCAPE_MENU_TABS: Array<{ id: EscapeMenuTab; label: string }> = [
   { id: "visual", label: "Visual" },
   { id: "movement", label: "Movement" },
@@ -231,6 +244,8 @@ const DEFAULT_THREE_D_SETTINGS: ThreeDSettingsState = {
   showGrabBoxes: false,
   showFps: false,
 };
+const REMOTE_PIANO_LOOKAHEAD_MS = 140;
+const MAX_REMOTE_PIANO_SCHEDULE_DELAY_MS = 500;
 
 const AVATAR_BODY_COLOR_OPTIONS = ["#1f8aa3", "#315c83", "#5d3f8f", "#3f6a48", "#7b4f83", "#234e76"] as const;
 const AVATAR_ACCENT_COLOR_OPTIONS = ["#57f3ff", "#75ffa8", "#ff8bd4", "#f8d36a", "#a5b4ff", "#ff9b70"] as const;
@@ -421,9 +436,27 @@ function worldFromStationLocal(station: LevelConfig["stations"][number], local: 
   ];
 }
 
-function getFallbackRevealRig(levelConfig: LevelConfig): StationRevealRig {
-  const endPosition = [...levelConfig.playerStart.position] as Vec3;
-  const endTarget = [...END_CAMERA_TARGET] as Vec3;
+function getInitialLevelArea(levelConfig: LevelConfig) {
+  const activeAreas = (levelConfig.areas ?? []).filter((area) => area.status === "active");
+
+  return (
+    activeAreas.find((area) => (
+      levelConfig.playerStart.position[0] >= area.bounds.min[0] &&
+      levelConfig.playerStart.position[0] <= area.bounds.max[0] &&
+      levelConfig.playerStart.position[1] >= area.bounds.min[1] &&
+      levelConfig.playerStart.position[1] <= area.bounds.max[1] &&
+      levelConfig.playerStart.position[2] >= area.bounds.min[2] &&
+      levelConfig.playerStart.position[2] <= area.bounds.max[2]
+    )) ??
+    activeAreas[0] ??
+    null
+  );
+}
+
+function getFallbackRevealRig(levelConfig: LevelConfig, arrivalOverride?: TransitionArrivalOverride): StationRevealRig {
+  const initialArea = getInitialLevelArea(levelConfig);
+  const endPosition = [...(arrivalOverride?.spawnPosition ?? initialArea?.spawnPosition ?? levelConfig.playerStart.position)] as Vec3;
+  const endTarget = [...(arrivalOverride?.cameraTarget ?? initialArea?.cameraTarget ?? END_CAMERA_TARGET)] as Vec3;
 
   return {
     startPosition: [...START_CAMERA_POSITION],
@@ -456,9 +489,13 @@ function getAreaForPosition(position: Vec3, levelConfig: LevelConfig) {
   );
 }
 
-function getStationRevealRig(levelConfig: LevelConfig, station?: LevelConfig["stations"][number]): StationRevealRig {
+function getStationRevealRig(
+  levelConfig: LevelConfig,
+  station?: LevelConfig["stations"][number],
+  arrivalOverride?: TransitionArrivalOverride,
+): StationRevealRig {
   if (!station) {
-    return getFallbackRevealRig(levelConfig);
+    return getFallbackRevealRig(levelConfig, arrivalOverride);
   }
 
   const screenTarget = worldFromStationLocal(station, [0, 1.32, -0.245]);
@@ -682,6 +719,9 @@ function EscapeMenuOverlay({
   const transportState = canControlSharedDawTransport ? sharedDawTransport.state : localDawState.transport.state;
   const transportBpm = canControlSharedDawTransport ? sharedDawTransport.bpm : localDawState.transport.bpm;
   const masterPercent = Math.round(audioState.masterVolume * 100);
+  const audioLatencyLabel = audioState.audioContextInfo
+    ? `BASE ${audioState.audioContextInfo.baseLatencyMs ?? "--"} MS / OUT ${audioState.audioContextInfo.outputLatencyMs ?? "--"} MS`
+    : "--";
   const handleAccentColorChange = (color: string) => {
     onAvatarSettingChange("accentColor", color);
     onAvatarSettingChange("headColor", color);
@@ -900,6 +940,10 @@ function EscapeMenuOverlay({
             <span>Master</span>
             <strong>{masterPercent}%</strong>
           </div>
+          <div className="three-d-escape-menu-row">
+            <span>Latency</span>
+            <strong>{audioLatencyLabel}</strong>
+          </div>
           <div className="three-d-escape-menu-button-grid three-d-escape-menu-button-grid-3">
             <button type="button" className="three-d-escape-menu-action" onClick={() => onSetMasterVolume(audioState.masterVolume - 0.1)}>
               -
@@ -1016,7 +1060,62 @@ function EscapeMenuOverlay({
   );
 }
 
-function ThreeDFpsCounter({ enabled }: { enabled: boolean }) {
+function ThreeDPerformanceSampler({
+  enabled,
+  onSample,
+}: {
+  enabled: boolean;
+  onSample: (sample: RendererPerformanceSample | null) => void;
+}) {
+  const { gl } = useThree();
+  const onSampleRef = useRef(onSample);
+  const lastSampleAtRef = useRef(0);
+
+  useEffect(() => {
+    onSampleRef.current = onSample;
+  }, [onSample]);
+
+  useEffect(() => {
+    if (!enabled) {
+      lastSampleAtRef.current = 0;
+      onSampleRef.current(null);
+    }
+  }, [enabled]);
+
+  useFrame(() => {
+    if (!enabled) {
+      return;
+    }
+
+    const now = performance.now();
+
+    if (now - lastSampleAtRef.current < 500) {
+      return;
+    }
+
+    lastSampleAtRef.current = now;
+    const info = gl.info;
+
+    onSampleRef.current({
+      drawCalls: info.render.calls,
+      triangles: info.render.triangles,
+      textures: info.memory.textures,
+      geometries: info.memory.geometries,
+    });
+  });
+
+  return null;
+}
+
+function ThreeDFpsCounter({
+  enabled,
+  interactionPerformanceSample,
+  rendererPerformanceSample,
+}: {
+  enabled: boolean;
+  interactionPerformanceSample: InteractionPerformanceSample | null;
+  rendererPerformanceSample: RendererPerformanceSample | null;
+}) {
   const [fps, setFps] = useState(0);
 
   useEffect(() => {
@@ -1052,7 +1151,17 @@ function ThreeDFpsCounter({ enabled }: { enabled: boolean }) {
 
   return (
     <div className="three-d-fps-counter" aria-live="polite">
-      FPS {fps}
+      <div>FPS {fps}</div>
+      {interactionPerformanceSample ? (
+        <div>
+          IR {interactionPerformanceSample.raycastDurationMs.toFixed(1)}ms {interactionPerformanceSample.raycastObjectCount} O {interactionPerformanceSample.intersectionCount} I {interactionPerformanceSample.hitCount} H
+        </div>
+      ) : null}
+      {rendererPerformanceSample ? (
+        <div>
+          GL {rendererPerformanceSample.drawCalls} DC {rendererPerformanceSample.triangles} TRI {rendererPerformanceSample.textures} TX {rendererPerformanceSample.geometries} GEO
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -2855,6 +2964,18 @@ function hasMeaningfulPoseChange(previousPose: LocalPlayerPose | null, nextPose:
   return positionDelta > FREE_ROAM_POSITION_EPSILON || yawDelta > FREE_ROAM_YAW_EPSILON;
 }
 
+function hasMeaningfulPositionChange(previousPose: LocalPlayerPose | null, nextPose: LocalPlayerPose) {
+  if (!previousPose) {
+    return true;
+  }
+
+  const dx = previousPose.position[0] - nextPose.position[0];
+  const dy = previousPose.position[1] - nextPose.position[1];
+  const dz = previousPose.position[2] - nextPose.position[2];
+
+  return Math.hypot(dx, dy, dz) > FREE_ROAM_POSITION_EPSILON;
+}
+
 function FreeRoamPresenceReporter({
   currentAreaIdRef,
   enabled,
@@ -3147,7 +3268,11 @@ function resolveLocalStation(
   };
 }
 
-function playSharedDawLiveSound(sound: SharedDawLiveSoundEvent, localDawAudioActions: LocalDawAudioEngineActions) {
+function playSharedDawLiveSound(
+  sound: SharedDawLiveSoundEvent,
+  localDawAudioActions: LocalDawAudioEngineActions,
+  schedule?: { startDelayMs: number; lateByMs: number },
+) {
   const gainScale = sound.gainScale ?? 1;
 
   if (sound.kind === "drum" && sound.drumKind) {
@@ -3176,6 +3301,8 @@ function playSharedDawLiveSound(sound: SharedDawLiveSoundEvent, localDawAudioAct
   }
 
   if (sound.kind === "piano" && typeof sound.frequency === "number") {
+    const scheduledStartDelaySeconds = schedule ? Math.max(0, schedule.startDelayMs) / 1000 : undefined;
+
     localDawAudioActions.playPianoLiveNote({
       label: sound.label,
       frequency: sound.frequency,
@@ -3183,7 +3310,16 @@ function playSharedDawLiveSound(sound: SharedDawLiveSoundEvent, localDawAudioAct
       gainScale,
       bassMachinePatch: sound.bassMachinePatch,
       fmSynthPatch: sound.fmSynthPatch,
-    }, sound.pianoTarget ?? "fm-synth", { allowSound: true });
+    }, sound.pianoTarget ?? "fm-synth", {
+      allowSound: true,
+      scheduledStartDelaySeconds,
+      latencyTrace: {
+        source: "shared-daw-live-piano",
+        handlerAtMs: performance.now(),
+        scheduledStartDelayMs: schedule?.startDelayMs,
+        remoteLateByMs: schedule?.lateByMs,
+      },
+    });
     return;
   }
 
@@ -3246,6 +3382,8 @@ export function ThreeDModeShell({
   const [isEscapeMenuOpen, setIsEscapeMenuOpen] = useState(false);
   const [escapeMenuTab, setEscapeMenuTab] = useState<EscapeMenuTab>("visual");
   const [threeDSettings, setThreeDSettings] = useState<ThreeDSettingsState>(DEFAULT_THREE_D_SETTINGS);
+  const [interactionPerformanceSample, setInteractionPerformanceSample] = useState<InteractionPerformanceSample | null>(null);
+  const [rendererPerformanceSample, setRendererPerformanceSample] = useState<RendererPerformanceSample | null>(null);
   const [localAvatarAppearance, setLocalAvatarAppearance] = useState<PlayerAvatarAppearance>(() => loadLocalAvatarAppearance());
   const lookStateRef = useRef<LookState>({ ...INITIAL_LOOK_STATE });
   const localPlayerPoseRef = useRef<LocalPlayerPose | null>(null);
@@ -3270,8 +3408,23 @@ export function ThreeDModeShell({
     }),
     [localUser?.avatarSeed, localUser?.displayName, localUser?.id, localUser?.isTestUser, localUserId],
   );
+
+  useEffect(() => {
+    if (!threeDSettings.showFps) {
+      setInteractionPerformanceSample(null);
+      setRendererPerformanceSample(null);
+    }
+  }, [threeDSettings.showFps]);
+
   const localStation = resolvedLocalStation.station;
-  const revealRig = useMemo(() => getStationRevealRig(levelConfig, localStation ?? undefined), [levelConfig, localStation]);
+  const [transitionArrivalOverride, setTransitionArrivalOverride] = useState<TransitionArrivalOverride | null>(null);
+  const revealRig = useMemo(() => (
+    getStationRevealRig(
+      levelConfig,
+      localStation ?? undefined,
+      transitionArrivalOverride?.levelId === levelConfig.id ? transitionArrivalOverride : undefined,
+    )
+  ), [levelConfig, localStation, transitionArrivalOverride]);
   const canRenderCanvas = status === "loading" || status === "ready";
   const areInteractionsEnabled = status === "ready" && revealState === "complete" && (
     ((!isTopDownViewActive && controlState !== "idle") ||
@@ -3280,7 +3433,13 @@ export function ThreeDModeShell({
   );
   const canShowAreaFeedback = status === "ready" && revealState === "complete";
   const updateLocalPlayerPose = useCallback((pose: LocalPlayerPose) => {
+    const previousPose = localPlayerPoseRef.current;
     localPlayerPoseRef.current = pose;
+
+    if (currentAreaIdRef.current && !hasMeaningfulPositionChange(previousPose, pose)) {
+      return;
+    }
+
     const area = getAreaForPosition(pose.position, levelConfig);
     const nextAreaId = area?.id ?? null;
 
@@ -3300,6 +3459,9 @@ export function ThreeDModeShell({
       });
     }
   }, [canShowAreaFeedback, levelConfig]);
+  const completeReveal = useCallback(() => {
+    setRevealState("complete");
+  }, []);
   const handleExit = useCallback(() => {
     if (isLocalHoldingStudioGuitarRef.current) {
       onDropStudioGuitar();
@@ -3420,12 +3582,20 @@ export function ThreeDModeShell({
   }, [canControlSharedDawTransport, localDawActions, onSetSharedDawTempo, sharedDawTransport.bpm]);
 
   const handleStudioTestPiano = useCallback(() => {
+    const handlerAtMs = performance.now();
+
     localDawAudioActions.playPianoLiveNote({
       durationSeconds: 0.55,
       frequency: 261.63,
       gainScale: 1.2,
       label: "C4",
-    }, "fm-synth", { allowSound: true });
+    }, "fm-synth", {
+      allowSound: true,
+      latencyTrace: {
+        source: "studio-test-piano",
+        handlerAtMs,
+      },
+    });
   }, [localDawAudioActions]);
 
   const handleStudioTestFmSynth = useCallback(() => {
@@ -3457,6 +3627,21 @@ export function ThreeDModeShell({
   const handleStudioTestDrumHat = useCallback(() => {
     localDawAudioActions.playDrumVoice({ gainScale: 1, kind: "hat", label: "Hat" }, { allowSound: true });
   }, [localDawAudioActions]);
+
+  const handleBroadcastDawLiveSound = useCallback((sound: SharedDawLiveSoundPayload) => {
+    if (sound.kind !== "piano") {
+      onBroadcastDawLiveSound(sound);
+      return;
+    }
+
+    const serverAlignedNowMs = Date.now() + (syncStatus.serverTimeOffsetMs ?? 0);
+
+    onBroadcastDawLiveSound({
+      ...sound,
+      clientTriggeredAt: sound.clientTriggeredAt ?? new Date().toISOString(),
+      scheduledAt: new Date(serverAlignedNowMs + REMOTE_PIANO_LOOKAHEAD_MS).toISOString(),
+    });
+  }, [onBroadcastDawLiveSound, syncStatus.serverTimeOffsetMs]);
 
   useEffect(() => {
     const sharedTransportPosition = getSharedDawTransportPosition(sharedDawTransport, syncStatus);
@@ -3504,7 +3689,24 @@ export function ThreeDModeShell({
       return;
     }
 
-    playSharedDawLiveSound(sharedDawLiveSound, localDawAudioActions);
+    const pianoSchedule = sharedDawLiveSound.kind === "piano"
+      ? (() => {
+          const scheduledAtMs = sharedDawLiveSound.scheduledAt ? Date.parse(sharedDawLiveSound.scheduledAt) : NaN;
+          const scheduledServerTimeMs = Number.isFinite(scheduledAtMs)
+            ? scheduledAtMs
+            : triggeredAtMs + REMOTE_PIANO_LOOKAHEAD_MS;
+          const rawStartDelayMs = scheduledServerTimeMs - serverAlignedNowMs;
+          const startDelayMs = Math.min(MAX_REMOTE_PIANO_SCHEDULE_DELAY_MS, Math.max(0, rawStartDelayMs));
+          const lateByMs = rawStartDelayMs < 0 ? Math.round(Math.abs(rawStartDelayMs)) : 0;
+
+          return {
+            startDelayMs: Math.round(startDelayMs),
+            lateByMs,
+          };
+        })()
+      : undefined;
+
+    playSharedDawLiveSound(sharedDawLiveSound, localDawAudioActions, pianoSchedule);
   }, [
     localDawAudioActions,
     localUserId,
@@ -3557,8 +3759,8 @@ export function ThreeDModeShell({
     });
   }, [localDawActions]);
 
-  const handleLevelExit = useCallback((targetLevelId: string) => {
-    const nextLevelConfig = getLevelConfig(targetLevelId);
+  const handleLevelExit = useCallback((exit: LevelExitConfig) => {
+    const nextLevelConfig = getLevelConfig(exit.targetLevelId);
 
     exitPointerLockIfActive();
 
@@ -3568,13 +3770,22 @@ export function ThreeDModeShell({
 
     onClearFreeRoamPresence();
     setIsEscapeMenuOpen(false);
+    setTransitionArrivalOverride(
+      exit.targetSpawnPosition || exit.targetCameraTarget
+        ? {
+          levelId: nextLevelConfig.id,
+          spawnPosition: exit.targetSpawnPosition ? [...exit.targetSpawnPosition] as Vec3 : undefined,
+          cameraTarget: exit.targetCameraTarget ? [...exit.targetCameraTarget] as Vec3 : undefined,
+        }
+        : null,
+    );
     setCurrentLevelId(nextLevelConfig.id);
     lookStateRef.current = { ...INITIAL_LOOK_STATE };
     localPlayerPoseRef.current = null;
     currentAreaIdRef.current = null;
     setCurrentAreaId(null);
     setAreaFeedback(null);
-    setRevealState("revealing");
+    setRevealState(exit.transitionStyle === "instant" ? "complete" : "revealing");
     setControlState("idle");
     setIsTopDownViewActive(false);
     setIsTopDownFreeCamActive(false);
@@ -3624,6 +3835,27 @@ export function ThreeDModeShell({
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.code !== "Space" || status !== "ready" || revealState !== "revealing") {
+        return;
+      }
+
+      if (isInteractiveTarget(event.target)) {
+        return;
+      }
+
+      event.preventDefault();
+      completeReveal();
+    };
+
+    window.addEventListener("keydown", handleKeyDown, { capture: true });
+
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown, { capture: true });
+    };
+  }, [completeReveal, revealState, status]);
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
       if (event.code !== "Escape" || document.pointerLockElement !== null) {
         return;
       }
@@ -3645,12 +3877,21 @@ export function ThreeDModeShell({
 
   useEffect(() => {
     if (status === "ready" && revealState === "complete" && !localPlayerPoseRef.current) {
-      localPlayerPoseRef.current = {
+      const initialPose: LocalPlayerPose = {
         position: [...revealRig.endPosition],
         yaw: revealRig.endLookState.yaw,
       };
+      const initialArea = getAreaForPosition(initialPose.position, levelConfig);
+
+      localPlayerPoseRef.current = initialPose;
+      currentAreaIdRef.current = initialArea?.id ?? null;
+      setCurrentAreaId(initialArea?.id ?? null);
+
+      if (transitionArrivalOverride?.levelId === levelConfig.id) {
+        setTransitionArrivalOverride(null);
+      }
     }
-  }, [revealRig.endLookState.yaw, revealRig.endPosition, revealState, status]);
+  }, [levelConfig, revealRig.endLookState.yaw, revealRig.endPosition, revealState, status, transitionArrivalOverride]);
 
   useEffect(() => () => {
     onClearFreeRoamPresence();
@@ -3752,7 +3993,7 @@ export function ThreeDModeShell({
                 revealRig={revealRig}
                 revealState={revealState}
                 lookStateRef={lookStateRef}
-                onComplete={() => setRevealState("complete")}
+                onComplete={completeReveal}
               />
               <ReturnToDashboardCameraController
                 revealState={revealState}
@@ -3820,12 +4061,21 @@ export function ThreeDModeShell({
                   localDawAudioActions={localDawAudioActions}
                   noteIndex={studioGuitarNoteIndex}
                   onFeedback={handleStudioGuitarFeedback}
-                  onBroadcastDawLiveSound={onBroadcastDawLiveSound}
+                  onBroadcastDawLiveSound={handleBroadcastDawLiveSound}
                   onNoteIndexChange={setStudioGuitarNoteIndex}
                   onRecordNote={handleStudioGuitarRecordNote}
                 />
               ) : null}
-              <AimInteractionController enabled={areInteractionsEnabled} enablePointerShoot />
+              <ThreeDPerformanceSampler
+                enabled={status === "ready" && revealState === "complete" && threeDSettings.showFps}
+                onSample={setRendererPerformanceSample}
+              />
+              <AimInteractionController
+                enabled={areInteractionsEnabled}
+                enablePointerShoot
+                activeAreaId={currentAreaId}
+                onPerformanceSample={threeDSettings.showFps ? setInteractionPerformanceSample : undefined}
+              />
               <Level1RoomShell
                 levelConfig={levelConfig}
                 countdownDisplay={countdownDisplay}
@@ -3857,7 +4107,7 @@ export function ThreeDModeShell({
                 localUserIdForSharedDawClips={localUserId}
                 onPublishSharedDawClip={onPublishSharedDawClip}
                 onClearSharedDawClip={onClearSharedDawClip}
-                onBroadcastDawLiveSound={onBroadcastDawLiveSound}
+                onBroadcastDawLiveSound={handleBroadcastDawLiveSound}
                 studioGuitar={studioGuitar}
                 onPickupStudioGuitar={onPickupStudioGuitar}
                 onDropStudioGuitar={onDropStudioGuitar}
@@ -3899,7 +4149,7 @@ export function ThreeDModeShell({
       ) : null}
 
       {status === "ready" && revealState === "revealing" ? (
-        <button type="button" className="three-d-shell-skip" onClick={() => setRevealState("complete")}>
+        <button type="button" className="three-d-shell-skip" onClick={completeReveal}>
           Skip
         </button>
       ) : null}
@@ -3916,7 +4166,11 @@ export function ThreeDModeShell({
         </button>
       ) : null}
 
-      <ThreeDFpsCounter enabled={status === "ready" && revealState === "complete" && threeDSettings.showFps} />
+      <ThreeDFpsCounter
+        enabled={status === "ready" && revealState === "complete" && threeDSettings.showFps}
+        interactionPerformanceSample={interactionPerformanceSample}
+        rendererPerformanceSample={rendererPerformanceSample}
+      />
 
       <EscapeMenuOverlay
         activeTab={escapeMenuTab}
