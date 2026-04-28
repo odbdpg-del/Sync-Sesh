@@ -211,6 +211,134 @@ function summarizeAttemptId(attemptId: string) {
   return attemptId.slice(-8);
 }
 
+interface DiscordAuthorizeErrorContext {
+  authMode: "silent" | "interactive";
+  attemptId: string;
+  buildId: string;
+  redirectUri: string;
+  authEndpoint: string;
+  hasClientId: boolean;
+  isDiscordProxyHost: boolean;
+  channelId?: string;
+  guildId?: string;
+  instanceId?: string;
+}
+
+const SAFE_AUTHORIZE_ERROR_KEYS = [
+  "name",
+  "code",
+  "type",
+  "status",
+  "statusCode",
+  "error",
+  "errorCode",
+  "error_code",
+  "reason",
+  "detail",
+  "details",
+] as const;
+
+function trimAuthorizeDiagnosticValue(value: string) {
+  const compact = value.replace(/\s+/g, " ").trim();
+  if (compact.length <= 180) {
+    return compact;
+  }
+
+  return `${compact.slice(0, 177)}...`;
+}
+
+function formatAuthorizeDiagnosticValue(value: unknown): string | undefined {
+  if (typeof value === "string") {
+    const trimmed = trimAuthorizeDiagnosticValue(value);
+    return trimmed.length > 0 ? trimmed : undefined;
+  }
+
+  if (typeof value === "number" || typeof value === "boolean") {
+    return String(value);
+  }
+
+  return undefined;
+}
+
+function readNestedAuthorizeDiagnosticFields(source: Record<string, unknown>, prefix: string) {
+  const diagnostics: string[] = [];
+
+  for (const key of SAFE_AUTHORIZE_ERROR_KEYS) {
+    const value = formatAuthorizeDiagnosticValue(source[key]);
+
+    if (!value) {
+      continue;
+    }
+
+    diagnostics.push(`${prefix}${key}=${value}`);
+  }
+
+  return diagnostics;
+}
+
+function collectSafeAuthorizeErrorFields(error: unknown) {
+  if (!error || typeof error !== "object") {
+    return [];
+  }
+
+  const record = error as Record<string, unknown>;
+  const diagnostics = readNestedAuthorizeDiagnosticFields(record, "");
+
+  for (const nestedKey of ["cause", "data"] as const) {
+    const nestedValue = record[nestedKey];
+
+    if (!nestedValue || typeof nestedValue !== "object") {
+      continue;
+    }
+
+    diagnostics.push(...readNestedAuthorizeDiagnosticFields(nestedValue as Record<string, unknown>, `${nestedKey}.`));
+  }
+
+  return [...new Set(diagnostics)];
+}
+
+function buildAuthorizeContextParts(context: DiscordAuthorizeErrorContext) {
+  return [
+    `${context.authMode} auth`,
+    `attempt ${summarizeAttemptId(context.attemptId)}`,
+    `build ${context.buildId}`,
+    `redirect ${context.redirectUri}`,
+    context.isDiscordProxyHost ? "discord proxy host" : "direct host",
+    context.hasClientId ? "client id present" : "client id missing",
+    `auth endpoint ${context.authEndpoint}`,
+    context.channelId ? `channel ${context.channelId}` : undefined,
+    context.guildId ? `guild ${context.guildId}` : undefined,
+    context.instanceId ? `instance ${context.instanceId}` : undefined,
+  ].filter((part): part is string => Boolean(part));
+}
+
+function summarizeDiscordAuthorizeError(error: unknown, context: DiscordAuthorizeErrorContext) {
+  const rawMessage =
+    error instanceof Error ? error.message : typeof error === "string" ? error : "Discord authorize request failed.";
+  const safeMessage = trimAuthorizeDiagnosticValue(rawMessage) || "Discord authorize request failed.";
+  const errorFields = collectSafeAuthorizeErrorFields(error);
+  const contextParts = buildAuthorizeContextParts(context);
+  const conciseHint =
+    errorFields.find((field) => field.startsWith("code=") || field.startsWith("errorCode=") || field.startsWith("error_code=")) ??
+    errorFields.find((field) => field.startsWith("status=") || field.startsWith("statusCode=")) ??
+    errorFields.find((field) => field.startsWith("name="));
+  const normalizedMessage = conciseHint
+    ? `Discord authorize failed: ${safeMessage} [${conciseHint}]`
+    : `Discord authorize failed: ${safeMessage}`;
+  const detailParts = [normalizedMessage, ...contextParts];
+
+  if (errorFields.length > 0) {
+    detailParts.push(`sdk fields ${errorFields.join(", ")}`);
+  } else {
+    detailParts.push("SDK returned no additional safe error fields.");
+  }
+
+  return {
+    normalizedMessage,
+    debugDetail: detailParts.join(" | "),
+  };
+}
+
 function emitDebugEvent(onDebugEvent: InitializeEmbeddedAppOptions["onDebugEvent"], event: DebugConsoleEventInput) {
   onDebugEvent?.(event);
 }
@@ -405,26 +533,37 @@ async function resolveDiscordIdentity(
     ...(authPrompt === "none" ? { prompt: "none" as const } : {}),
   };
   let code: string;
+  const authorizeErrorContext: DiscordAuthorizeErrorContext = {
+    authMode,
+    attemptId,
+    buildId: FRONTEND_BUILD_ID,
+    redirectUri: authorizeOptions.redirect_uri,
+    authEndpoint: resolveDiscordAuthEndpoint(),
+    hasClientId: Boolean(clientId),
+    isDiscordProxyHost: isDiscordProxyHost(),
+    channelId: sdk.channelId ?? undefined,
+    guildId: sdk.guildId ?? undefined,
+    instanceId: sdk.instanceId ?? undefined,
+  };
 
   emitAuthProgress("authorizing");
   emitDebugEvent(onDebugEvent, {
     level: "info",
     category: "auth",
     label: `auth:${authMode}:start`,
-    detail: `attempt ${summarizeAttemptId(attemptId)}`,
+    detail: buildAuthorizeContextParts(authorizeErrorContext).join(" | "),
   });
 
   try {
     code = await requestDiscordAuthorization(sdk, authorizeOptions, attemptId);
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Discord authorize request failed.";
-    const normalizedMessage = message.startsWith("Discord authorize failed:") ? message : `Discord authorize failed: ${message}`;
+    const { normalizedMessage, debugDetail } = summarizeDiscordAuthorizeError(error, authorizeErrorContext);
     emitAuthProgress("authorizing", normalizedMessage);
     emitDebugEvent(onDebugEvent, {
       level: "error",
       category: "auth",
       label: `auth:${authMode}:failed`,
-      detail: normalizedMessage,
+      detail: debugDetail,
     });
     throw new Error(normalizedMessage);
   }

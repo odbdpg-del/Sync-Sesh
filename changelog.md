@@ -8,6 +8,20 @@ Entries must be in reverse chronological order. New entries go at the top, above
 
 Use a level-two heading for every entry so the editor can fold each change.
 
+## [2346] - 2026-04-28 11:11 - `codex/merge-ui-and-3d-world / DAV-3 Authorize Diagnostics`
+
+- Expanded Discord Activity authorize diagnostics so immediate `sdk.commands.authorize(...)` failures now capture safe raw SDK error fields plus runtime hints like auth mode, attempt suffix, redirect URI, auth endpoint, host mode, build id, and Discord context identifiers.
+- Kept the player-facing authorize error readable while making the debug console detail string much more actionable, including an explicit note when the SDK returns no extra safe error fields.
+- Touched `src/lib/discord/embeddedApp.ts` and `docs/discord-activity-authorization-vision.md`.
+- Build/test: `npm.cmd run build` passed.
+
+## [2345] - 2026-04-28 10:58 - `codex/merge-ui-and-3d-world / DAV-2 Retry Timeout Alignment`
+
+- Removed the shorter client-side retry race from Discord identity refresh so retry now waits for the SDK bootstrap/auth flow instead of failing early on a competing 20-second timer.
+- Replaced the generic stalled-stage watchdog with stage-aware timeouts, giving `authorizing` a longer 60-second window and keeping clearer timeout messages for later stages like token exchange and SDK authentication.
+- Touched `src/hooks/useDabSyncSession.ts` and `docs/discord-activity-authorization-vision.md`.
+- Build/test: `npm.cmd run build` passed.
+
 ## [2344] - 2026-04-28 10:42 - `codex/merge-ui-and-3d-world / Terminal-Style Debug Console`
 
 - Reworked the Discord Activity debug console from a card-style event panel into a denser terminal-style live stream with inline command echoes, collapsed snapshot header, and live versus paused auto-scroll behavior.

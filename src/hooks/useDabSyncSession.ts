@@ -20,7 +20,35 @@ import type {
 } from "../types/session";
 import { deriveLobbyState } from "../lib/lobby/sessionState";
 
-const DISCORD_RETRY_TIMEOUT_MS = 20_000;
+const DISCORD_AUTHORIZING_TIMEOUT_MS = 60_000;
+const DISCORD_FOLLOW_UP_STAGE_TIMEOUT_MS = 30_000;
+
+function getDiscordStageWatchdog(authStage: DiscordAuthStage) {
+  switch (authStage) {
+    case "authorizing":
+      return {
+        timeoutMs: DISCORD_AUTHORIZING_TIMEOUT_MS,
+        stalledDescription: "waiting for Discord authorization to complete",
+      };
+    case "exchanging_token":
+      return {
+        timeoutMs: DISCORD_FOLLOW_UP_STAGE_TIMEOUT_MS,
+        stalledDescription: "exchanging the Discord authorization code",
+      };
+    case "authenticating":
+      return {
+        timeoutMs: DISCORD_FOLLOW_UP_STAGE_TIMEOUT_MS,
+        stalledDescription: "authenticating with the Discord SDK",
+      };
+    case "subscribing":
+      return {
+        timeoutMs: DISCORD_FOLLOW_UP_STAGE_TIMEOUT_MS,
+        stalledDescription: "subscribing to Discord identity updates",
+      };
+    default:
+      return null;
+  }
+}
 
 interface UseDabSyncSessionOptions {
   onDebugEvent?: (event: DebugConsoleEventInput) => void;
@@ -45,6 +73,12 @@ export function useDabSyncSession(options: UseDabSyncSessionOptions = {}) {
 
     const attemptId = sdkState.attemptId;
     const stalledStage = sdkState.authStage;
+    const watchdog = getDiscordStageWatchdog(stalledStage);
+
+    if (!watchdog) {
+      return;
+    }
+
     const timeoutId = window.setTimeout(() => {
       setSdkState((current) => {
         if (
@@ -55,7 +89,7 @@ export function useDabSyncSession(options: UseDabSyncSessionOptions = {}) {
           return current;
         }
 
-        const message = `Discord identity refresh timed out while ${stalledStage.replace(/_/g, " ")}.`;
+        const message = `Discord identity refresh timed out while ${watchdog.stalledDescription}.`;
         onDebugEvent?.({
           level: "error",
           category: "auth",
@@ -71,7 +105,7 @@ export function useDabSyncSession(options: UseDabSyncSessionOptions = {}) {
           authError: message,
         };
       });
-    }, DISCORD_RETRY_TIMEOUT_MS);
+    }, watchdog.timeoutMs);
 
     return () => {
       window.clearTimeout(timeoutId);
@@ -298,47 +332,40 @@ export function useDabSyncSession(options: UseDabSyncSessionOptions = {}) {
     }));
 
     try {
-      const nextSdkState = await Promise.race([
-        initializeEmbeddedApp({
-          attemptId,
-          authPrompt: "interactive",
-          onDebugEvent,
-          onProfileUpdate: (localProfile, identitySource) => {
-            const previousLocalProfile = syncClient.getSnapshot().localProfile;
-            const profileChanged =
-              previousLocalProfile.id !== localProfile.id ||
-              previousLocalProfile.displayName !== localProfile.displayName ||
-              previousLocalProfile.avatarUrl !== localProfile.avatarUrl ||
-              previousLocalProfile.avatarSeed !== localProfile.avatarSeed;
+      const nextSdkState = await initializeEmbeddedApp({
+        attemptId,
+        authPrompt: "interactive",
+        onDebugEvent,
+        onProfileUpdate: (localProfile, identitySource) => {
+          const previousLocalProfile = syncClient.getSnapshot().localProfile;
+          const profileChanged =
+            previousLocalProfile.id !== localProfile.id ||
+            previousLocalProfile.displayName !== localProfile.displayName ||
+            previousLocalProfile.avatarUrl !== localProfile.avatarUrl ||
+            previousLocalProfile.avatarSeed !== localProfile.avatarSeed;
 
-            if (!profileChanged) {
-              return;
-            }
+          if (!profileChanged) {
+            return;
+          }
 
-            syncClient.setLocalProfile(localProfile);
-            setSdkState((current) => ({
-              ...current,
-              localProfile,
-              identitySource,
-              authError: undefined,
-              startupError: undefined,
-              authStage: "ready",
-            }));
+          syncClient.setLocalProfile(localProfile);
+          setSdkState((current) => ({
+            ...current,
+            localProfile,
+            identitySource,
+            authError: undefined,
+            startupError: undefined,
+            authStage: "ready",
+          }));
 
-            if (syncClient.getSnapshot().users.some((user) => user.id === localProfile.id)) {
-              syncClient.send({ type: "join_session" });
-            }
-          },
-          onAuthProgress: ({ attemptId: incomingAttemptId, authStage, authError }) => {
-            handleAuthProgress(incomingAttemptId, authStage, authError);
-          },
-        }),
-        new Promise<EmbeddedAppState>((_, reject) => {
-          window.setTimeout(() => {
-            reject(new Error("Discord identity refresh timed out before the SDK completed authorization."));
-          }, DISCORD_RETRY_TIMEOUT_MS);
-        }),
-      ]);
+          if (syncClient.getSnapshot().users.some((user) => user.id === localProfile.id)) {
+            syncClient.send({ type: "join_session" });
+          }
+        },
+        onAuthProgress: ({ attemptId: incomingAttemptId, authStage, authError }) => {
+          handleAuthProgress(incomingAttemptId, authStage, authError);
+        },
+      });
 
       if (!shouldApplyDiscordAuthAttemptResult(activeAuthAttemptIdRef.current, nextSdkState.attemptId ?? attemptId)) {
         nextSdkState.cleanup?.();
