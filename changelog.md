@@ -8,6 +8,27 @@ Entries must be in reverse chronological order. New entries go at the top, above
 
 Use a level-two heading for every entry so the editor can fold each change.
 
+## [2353] - 2026-04-28 13:33 - `codex/merge-ui-and-3d-world / Bug 1 Attempt 3 Harness One-Shot Fix`
+
+- Fixed the Attempt 3 auth harness so it no longer auto-runs in a loop after each completed authorization attempt; it now runs once on load and only reruns from the explicit button press.
+- Replaced the rerun-sensitive `isRunning` callback dependency with a ref-backed guard so the one-shot debug flow stays stable without changing the visible harness behavior.
+- Touched `src/screens/AuthHarnessScreen.tsx` and `changelog.md`.
+- Build/test: `npm.cmd run build` passed.
+
+## [2352] - 2026-04-28 13:24 - `codex/merge-ui-and-3d-world / Bug 1 Attempt 3 Harness Finalization`
+
+- Finalized the minimal Discord authorize harness by fixing the SDK `authorize()` input typing so the isolated `?authHarness=1` / `/auth-harness` route compiles cleanly without changing the normal Sync Sesh launch path.
+- Clarified the bug tracker notes for Attempt 3 so the harness entry points and non-destructive isolation goal are explicit for future debugging passes.
+- Touched `src/screens/AuthHarnessScreen.tsx`, `docs/bugs/bug_1.md`, and `changelog.md`.
+- Build/test: `npm.cmd run build` passed.
+
+## [2351] - 2026-04-28 13:10 - `codex/merge-ui-and-3d-world / Bug 1 Attempt 3 Auth Harness`
+
+- Added a non-destructive `?authHarness=1` / `/auth-harness` mode that bypasses the normal Sync Sesh app and runs only a minimal Discord SDK ready-plus-authorize harness with an on-screen log.
+- Exported the existing Discord URL-mapping helper for reuse, documented the Attempt 3 harness activation and behavior in `docs/bugs/bug_1.md`, and kept the default app path unchanged.
+- Touched `src/lib/discord/embeddedApp.ts`, `src/screens/AuthHarnessScreen.tsx`, `src/App.tsx`, `src/styles/global.css`, `docs/bugs/bug_1.md`, and `changelog.md`.
+- Build/test: `npm.cmd run build` passed.
+
 ## [2350] - 2026-04-28 13:02 - `codex/merge-ui-and-3d-world / Bug 1 Attempt 2 Skip Silent Auth`
 
 - Reverted the unsupported explicit-consent prompt idea, documented Attempt 1 as blocked by the embedded SDK contract, and switched the default Discord identity bootstrap path to start directly with the supported interactive auth request instead of trying silent auth first.

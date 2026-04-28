@@ -223,6 +223,10 @@ Move to Attempt 2 and treat the remaining problem as likely Discord platform/app
 
 Skip Silent Auth Entirely
 
+### Result
+
+Failed.
+
 ### Goal
 
 Find out whether the silent-first startup path is poisoning or confusing the embedded OAuth flow, even though the fallback interactive request is technically supported.
@@ -265,17 +269,121 @@ This attempt should be considered failed if:
 
 Treat the remaining problem as likely Discord platform/app/install context or an app-state issue outside the supported frontend request shapes.
 
+### Actual Outcome
+
+- The app was changed to start directly with the supported interactive authorize path.
+- Startup no longer emitted any `auth:silent:*` lines.
+- The first auth line became:
+  - `auth:interactive:start`
+- Discord still immediately rejected the authorize request with:
+  - `Discord authorize failed: Discord authorize request failed. [code=5000]`
+- No consent popup appeared.
+- This happened on the fresh `SyncSeshTest` app as well.
+
+### What We Learned From Attempt 2
+
+- the silent-first path is not the cause of the missing popup
+- the supported interactive-only path also fails immediately
+- the remaining problem is very unlikely to be caused by our startup auth ordering
+- the remaining problem is now more likely:
+  - Discord platform/app state
+  - Discord install/launch context
+  - or a behavior that only shows up in a minimal embedded authorize harness
+
+## Attempt 3
+
+### Name
+
+Minimal Isolated Discord Authorize Harness
+
+### Goal
+
+Separate “Sync Sesh app complexity” from “Discord embedded authorize behavior” by testing the smallest possible Activity that does only:
+
+1. `sdk.ready()`
+2. `sdk.commands.authorize(...)`
+3. display/log the result
+
+### Change
+
+Create or point the Activity at a minimal test page that:
+
+- initializes the Embedded App SDK
+- logs SDK-ready state
+- issues one interactive authorize call
+- renders the raw result or failure detail
+- does not include:
+  - sync client startup
+  - local profile fallback logic
+  - SoundCloud
+- session state
+- extra app complexity
+
+### Implementation
+
+Attempt 3 is implemented as a non-destructive harness mode inside the existing frontend.
+
+Activation:
+
+- add `?authHarness=1` to the Activity URL
+- or use the `/auth-harness` path
+
+Harness behavior:
+
+- initialize `DiscordSDK`
+- wait for `sdk.ready()`
+- issue one interactive `authorize()` call with `identify`
+- log the result or failure directly on screen
+- do not start sync
+- do not enter the normal Sync Sesh session flow
+
+Implementation notes:
+
+- the normal app remains the default experience
+- the harness is opt-in only through:
+  - `?authHarness=1`
+  - `/auth-harness`
+- this keeps bug isolation work from disturbing the regular Sync Sesh launch path
+
+### Why This Attempt Makes Sense
+
+- Attempt 2 proved the normal supported interactive auth path still fails immediately
+- we now need to isolate whether Sync Sesh’s app shell is a factor at all
+- a minimal harness gives the clearest answer with the fewest moving parts
+
+### Success Criteria
+
+Any of the following count as a meaningful success signal:
+
+- the minimal harness shows a Discord consent popup
+- the minimal harness reaches token exchange or returns a code
+- the minimal harness produces a more specific Discord-side failure than the full app
+
+### Failure Criteria
+
+This attempt should be considered failed if:
+
+- the minimal harness still fails immediately with the same `code=5000`
+- no consent popup appears
+- behavior is effectively identical to the full Sync Sesh app
+
+### If Attempt 3 Fails
+
+Treat the remaining problem as strongly pointing to Discord platform/app/install state rather than the Sync Sesh code path.
+
 ## Next Recommended Steps
 
-1. Implement Attempt 2 by skipping silent auth on the tested launch path.
-2. Retest on the fresh `SyncSeshTest` app.
-3. Compare whether:
-   - a consent popup finally appears
-   - the same `code=5000` failure remains
+1. Build a minimal isolated Discord authorize harness.
+2. Point the fresh test Activity at that harness.
+3. Retest in DM and small-server launch contexts.
+4. Compare whether:
+   - a consent popup appears
+   - the same `code=5000` remains
+   - any more specific Discord-side behavior appears
 
-If that still fails unchanged, the next conclusion becomes:
+If Attempt 3 also fails unchanged, the next conclusion becomes:
 
-- the remaining blocker is likely Discord platform/app state rather than the app code path
+- the remaining blocker is very likely Discord platform/app/install state rather than the Sync Sesh code path
 
 ## Related Docs
 

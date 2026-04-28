@@ -82,7 +82,7 @@ function resolveSyncProxyTarget() {
   return DEFAULT_SYNC_PROXY_TARGET;
 }
 
-function patchActivityUrlMappings() {
+export function ensureDiscordActivityUrlMappingsPatched() {
   if (hasPatchedActivityUrlMappings) {
     return;
   }
@@ -854,7 +854,7 @@ export async function initializeEmbeddedApp(options: InitializeEmbeddedAppOption
     };
   }
 
-  patchActivityUrlMappings();
+  ensureDiscordActivityUrlMappingsPatched();
 
   let sdk: DiscordSDK;
   emitDebugEvent(options.onDebugEvent, {
