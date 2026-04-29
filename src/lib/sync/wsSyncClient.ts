@@ -32,6 +32,7 @@ export class WebSocketSyncClient implements SyncClient {
   private syncStatus: SyncStatus = {
     mode: "ws",
     connection: "offline",
+    startupMilestone: "idle",
     warning: "Waiting for sync connection",
   };
   private socket?: WebSocket;
@@ -53,6 +54,7 @@ export class WebSocketSyncClient implements SyncClient {
     this.syncStatus = {
       ...this.syncStatus,
       connection: "connecting",
+      startupMilestone: "opening_socket",
       debugDetail: `Opening ${this.serverUrl} for session ${this.sessionId}.`,
       warning: this.reconnectAttempt > 0 ? "Reconnecting to sync server" : "Connecting to sync server",
     };
@@ -72,6 +74,7 @@ export class WebSocketSyncClient implements SyncClient {
         this.syncStatus = {
           ...this.syncStatus,
           connection: "error",
+          startupMilestone: "error",
           debugDetail: `Timed out after 15000ms while opening ${this.serverUrl}.`,
           warning: "Sync server is still waking up. Retrying shortly.",
         };
@@ -86,6 +89,7 @@ export class WebSocketSyncClient implements SyncClient {
         this.syncStatus = {
           ...this.syncStatus,
           connection: "connected",
+          startupMilestone: "socket_open",
           debugDetail: `Opened ${this.serverUrl}.`,
           warning: undefined,
         };
@@ -131,6 +135,7 @@ export class WebSocketSyncClient implements SyncClient {
           this.syncStatus = {
             ...this.syncStatus,
             connection: "error",
+            startupMilestone: "error",
             debugDetail: `Received invalid sync data from ${this.serverUrl}.`,
             warning: "Received invalid sync data from server.",
           };
@@ -144,6 +149,7 @@ export class WebSocketSyncClient implements SyncClient {
           this.syncStatus = {
             ...this.syncStatus,
             connection: "connected",
+            startupMilestone: "snapshot_received",
             debugDetail: `Received snapshot from ${this.serverUrl}.`,
             serverTimeOffsetMs: payload.serverNow - Date.now(),
             lastEventAt: new Date().toISOString(),
@@ -170,6 +176,7 @@ export class WebSocketSyncClient implements SyncClient {
           this.syncStatus = {
             ...this.syncStatus,
             connection: "error",
+            startupMilestone: "error",
             debugDetail: `Server error from ${this.serverUrl}: ${payload.message}`,
             warning: payload.message,
             serverTimeOffsetMs: payload.serverNow - Date.now(),
@@ -183,6 +190,7 @@ export class WebSocketSyncClient implements SyncClient {
         this.syncStatus = {
           ...this.syncStatus,
           connection: "error",
+          startupMilestone: "error",
           debugDetail: `WebSocket error while opening ${this.serverUrl}.`,
           warning: "Unable to reach the sync server. Retrying...",
         };
@@ -200,6 +208,7 @@ export class WebSocketSyncClient implements SyncClient {
         this.syncStatus = {
           ...this.syncStatus,
           connection: this.syncStatus.connection === "error" ? "error" : "offline",
+          startupMilestone: this.syncStatus.connection === "error" ? "error" : "idle",
           debugDetail: `WebSocket closed code=${event.code} reason=${event.reason || "n/a"} clean=${event.wasClean} url=${this.serverUrl}.`,
           warning:
             this.syncStatus.connection === "error"

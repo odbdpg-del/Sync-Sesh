@@ -38,6 +38,7 @@ export class MockSyncClient implements SyncClient {
     this.syncStatus = {
       ...this.syncStatus,
       connection: "connected",
+      startupMilestone: "snapshot_received",
       latencyMs: 0,
       serverTimeOffsetMs: 0,
       lastEventAt: new Date().toISOString(),
@@ -63,6 +64,7 @@ export class MockSyncClient implements SyncClient {
     this.syncStatus = {
       ...this.syncStatus,
       connection: "offline",
+      startupMilestone: "idle",
     };
 
     this.emit();

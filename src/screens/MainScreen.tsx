@@ -2,6 +2,7 @@ import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } fro
 import { AdminPanel } from "../components/AdminPanel";
 import { AppHeader } from "../components/AppHeader";
 import { DebugConsoleWindow } from "../components/DebugConsoleWindow";
+import { LoadingScreen } from "../components/LoadingScreen";
 import { LobbyPanel } from "../components/LobbyPanel";
 import { SoundCloudDeckPanel } from "../components/SoundCloudDeckPanel";
 import { type SoundCloudPanelMode } from "../components/SoundCloudModeToggle";
@@ -195,6 +196,7 @@ export function MainScreen() {
     state,
     lobbyState,
     sdkState,
+    startupProgress,
     generatedDisplayNames,
     discordDisplayName,
     joinSession,
@@ -838,6 +840,7 @@ export function MainScreen() {
   };
   const shouldMountDeckWorkspace = soundCloudPanelMode === "decks" || isThreeDModeOpen;
   const adminSoundCloudPlayer = soundCloudPanelMode === "decks" ? soundCloudDeckA : frontEndSoundCloudPlayer;
+  const shouldShowLoadingScreen = startupProgress.isBlocking;
 
   return (
     <div className="app-stage">
@@ -850,6 +853,8 @@ export function MainScreen() {
         <div className="app-background-stage-grid" />
         <div className="app-background-stage-atmosphere" />
       </div>
+
+      {shouldShowLoadingScreen ? <LoadingScreen progress={startupProgress} /> : null}
 
       <main
         className="app-shell"

@@ -2,6 +2,7 @@ export type UserPresenceState = "idle" | "ready" | "spectating";
 export type SessionPhase = "idle" | "lobby" | "armed" | "precount" | "countdown" | "completed";
 export type SyncTransportMode = "mock" | "ws";
 export type SyncConnectionState = "offline" | "connecting" | "connected" | "error";
+export type SyncStartupMilestone = "idle" | "opening_socket" | "socket_open" | "snapshot_received" | "error";
 
 export interface SessionUser {
   id: string;
@@ -223,6 +224,7 @@ export interface SharedStudioGuitarState {
 export interface SyncStatus {
   mode: SyncTransportMode;
   connection: SyncConnectionState;
+  startupMilestone?: SyncStartupMilestone;
   debugDetail?: string;
   lastEventAt?: string;
   latencyMs?: number;

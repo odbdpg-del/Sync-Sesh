@@ -8,6 +8,48 @@ Entries must be in reverse chronological order. New entries go at the top, above
 
 Use a level-two heading for every entry so the editor can fold each change.
 
+## [2381] - 2026-04-28 23:13 - `codex/merge-ui-and-3d-world / LS-4 Startup Auto Join`
+
+- Added default startup auto-join after mock sync is ready or the WebSocket client receives its first server snapshot.
+- Replaced the old `timerConfig.autoJoinOnLoad` startup gate with a session/user/sync-readiness attempt key so startup join requests do not double-send.
+- Switched loading screen visibility back to the startup progress model now that lobby join can complete automatically.
+- Marked LS-4 complete in the loading screen plan.
+- Touched `src/hooks/useDabSyncSession.ts`, `src/screens/MainScreen.tsx`, `docs/sync-sesh-loading-screen-plan.md`, and `changelog.md`.
+- Build/test: `npm.cmd run build` passed; `npx.cmd tsx --test tests/startupProgress.test.ts` passed. Manual two-window WebSocket verification not run in this pass.
+
+## [2380] - 2026-04-28 23:11 - `codex/merge-ui-and-3d-world / LS-3 Startup Milestones`
+
+- Added sync startup milestones so the loading screen can distinguish opening socket, socket open, snapshot received, and error states.
+- Updated WebSocket and mock sync clients to populate the milestone without changing session behavior or debug event labels.
+- Refined startup progress mapping so WebSocket sync is model-complete only after the first snapshot, while preserving the pre-LS-4 loading-screen dismissal guard.
+- Expanded startup progress tests for the sync milestone sequence and marked LS-3 complete in the loading screen plan.
+- Touched `src/types/session.ts`, `src/lib/sync/wsSyncClient.ts`, `src/lib/sync/mockSyncClient.ts`, `src/lib/startup/startupProgress.ts`, `src/screens/MainScreen.tsx`, `tests/startupProgress.test.ts`, `docs/sync-sesh-loading-screen-plan.md`, and `changelog.md`.
+- Build/test: `npm.cmd run build` passed; `npx.cmd tsx --test tests/startupProgress.test.ts` passed.
+
+## [2379] - 2026-04-28 23:08 - `codex/merge-ui-and-3d-world / Loading Screen Text Fit`
+
+- Fixed the startup loading headline and content sizing so the loading card wraps within the viewport instead of creating horizontal scroll.
+- Added local loading-screen overrides for global `h1` nowrap and letter-spacing behavior, plus overflow guards on the shell and rows.
+- Touched `src/styles/global.css` and `changelog.md`.
+- Build/test: `npm.cmd run build` passed.
+
+## [2378] - 2026-04-28 23:05 - `codex/merge-ui-and-3d-world / LS-2 Loading Screen UI`
+
+- Added a full-screen startup loading screen component that renders the LS-1 startup progress contract with overall and per-phase progress bars.
+- Styled the loading screen for the existing Sync Sesh neon/control-room theme with responsive mobile behavior.
+- Mounted the loading screen during blocking startup transport states while avoiding a lobby-join deadlock before LS-4 auto-join work lands.
+- Marked LS-2 complete in the loading screen plan.
+- Touched `src/components/LoadingScreen.tsx`, `src/screens/MainScreen.tsx`, `src/styles/global.css`, `docs/sync-sesh-loading-screen-plan.md`, and `changelog.md`.
+- Build/test: `npm.cmd run build` passed; `npx.cmd tsx --test tests/startupProgress.test.ts` passed.
+
+## [2377] - 2026-04-28 23:03 - `codex/merge-ui-and-3d-world / LS-1 Startup Progress Model`
+
+- Added a pure startup progress model for app shell, Discord SDK, Discord identity, sync server, lobby join, and media loading rows.
+- Exposed `startupProgress` from `useDabSyncSession()` so the upcoming loading screen can consume one derived contract.
+- Added focused startup progress tests and marked LS-1 complete in the loading screen plan.
+- Touched `src/lib/startup/startupProgress.ts`, `src/hooks/useDabSyncSession.ts`, `tests/startupProgress.test.ts`, `docs/sync-sesh-loading-screen-plan.md`, and `changelog.md`.
+- Build/test: `npm.cmd run build` passed; `npx.cmd tsx --test tests/startupProgress.test.ts` passed; `npm.cmd test` still fails in existing unrelated tests (`tests/discordAuthState.test.ts` `.txt` loader issue and `tests/sessionState.test.ts` ready-hold strict reference assertion).
+
 ## [2376] - 2026-04-28 22:48 - `codex/merge-ui-and-3d-world / Discord Name Default`
 
 - Updated first-join sync server profile assignment to keep the actor's current profile display name by default when it is available and not already taken.

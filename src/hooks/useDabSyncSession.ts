@@ -10,6 +10,7 @@ import {
 import { createSyncClient } from "../lib/sync/createSyncClient";
 import { GENERATED_PROFILE_NAMES, getAvatarSeedFromName, getRolledGeneratedProfileNameForUser } from "../lib/session/generatedNames";
 import { persistLocalProfile } from "../lib/session/localProfile";
+import { buildStartupProgress } from "../lib/startup/startupProgress";
 import type {
   DabSyncState,
   FreeRoamPresenceUpdate,
@@ -23,6 +24,10 @@ import { deriveLobbyState } from "../lib/lobby/sessionState";
 const DISCORD_SDK_READY_TIMEOUT_MS = 30_000;
 const DISCORD_AUTHORIZING_TIMEOUT_MS = 60_000;
 const DISCORD_FOLLOW_UP_STAGE_TIMEOUT_MS = 30_000;
+
+function isStartupJoinReady(syncStatus: DabSyncState["syncStatus"]) {
+  return syncStatus.mode === "mock" || syncStatus.startupMilestone === "snapshot_received";
+}
 
 function getDiscordStageWatchdog(authStage: DiscordAuthStage) {
   switch (authStage) {
@@ -516,6 +521,11 @@ export function useDabSyncSession(options: UseDabSyncSessionOptions = {}) {
   }, []);
 
   const lobbyState = useMemo(() => deriveLobbyState(state), [state]);
+  const startupProgress = useMemo(() => buildStartupProgress({
+    sdkState,
+    state,
+    lobbyState,
+  }), [lobbyState, sdkState, state]);
 
   useEffect(() => {
     const pendingDisplayName = pendingDisplayNameRef.current;
@@ -542,11 +552,11 @@ export function useDabSyncSession(options: UseDabSyncSessionOptions = {}) {
   }, [lobbyState.localUser?.displayName, lobbyState.localUser, onDebugEvent, state.syncStatus.lastEventAt]);
 
   useEffect(() => {
-    if (!state.timerConfig.autoJoinOnLoad || state.syncStatus.connection !== "connected" || !lobbyState.canJoinSession) {
+    if (!isStartupJoinReady(state.syncStatus) || !lobbyState.canJoinSession || lobbyState.localUser) {
       return;
     }
 
-    const attemptKey = `${state.session.id}:${state.localProfile.id}`;
+    const attemptKey = `${state.session.id}:${state.localProfile.id}:${state.syncStatus.startupMilestone ?? state.syncStatus.mode}`;
 
     if (autoJoinAttemptKeyRef.current === attemptKey) {
       return;
@@ -556,10 +566,10 @@ export function useDabSyncSession(options: UseDabSyncSessionOptions = {}) {
     syncClient.send({ type: "join_session" });
   }, [
     lobbyState.canJoinSession,
+    lobbyState.localUser,
     state.localProfile.id,
     state.session.id,
-    state.syncStatus.connection,
-    state.timerConfig.autoJoinOnLoad,
+    state.syncStatus,
     syncClient,
   ]);
 
@@ -783,6 +793,7 @@ export function useDabSyncSession(options: UseDabSyncSessionOptions = {}) {
     state,
     lobbyState,
     sdkState,
+    startupProgress,
     generatedDisplayNames,
     discordDisplayName: sdkState.localProfile?.displayName,
     joinSession,
