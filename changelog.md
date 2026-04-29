@@ -8,6 +8,57 @@ Entries must be in reverse chronological order. New entries go at the top, above
 
 Use a level-two heading for every entry so the editor can fold each change.
 
+## [2403] - 2026-04-29 00:18 - `codex/merge-ui-and-3d-world / Header-Spanning Loading Speed Rail`
+
+- Moved the loading-screen speed control onto its own terminal header row so it spans the full Room Link Protocol window width.
+- Touched `src/components/LoadingScreen.tsx`, `src/styles/global.css`, and `changelog.md`.
+- Build/test: `npm.cmd run build` passed.
+
+## [2402] - 2026-04-29 00:16 - `codex/merge-ui-and-3d-world / Full Width Loading Speed Rail`
+
+- Expanded the loading-screen speed control to fill the available Room Link Protocol header width.
+- Touched `src/styles/global.css` and `changelog.md`.
+- Build/test: `npm.cmd run build` passed.
+
+## [2401] - 2026-04-29 00:14 - `codex/merge-ui-and-3d-world / Matrix Speed Control Styling`
+
+- Removed the visible text labels from the loading-screen speed control and restyled the range input as a retro Matrix terminal rail.
+- Touched `src/components/LoadingScreen.tsx`, `src/styles/global.css`, and `changelog.md`.
+- Build/test: `npm.cmd run build` passed.
+
+## [2400] - 2026-04-29 00:11 - `codex/merge-ui-and-3d-world / Loading Boost Step Tuning`
+
+- Reduced each loading-screen input boost from `10` to `2` slider points, requiring 25 interactions to move from the default speed to maximum speed.
+- Touched `src/components/LoadingScreen.tsx` and `changelog.md`.
+- Build/test: `npm.cmd run build` passed.
+
+## [2399] - 2026-04-29 00:10 - `codex/merge-ui-and-3d-world / Loading Slider Minimum Print Delay`
+
+- Lowered the fastest loading terminal slider delay from `25ms` to `5ms` between printed entries.
+- Touched `src/components/LoadingScreen.tsx` and `changelog.md`.
+- Build/test: `npm.cmd run build` passed.
+
+## [2398] - 2026-04-29 00:08 - `codex/merge-ui-and-3d-world / Loading Boost Space Exclusion`
+
+- Updated loading-screen keyboard speed boosts to ignore Space while keeping other non-repeated keys and pointer presses active.
+- Touched `src/components/LoadingScreen.tsx` and `changelog.md`.
+- Build/test: `npm.cmd run build` passed.
+
+## [2397] - 2026-04-29 00:07 - `codex/merge-ui-and-3d-world / Loading Input Speed Boost Phase 1`
+
+- Added loading-screen key and pointer input listeners that boost the visual terminal speed by 10 slider points per interaction.
+- Ignored repeated keydown events and interactions originating from the speed slider so manual slider control remains clean.
+- Marked Phase 1 complete in `docs/loading-screen-input-boost-plan.md`.
+- Touched `src/components/LoadingScreen.tsx`, `docs/loading-screen-input-boost-plan.md`, and `changelog.md`.
+- Build/test: `npm.cmd run build` passed.
+
+## [2396] - 2026-04-29 00:03 - `codex/merge-ui-and-3d-world / Loading Speed Slider`
+
+- Added a Room Link Protocol header slider for controlling the paced loading terminal print speed.
+- Defaulted the slider to the middle at the current `100ms` print delay, with faster output to the right and slower output to the left.
+- Touched `src/components/LoadingScreen.tsx`, `src/styles/global.css`, and `changelog.md`.
+- Build/test: `npm.cmd run build` passed.
+
 ## [2395] - 2026-04-29 00:00 - `codex/merge-ui-and-3d-world / Faster Loading Terminal Pace`
 
 - Reduced the loading terminal visual print delay from `0.2s` to `0.1s` per entry.

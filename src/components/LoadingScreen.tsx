@@ -39,7 +39,11 @@ interface TrackedConsoleEvent {
 
 const TERMINAL_LOG_ENTRY_LIMIT = 80;
 const MATRIX_OVERLAY_LINE_COUNT = 42;
-const TERMINAL_LOG_PRINT_DELAY_MS = 100;
+const DEFAULT_LOADING_SPEED = 50;
+const LOADING_SPEED_INPUT_BOOST = 2;
+const MIN_TERMINAL_LOG_PRINT_DELAY_MS = 5;
+const DEFAULT_TERMINAL_LOG_PRINT_DELAY_MS = 100;
+const MAX_TERMINAL_LOG_PRINT_DELAY_MS = 175;
 
 function getStatusLabel(status: StartupProgressStep["status"]) {
   switch (status) {
@@ -72,12 +76,32 @@ function getDiagnosticConsoleLine(diagnostic: LoadingScreenDiagnosticEvent, inde
   return `${getLogIndex(index)} > ${diagnostic.label} :: ${getStatusLabel(diagnostic.status ?? "complete")} :: ${diagnostic.detail} :: ${diagnostic.progress ?? 100}%`;
 }
 
+function getTerminalLogPrintDelay(speed: number) {
+  if (speed === DEFAULT_LOADING_SPEED) {
+    return DEFAULT_TERMINAL_LOG_PRINT_DELAY_MS;
+  }
+
+  if (speed > DEFAULT_LOADING_SPEED) {
+    const fastRatio = (speed - DEFAULT_LOADING_SPEED) / DEFAULT_LOADING_SPEED;
+    return Math.round(DEFAULT_TERMINAL_LOG_PRINT_DELAY_MS - fastRatio * (DEFAULT_TERMINAL_LOG_PRINT_DELAY_MS - MIN_TERMINAL_LOG_PRINT_DELAY_MS));
+  }
+
+  const slowRatio = (DEFAULT_LOADING_SPEED - speed) / DEFAULT_LOADING_SPEED;
+  return Math.round(DEFAULT_TERMINAL_LOG_PRINT_DELAY_MS + slowRatio * (MAX_TERMINAL_LOG_PRINT_DELAY_MS - DEFAULT_TERMINAL_LOG_PRINT_DELAY_MS));
+}
+
+function isSpeedControlInput(target: EventTarget | null) {
+  return target instanceof Element && Boolean(target.closest(".loading-screen-speed-control"));
+}
+
 export function LoadingScreen({ progress, diagnostics = [], isPaused = false, onConsoleDrainChange }: LoadingScreenProps) {
   const [terminalLogEntries, setTerminalLogEntries] = useState<TerminalLogEntry[]>([]);
   const [pendingTerminalLogEntries, setPendingTerminalLogEntries] = useState<TerminalLogEntry[]>([]);
   const [isConsoleCaptureClosed, setIsConsoleCaptureClosed] = useState(false);
+  const [loadingSpeed, setLoadingSpeed] = useState(DEFAULT_LOADING_SPEED);
   const terminalLogIndexRef = useRef(0);
   const previousConsoleSignaturesRef = useRef<Map<string, string>>(new Map());
+  const terminalLogPrintDelayMs = getTerminalLogPrintDelay(loadingSpeed);
   const trackedConsoleEvents = useMemo<TrackedConsoleEvent[]>(() => {
     const stepEvents = progress.steps.map((step, index) => ({
       key: step.id,
@@ -156,6 +180,34 @@ export function LoadingScreen({ progress, diagnostics = [], isPaused = false, on
   }, [onConsoleDrainChange, pendingTerminalLogEntries.length]);
 
   useEffect(() => {
+    const boostLoadingSpeed = () => {
+      setLoadingSpeed((current) => Math.min(100, current + LOADING_SPEED_INPUT_BOOST));
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.repeat || event.code === "Space" || event.key === " " || isSpeedControlInput(event.target)) {
+        return;
+      }
+
+      boostLoadingSpeed();
+    };
+    const handlePointerDown = (event: PointerEvent) => {
+      if (isSpeedControlInput(event.target)) {
+        return;
+      }
+
+      boostLoadingSpeed();
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("pointerdown", handlePointerDown);
+
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("pointerdown", handlePointerDown);
+    };
+  }, []);
+
+  useEffect(() => {
     const nextEntry = pendingTerminalLogEntries[0];
 
     if (!nextEntry) {
@@ -165,10 +217,10 @@ export function LoadingScreen({ progress, diagnostics = [], isPaused = false, on
     const printTimeout = window.setTimeout(() => {
       setTerminalLogEntries((current) => [...current, nextEntry].slice(-TERMINAL_LOG_ENTRY_LIMIT));
       setPendingTerminalLogEntries((current) => current[0]?.id === nextEntry.id ? current.slice(1) : current.filter((entry) => entry.id !== nextEntry.id));
-    }, TERMINAL_LOG_PRINT_DELAY_MS);
+    }, terminalLogPrintDelayMs);
 
     return () => window.clearTimeout(printTimeout);
-  }, [pendingTerminalLogEntries]);
+  }, [pendingTerminalLogEntries, terminalLogPrintDelayMs]);
 
   return (
     <section className="loading-screen" aria-label="Sync Sesh startup progress" aria-live="polite">
@@ -189,6 +241,16 @@ export function LoadingScreen({ progress, diagnostics = [], isPaused = false, on
           <div className="loading-screen-terminal-progress">
             <span>required_progress</span>
             <strong>{progress.requiredProgress}%</strong>
+          </div>
+          <div className="loading-screen-speed-control">
+            <input
+              aria-label="Loading terminal print speed"
+              max="100"
+              min="0"
+              onChange={(event) => setLoadingSpeed(Number(event.currentTarget.value))}
+              type="range"
+              value={loadingSpeed}
+            />
           </div>
         </div>
 
