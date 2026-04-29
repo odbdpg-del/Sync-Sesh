@@ -8,6 +8,106 @@ Entries must be in reverse chronological order. New entries go at the top, above
 
 Use a level-two heading for every entry so the editor can fold each change.
 
+## [2395] - 2026-04-29 00:00 - `codex/merge-ui-and-3d-world / Faster Loading Terminal Pace`
+
+- Reduced the loading terminal visual print delay from `0.2s` to `0.1s` per entry.
+- Kept actual startup behavior unchanged; only the paced loading-screen presentation is faster.
+- Touched `src/components/LoadingScreen.tsx` and `changelog.md`.
+- Build/test: `npm.cmd run build` passed.
+
+## [2394] - 2026-04-28 23:59 - `codex/merge-ui-and-3d-world / Close Loading Log Capture`
+
+- Closed loading-screen visual log capture after the first non-blocking startup snapshot so late diagnostics cannot keep extending the paced output queue.
+- Kept the final ready/pass batch eligible to print, then let the queue drain normally so the intro can release.
+- Touched `src/components/LoadingScreen.tsx` and `changelog.md`.
+- Build/test: `npm.cmd run build` passed.
+
+## [2393] - 2026-04-28 23:57 - `codex/merge-ui-and-3d-world / Remove Discord Context Loading Line`
+
+- Removed the extra `DISCORD_CONTEXT` loading diagnostic from the paced startup terminal to reduce noisy Discord boot output.
+- Kept Discord SDK, auth, and identity diagnostics in place for the meaningful startup state.
+- Touched `src/screens/MainScreen.tsx` and `changelog.md`.
+- Build/test: `npm.cmd run build` passed.
+
+## [2392] - 2026-04-28 23:55 - `codex/merge-ui-and-3d-world / Loading Completion Hold Release`
+
+- Fixed a loading-screen completion hold race where the visual queue could report empty before the parent entered hold mode, leaving the intro mounted indefinitely.
+- The completion hold now starts only while the visual console is actively draining and releases whenever startup is ready and the queue is empty.
+- Touched `src/screens/MainScreen.tsx` and `changelog.md`.
+- Build/test: `npm.cmd run build` passed.
+
+## [2391] - 2026-04-28 23:54 - `codex/merge-ui-and-3d-world / Stable Loading Diagnostics`
+
+- Stabilized the loading terminal `SYNC_CLOCK` diagnostic so offset jitter does not keep adding paced output while latency is still pending.
+- Fixed pending host and Discord context diagnostics to report `0%` instead of defaulting to `100%`.
+- Touched `src/screens/MainScreen.tsx` and `changelog.md`.
+- Build/test: `npm.cmd run build` passed.
+
+## [2390] - 2026-04-28 23:47 - `codex/merge-ui-and-3d-world / Expanded Loading Diagnostics`
+
+- Added extra real startup diagnostics to the paced loading terminal for session route, capacity, local profile, host ownership, Discord runtime/auth/context, sync transport/clock/debug, lobby permissions, ready manifest, auto-join, and media mount state.
+- Passed diagnostic events from `MainScreen` into `LoadingScreen` so they print through the same 0.2-second queue and Matrix background fill as the core startup phases.
+- Touched `src/components/LoadingScreen.tsx`, `src/screens/MainScreen.tsx`, and `changelog.md`.
+- Build/test: `npm.cmd run build` passed.
+
+## [2389] - 2026-04-28 23:45 - `codex/merge-ui-and-3d-world / Paced Loading Terminal Output`
+
+- Added a paced loading terminal queue so startup events can arrive immediately but print to the visible console and Matrix background one entry every 0.2 seconds.
+- Kept the loading screen mounted after real startup completes until the visual terminal queue finishes draining.
+- Touched `src/components/LoadingScreen.tsx`, `src/screens/MainScreen.tsx`, and `changelog.md`.
+- Build/test: `npm.cmd run build` passed.
+
+## [2388] - 2026-04-28 23:42 - `codex/merge-ui-and-3d-world / Natural Matrix Overlay Fill`
+
+- Changed the full-screen Matrix overlay to stop repeating console history across the background.
+- The overlay now fills naturally from accumulated loading terminal events, capped to the visible row count.
+- Touched `src/components/LoadingScreen.tsx` and `changelog.md`.
+- Build/test: `npm.cmd run build` passed.
+
+## [2387] - 2026-04-28 23:40 - `codex/merge-ui-and-3d-world / Loading Console Event Buffer`
+
+- Changed the loading-screen console from a repeated current-state list into a terminal-style event buffer that starts empty and appends entries when startup phase snapshots change.
+- Updated the Matrix background overlay to draw from the accumulated terminal events instead of repeating the same seven source lines immediately.
+- Touched `src/components/LoadingScreen.tsx` and `changelog.md`.
+- Build/test: `npm.cmd run build` passed.
+
+## [2386] - 2026-04-28 23:36 - `codex/merge-ui-and-3d-world / Matrix Overlay Alignment`
+
+- Aligned the full-screen Matrix text overlay to the viewport instead of offsetting rows left for drift.
+- Switched the overlay to 42 equal-height rows with each line clipped inside `100vw`, so the text accounts for the visible left-to-right and top-to-bottom bounds.
+- Touched `src/styles/global.css` and `changelog.md`.
+- Build/test: `npm.cmd run build` passed.
+
+## [2385] - 2026-04-28 23:35 - `codex/merge-ui-and-3d-world / Loading Pause Hotkey`
+
+- Added a `P` hotkey that freezes the loading screen on its current startup-progress snapshot while the real sync startup continues underneath.
+- Kept the paused loading overlay mounted until `P` is pressed again, and added visible `PAUSED`/`debug_pause=true` terminal readouts.
+- Touched `src/screens/MainScreen.tsx`, `src/components/LoadingScreen.tsx`, and `changelog.md`.
+- Build/test: `npm.cmd run build` passed.
+
+## [2384] - 2026-04-28 23:29 - `codex/merge-ui-and-3d-world / Loading Matrix Text Overlay`
+
+- Added a full-screen Matrix text overlay that reprints the loading console feed across the viewport as an aesthetic layer.
+- Reused the same console-line formatter for the bottom debug feed and overlay so startup status text stays synchronized.
+- Touched `src/components/LoadingScreen.tsx`, `src/styles/global.css`, and `changelog.md`.
+- Build/test: `npm.cmd run build` passed.
+
+## [2383] - 2026-04-28 23:26 - `codex/merge-ui-and-3d-world / Loading Console Output Feed`
+
+- Added a bottom `console_output` panel to the Matrix-style loading screen that prints every startup phase with status, detail, progress percent, and a mini progress trace.
+- Kept the existing loading bars above while giving the marked lower area a scrolling terminal-style event feed.
+- Touched `src/components/LoadingScreen.tsx`, `src/styles/global.css`, and `changelog.md`.
+- Build/test: `npm.cmd run build` passed.
+
+## [2382] - 2026-04-28 23:23 - `codex/merge-ui-and-3d-world / LS-5.1 Matrix Loading Console`
+
+- Restyled the startup loading screen into a Matrix-style boot console with compact terminal header, required-progress readout, on-screen log rows, and metadata footer.
+- Rendered every startup phase as a terminal log line with status, phase label, detail text, and a thin per-line progress bar.
+- Replaced the previous glossy card look with black/green terminal styling, scanline treatment, and responsive terminal row layout without changing loading behavior.
+- Marked LS-5.1 complete in the loading screen plan.
+- Touched `src/components/LoadingScreen.tsx`, `src/styles/global.css`, `docs/sync-sesh-loading-screen-plan.md`, and `changelog.md`.
+- Build/test: `npm.cmd run build` passed; `npx.cmd tsx --test tests/startupProgress.test.ts` passed.
+
 ## [2381] - 2026-04-28 23:13 - `codex/merge-ui-and-3d-world / LS-4 Startup Auto Join`
 
 - Added default startup auto-join after mock sync is ready or the WebSocket client receives its first server snapshot.

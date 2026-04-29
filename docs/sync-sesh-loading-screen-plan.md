@@ -66,7 +66,7 @@ The user should be loaded into the sync server automatically. The loading screen
 - [x] LS-3: Wire Sync And Discord Progress Into Loading Screen
 - [x] LS-4: Auto-Join Lobby On Startup
 - [ ] LS-5: Polish Failure, Retry, And Timeout States
-- [ ] LS-5.1: Restyle Loading Screen Visual Direction
+- [x] LS-5.1: Restyle Loading Screen Visual Direction
 
 ## LS-1: Define Startup Progress Model
 
@@ -560,11 +560,11 @@ Make startup failures readable and recoverable.
 
 ## LS-5.1: Restyle Loading Screen Visual Direction
 
-Status: `[ ]` not started.
+Status: `[x]` completed.
 
 ### Summary
 
-Revise the loading screen's visual treatment now that the startup behavior works. This phase is intentionally visual-only and should not change sync, Discord, auto-join, or loading dismissal behavior.
+Revise the loading screen into a Matrix-style boot console now that the startup behavior works. This phase is intentionally visual-only and should not change sync, Discord, auto-join, or loading dismissal behavior.
 
 ### Expected Files
 
@@ -586,22 +586,92 @@ Revise the loading screen's visual treatment now that the startup behavior works
 
 ### Visual Direction Notes
 
-Collect the desired visual changes before implementation. Possible knobs:
+Desired vibe: "the Matrix" boot console.
 
-- smaller or less dominant title
-- more compact card
-- fewer visible rows above the fold
-- different progress bar style
-- more game/loading-screen feel
-- more minimal/control-room console feel
-- add or remove background blur/tint
-- change status chips or row borders
+Visual principles:
+
+- black or near-black terminal background
+- green monochrome as the dominant color
+- avoid the current glossy card-heavy neon panel feel
+- use compact terminal rows instead of large status cards
+- overall feel should be "systems are being loaded into the simulation"
+- keep it readable, not noisy
+- no horizontal overflow
+
+Recommended layout:
+
+- Full-screen terminal surface.
+- A compact header such as:
+  - `SYNC_SESH_BOOT`
+  - `ROOM LINK PROTOCOL`
+  - overall progress percent
+- A single overall progress line/bar near the top.
+- A console log block showing one line per startup phase.
+- Optional right-side or bottom metadata strip for:
+  - `required_progress`
+  - `blocking`
+  - current blocking reason
+
+Recommended console line format:
+
+```text
+[READY]    APP_SHELL          Interface bootstrapped.
+[READY]    DISCORD_SDK        Discord Activity runtime is available.
+[ACTIVE]   DISCORD_IDENTITY   Resolving Discord identity: exchanging token.
+[ACTIVE]   SYNC_SERVER        Opening wss://...
+[PENDING]  LOBBY_JOIN         Waiting for sync snapshot before joining lobby.
+[READY]    MEDIA              Media will continue loading in the background.
+```
+
+Implementation notes:
+
+- Add a helper in `LoadingScreen.tsx` to format phase IDs into terminal labels:
+  - `app_shell` -> `APP_SHELL`
+  - `discord_sdk` -> `DISCORD_SDK`
+  - etc.
+- Add a helper to format status labels:
+  - `pending` -> `PENDING`
+  - `active` -> `ACTIVE`
+  - `complete` -> `READY`
+  - `degraded` -> `DEGRADED`
+  - `error` -> `ERROR`
+- Render the existing `progress.steps` as log rows.
+- Keep the progress bars, but make them terminal-style:
+  - thin horizontal track
+  - green fill
+  - optional segmented/scanline feel using CSS gradients
+- Prefer CSS-only effects:
+  - subtle scanline overlay
+  - faint text glow
+  - no animated falling-code canvas or heavy JS
+- Respect `prefers-reduced-motion`.
+
+Suggested class additions or replacements:
+
+- `.loading-screen-terminal`
+- `.loading-screen-terminal-header`
+- `.loading-screen-terminal-log`
+- `.loading-screen-terminal-line`
+- `.loading-screen-terminal-status`
+- `.loading-screen-terminal-label`
+- `.loading-screen-terminal-detail`
+
+Behavior boundaries:
+
+- Do not change `startupProgress`.
+- Do not change sync clients.
+- Do not change auto-join.
+- Do not add retry buttons in LS-5.1; LS-5 owns retry/error recovery.
+- Do not add real console logging to `console.log`; this is an on-screen console log.
+- Do not hide optional phases; the point is to show everything loading/happening.
 
 ### Acceptance Criteria
 
 - Loading screen keeps the same functional data and dismissal behavior.
 - Loading screen no longer has horizontal overflow.
-- The style direction is visibly different from LS-2.
+- The style direction is visibly Matrix-like and terminal-first.
+- The screen shows an on-screen console log line for every startup phase.
+- Console rows include status, phase label, and detail text.
 - Build passes.
 
 ### Build/Test
@@ -609,6 +679,13 @@ Collect the desired visual changes before implementation. Possible knobs:
 - Run `npm.cmd run build`.
 - Run `npx.cmd tsx --test tests/startupProgress.test.ts` if the component data contract changes.
 - Manual visual check in at least one desktop-sized viewport and one narrow viewport.
+
+### Completed Implementation
+
+- Reworked the loading screen into a Matrix-style boot console with a compact terminal header, required-progress line, on-screen console log rows, and metadata footer.
+- Rendered every startup phase as a terminal log line with status, phase label, detail, and a thin per-line progress bar.
+- Replaced the previous glossy card-heavy loading style with a black/green terminal surface, scanline treatment, and responsive terminal row layout.
+- Kept startup progress data, sync behavior, auto-join, and dismissal behavior unchanged.
 
 ## Changelog Requirement
 

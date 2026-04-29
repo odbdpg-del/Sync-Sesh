@@ -2,7 +2,7 @@ import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } fro
 import { AdminPanel } from "../components/AdminPanel";
 import { AppHeader } from "../components/AppHeader";
 import { DebugConsoleWindow } from "../components/DebugConsoleWindow";
-import { LoadingScreen } from "../components/LoadingScreen";
+import { LoadingScreen, type LoadingScreenDiagnosticEvent } from "../components/LoadingScreen";
 import { LobbyPanel } from "../components/LobbyPanel";
 import { SoundCloudDeckPanel } from "../components/SoundCloudDeckPanel";
 import { type SoundCloudPanelMode } from "../components/SoundCloudModeToggle";
@@ -28,6 +28,8 @@ import { useSoundCloudGridController } from "../hooks/useSoundCloudGridControlle
 import { useSoundCloudPlayer, type SoundCloudAcceptedBpmState } from "../hooks/useSoundCloudPlayer";
 import { useSoundEffects } from "../hooks/useSoundEffects";
 import type { DebugConsoleEventInput, DebugLogCategory } from "../lib/debug/debugConsole";
+import type { StartupProgress, StartupProgressStep } from "../lib/startup/startupProgress";
+import type { SyncConnectionState } from "../types/session";
 import backgroundVideo from "../../media/202587-918431513.mp4";
 
 const RenderingStackSpike = lazy(() =>
@@ -39,6 +41,32 @@ const ThreeDModeShell = lazy(() =>
 
 function hasRenderingSpikeParam() {
   return new URLSearchParams(window.location.search).get("spike3d") === "1";
+}
+
+function isEditableHotkeyTarget(target: EventTarget | null) {
+  if (!(target instanceof HTMLElement)) {
+    return false;
+  }
+
+  const tagName = target.tagName.toLowerCase();
+  return target.isContentEditable || tagName === "input" || tagName === "textarea" || tagName === "select";
+}
+
+function getSyncConnectionDiagnosticStatus(connection: SyncConnectionState): StartupProgressStep["status"] {
+  switch (connection) {
+    case "connected":
+      return "complete";
+    case "connecting":
+      return "active";
+    case "error":
+      return "error";
+    case "offline":
+      return "pending";
+  }
+}
+
+function getBooleanDiagnosticStatus(value: boolean): StartupProgressStep["status"] {
+  return value ? "complete" : "pending";
 }
 
 function HiddenWorldLoadingPanel({ label }: { label: string }) {
@@ -185,7 +213,12 @@ export function MainScreen() {
   const [soundCloudDeckMuted, setSoundCloudDeckMuted] = useState<Record<SoundCloudDeckId, boolean>>({ A: false, B: false });
   const [soundCloudDeckSyncLabels, setSoundCloudDeckSyncLabels] = useState<Record<SoundCloudDeckId, string>>({ A: "SYNC", B: "SYNC" });
   const [soundCloudBoothConsoleEvents, setSoundCloudBoothConsoleEvents] = useState<SoundCloudBoothConsoleEvent[]>([]);
+  const [isStartupDebugPaused, setIsStartupDebugPaused] = useState(false);
+  const [isStartupConsoleDraining, setIsStartupConsoleDraining] = useState(false);
+  const [isStartupCompletionHeld, setIsStartupCompletionHeld] = useState(false);
+  const [pausedStartupProgress, setPausedStartupProgress] = useState<StartupProgress | null>(null);
   const threeDJoinAttemptKeyRef = useRef<string | null>(null);
+  const wasStartupBlockingRef = useRef(false);
   const previousSoundCloudTrackUrlRef = useRef<Record<SoundCloudDeckId, string | null>>({ A: null, B: null });
   const previousSoundCloudWidgetReadyRef = useRef<Record<SoundCloudDeckId, boolean>>({ A: false, B: false });
   const previousSoundCloudErrorRef = useRef<Record<SoundCloudDeckId, string | null>>({ A: null, B: null });
@@ -246,6 +279,50 @@ export function MainScreen() {
       debugEventHandlerRef.current = undefined;
     };
   }, [debugConsoleState.appendLog]);
+  useEffect(() => {
+    const handleStartupPauseHotkey = (event: KeyboardEvent) => {
+      if (event.repeat || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey || event.key.toLowerCase() !== "p") {
+        return;
+      }
+
+      if (isEditableHotkeyTarget(event.target)) {
+        return;
+      }
+
+      if (!startupProgress.isBlocking && !isStartupDebugPaused) {
+        return;
+      }
+
+      event.preventDefault();
+      setIsStartupDebugPaused((current) => {
+        const shouldPause = !current;
+        setPausedStartupProgress(shouldPause ? startupProgress : null);
+        return shouldPause;
+      });
+    };
+
+    window.addEventListener("keydown", handleStartupPauseHotkey);
+
+    return () => window.removeEventListener("keydown", handleStartupPauseHotkey);
+  }, [isStartupDebugPaused, startupProgress]);
+  useEffect(() => {
+    if (wasStartupBlockingRef.current && !startupProgress.isBlocking && isStartupConsoleDraining) {
+      setIsStartupCompletionHeld(true);
+    }
+
+    if (!startupProgress.isBlocking && !isStartupConsoleDraining) {
+      setIsStartupCompletionHeld(false);
+    }
+
+    wasStartupBlockingRef.current = startupProgress.isBlocking;
+  }, [isStartupConsoleDraining, startupProgress.isBlocking]);
+  const handleStartupConsoleDrainChange = useCallback((isDraining: boolean) => {
+    setIsStartupConsoleDraining(isDraining);
+
+    if (!isDraining && !startupProgress.isBlocking) {
+      setIsStartupCompletionHeld(false);
+    }
+  }, [startupProgress.isBlocking]);
   const handleDebugConsoleCommand = useCallback((rawCommand: string) => {
     const normalizedCommand = rawCommand.trim().toLowerCase().replace(/\s+/g, " ");
     debugConsoleState.appendCommandInput(rawCommand);
@@ -840,7 +917,145 @@ export function MainScreen() {
   };
   const shouldMountDeckWorkspace = soundCloudPanelMode === "decks" || isThreeDModeOpen;
   const adminSoundCloudPlayer = soundCloudPanelMode === "decks" ? soundCloudDeckA : frontEndSoundCloudPlayer;
-  const shouldShowLoadingScreen = startupProgress.isBlocking;
+  const loadingScreenDiagnostics = useMemo<LoadingScreenDiagnosticEvent[]>(() => {
+    const syncDetailParts = [
+      `mode=${state.syncStatus.mode}`,
+      `connection=${state.syncStatus.connection}`,
+      `milestone=${state.syncStatus.startupMilestone ?? "none"}`,
+    ];
+    const isSyncClockReady = state.syncStatus.latencyMs !== undefined;
+    const syncTimingParts = isSyncClockReady
+      ? [
+          `latency=${state.syncStatus.latencyMs}ms`,
+          state.syncStatus.serverTimeOffsetMs === undefined ? "offset=pending" : `offset=${state.syncStatus.serverTimeOffsetMs}ms`,
+        ]
+      : ["latency=pending", "offset=pending"];
+
+    return [
+      {
+        key: "session_route",
+        label: "SESSION_ROUTE",
+        detail: `code=${state.session.code} phase=${state.session.phase} round=${state.session.roundNumber}`,
+      },
+      {
+        key: "session_capacity",
+        label: "SESSION_CAPACITY",
+        detail: `users=${state.users.length}/${state.session.capacity.max} min=${state.session.capacity.min} active=${lobbyState.metrics.activeCount} idle=${lobbyState.metrics.idleCount}`,
+      },
+      {
+        key: "local_profile",
+        label: "LOCAL_PROFILE",
+        detail: `name=${state.localProfile.displayName} id=${state.localProfile.id.slice(0, 8)}`,
+      },
+      {
+        key: "host_claim",
+        label: "HOST_CLAIM",
+        detail: `owner=${state.session.ownerId.slice(0, 8)} local_host=${lobbyState.isLocalHost ? "true" : "false"}`,
+        status: getBooleanDiagnosticStatus(lobbyState.isLocalHost || Boolean(state.session.ownerId)),
+        progress: lobbyState.isLocalHost || Boolean(state.session.ownerId) ? 100 : 0,
+      },
+      {
+        key: "discord_runtime",
+        label: "DISCORD_RUNTIME",
+        detail: `enabled=${sdkState.enabled ? "true" : "false"} startup=${sdkState.startupStage ?? "unknown"} build=${sdkState.buildId}`,
+        status: sdkState.startupError ? "degraded" : sdkState.enabled && sdkState.startupStage !== "ready" ? "active" : "complete",
+        progress: sdkState.enabled && sdkState.startupStage !== "ready" ? 70 : 100,
+      },
+      {
+        key: "discord_auth",
+        label: "DISCORD_AUTH",
+        detail: `stage=${sdkState.authStage ?? "idle"} source=${sdkState.identitySource ?? "pending"} error=${sdkState.authError ? "true" : "false"}`,
+        status: sdkState.authError ? "degraded" : sdkState.authStage === "ready" || !sdkState.enabled ? "complete" : "active",
+        progress: sdkState.authStage === "ready" || !sdkState.enabled ? 100 : 60,
+      },
+      {
+        key: "sync_transport",
+        label: "SYNC_TRANSPORT",
+        detail: syncDetailParts.join(" "),
+        status: getSyncConnectionDiagnosticStatus(state.syncStatus.connection),
+        progress: state.syncStatus.connection === "connected" ? 100 : state.syncStatus.connection === "connecting" ? 50 : 0,
+      },
+      {
+        key: "sync_clock",
+        label: "SYNC_CLOCK",
+        detail: syncTimingParts.join(" "),
+        status: isSyncClockReady ? "complete" : "pending",
+        progress: isSyncClockReady ? 100 : 0,
+      },
+      {
+        key: "sync_debug",
+        label: "SYNC_DEBUG",
+        detail: state.syncStatus.warning ?? state.syncStatus.debugDetail ?? "transport diagnostics nominal",
+        status: state.syncStatus.warning ? "degraded" : state.syncStatus.debugDetail ? "active" : "complete",
+        progress: state.syncStatus.warning ? 100 : state.syncStatus.debugDetail ? 75 : 100,
+      },
+      {
+        key: "lobby_permissions",
+        label: "LOBBY_PERMISSIONS",
+        detail: `joined=${lobbyState.isJoined ? "true" : "false"} can_join=${lobbyState.canJoinSession ? "true" : "false"} admin=${lobbyState.canUseAdminTools ? "true" : "false"}`,
+        status: lobbyState.isJoined ? "complete" : lobbyState.canJoinSession ? "active" : "pending",
+        progress: lobbyState.isJoined ? 100 : lobbyState.canJoinSession ? 50 : 0,
+      },
+      {
+        key: "ready_manifest",
+        label: "READY_MANIFEST",
+        detail: `ready=${lobbyState.metrics.readyCount} spectators=${lobbyState.metrics.spectatorCount} local_ready=${lobbyState.isLocalUserReady ? "true" : "false"}`,
+        status: lobbyState.isLocalUserReady ? "complete" : "pending",
+        progress: lobbyState.isLocalUserReady ? 100 : 20,
+      },
+      {
+        key: "auto_join",
+        label: "AUTO_JOIN",
+        detail: `config=${state.timerConfig.autoJoinOnLoad ? "enabled" : "disabled"} local_user=${lobbyState.localUser ? "resolved" : "pending"}`,
+        status: lobbyState.localUser ? "complete" : "active",
+        progress: lobbyState.localUser ? 100 : 50,
+      },
+      {
+        key: "media_mount",
+        label: "MEDIA_MOUNT",
+        detail: `panel=${soundCloudPanelMode} decks=${shouldMountDeckWorkspace ? "mounted" : "standby"} background_video=preload`,
+      },
+    ];
+  }, [
+    lobbyState.canJoinSession,
+    lobbyState.canUseAdminTools,
+    lobbyState.isJoined,
+    lobbyState.isLocalHost,
+    lobbyState.isLocalUserReady,
+    lobbyState.localUser,
+    lobbyState.metrics.activeCount,
+    lobbyState.metrics.idleCount,
+    lobbyState.metrics.readyCount,
+    lobbyState.metrics.spectatorCount,
+    sdkState.authError,
+    sdkState.authStage,
+    sdkState.buildId,
+    sdkState.enabled,
+    sdkState.identitySource,
+    sdkState.startupError,
+    sdkState.startupStage,
+    shouldMountDeckWorkspace,
+    soundCloudPanelMode,
+    state.localProfile.displayName,
+    state.localProfile.id,
+    state.session.capacity.max,
+    state.session.capacity.min,
+    state.session.code,
+    state.session.ownerId,
+    state.session.phase,
+    state.session.roundNumber,
+    state.syncStatus.connection,
+    state.syncStatus.debugDetail,
+    state.syncStatus.latencyMs,
+    state.syncStatus.mode,
+    state.syncStatus.serverTimeOffsetMs,
+    state.syncStatus.startupMilestone,
+    state.syncStatus.warning,
+    state.timerConfig.autoJoinOnLoad,
+    state.users.length,
+  ]);
+  const loadingScreenProgress = isStartupDebugPaused && pausedStartupProgress ? pausedStartupProgress : startupProgress;
+  const shouldShowLoadingScreen = startupProgress.isBlocking || isStartupDebugPaused || isStartupConsoleDraining || isStartupCompletionHeld;
 
   return (
     <div className="app-stage">
@@ -854,7 +1069,14 @@ export function MainScreen() {
         <div className="app-background-stage-atmosphere" />
       </div>
 
-      {shouldShowLoadingScreen ? <LoadingScreen progress={startupProgress} /> : null}
+      {shouldShowLoadingScreen ? (
+        <LoadingScreen
+          progress={loadingScreenProgress}
+          diagnostics={loadingScreenDiagnostics}
+          isPaused={isStartupDebugPaused}
+          onConsoleDrainChange={handleStartupConsoleDrainChange}
+        />
+      ) : null}
 
       <main
         className="app-shell"
