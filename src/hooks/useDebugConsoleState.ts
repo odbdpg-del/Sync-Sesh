@@ -49,7 +49,7 @@ export const DEBUG_CONSOLE_SNAPSHOT_ROWS: Array<{ key: keyof DebugConsoleSnapsho
   { key: "host", label: "Host" },
   { key: "isDiscordProxyHost", label: "Discord Proxy Host" },
   { key: "authEndpoint", label: "Auth Endpoint" },
-  { key: "redirectUri", label: "Redirect URI" },
+  { key: "redirectUri", label: "Backend Redirect URI" },
   { key: "discordSdkEnabledByEnv", label: "SDK Enabled By Env" },
   { key: "hasDiscordClientId", label: "Has Discord Client ID" },
   { key: "attemptId", label: "Attempt ID" },

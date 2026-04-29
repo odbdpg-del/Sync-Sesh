@@ -192,7 +192,7 @@ export function useDabSyncSession(options: UseDabSyncSessionOptions = {}) {
         level: "info",
         category: "sync",
         label: "sync:connect:start",
-        detail: state.syncStatus.mode === "ws" ? "Connecting to sync server." : "Starting mock sync transport.",
+        detail: state.syncStatus.debugDetail ?? (state.syncStatus.mode === "ws" ? "Connecting to sync server." : "Starting mock sync transport."),
       });
       return;
     }
@@ -202,7 +202,9 @@ export function useDabSyncSession(options: UseDabSyncSessionOptions = {}) {
         level: "info",
         category: "sync",
         label: "sync:connect:success",
-        detail: state.syncStatus.latencyMs !== undefined ? `${state.syncStatus.mode} ${state.syncStatus.latencyMs}ms` : `${state.syncStatus.mode} connected`,
+        detail:
+          state.syncStatus.debugDetail ??
+          (state.syncStatus.latencyMs !== undefined ? `${state.syncStatus.mode} ${state.syncStatus.latencyMs}ms` : `${state.syncStatus.mode} connected`),
       });
       return;
     }
@@ -212,7 +214,7 @@ export function useDabSyncSession(options: UseDabSyncSessionOptions = {}) {
         level: "error",
         category: "sync",
         label: "sync:connect:failed",
-        detail: state.syncStatus.warning ?? "Sync connection entered error state.",
+        detail: state.syncStatus.debugDetail ?? state.syncStatus.warning ?? "Sync connection entered error state.",
       });
       return;
     }
@@ -222,10 +224,17 @@ export function useDabSyncSession(options: UseDabSyncSessionOptions = {}) {
         level: "warn",
         category: "sync",
         label: "sync:disconnect",
-        detail: state.syncStatus.warning ?? "Sync transport disconnected.",
+        detail: state.syncStatus.debugDetail ?? state.syncStatus.warning ?? "Sync transport disconnected.",
       });
     }
-  }, [onDebugEvent, state.syncStatus.connection, state.syncStatus.latencyMs, state.syncStatus.mode, state.syncStatus.warning]);
+  }, [
+    onDebugEvent,
+    state.syncStatus.connection,
+    state.syncStatus.debugDetail,
+    state.syncStatus.latencyMs,
+    state.syncStatus.mode,
+    state.syncStatus.warning,
+  ]);
 
   useEffect(() => {
     const unsubscribe = syncClient.subscribe(setState);
@@ -251,6 +260,17 @@ export function useDabSyncSession(options: UseDabSyncSessionOptions = {}) {
         };
       });
     };
+
+    setSdkState((current) => ({
+      ...current,
+      enabled: true,
+      buildId: current.buildId ?? __APP_BUILD_ID__,
+      attemptId: initialAttemptId,
+      authStage: "idle",
+      startupStage: "sdk_init",
+      startupError: undefined,
+      authError: undefined,
+    }));
 
     void initializeEmbeddedApp({
       attemptId: initialAttemptId,
@@ -364,9 +384,10 @@ export function useDabSyncSession(options: UseDabSyncSessionOptions = {}) {
 
     setSdkState((current) => ({
       ...current,
+      enabled: true,
       attemptId,
       authStage: "idle",
-      startupStage: "sdk_ready",
+      startupStage: "sdk_init",
       startupError: undefined,
       authError: undefined,
     }));

@@ -31,16 +31,17 @@ interface DiscordAuthProgress {
   authError?: string;
 }
 
-interface DiscordAuthorizeRequest {
+type CleanDiscordAuthorizePrompt = "none" | "consent";
+type DiscordAuthorizeMode = "silent" | "consent";
+
+interface CleanDiscordAuthorizeRequest {
   client_id: string;
   response_type: "code";
   state: string;
   scope: Array<(typeof DISCORD_IDENTITY_SCOPES)[number]>;
-  redirect_uri: string;
-  prompt?: "none";
+  prompt: "none";
 }
 
-const DEFAULT_SYNC_PROXY_TARGET = "sync-sesh-sync.onrender.com";
 const STATIC_ACTIVITY_URL_MAPPINGS = [
   { prefix: "/soundcloud-widget", target: "w.soundcloud.com" },
   { prefix: "/soundcloud-api", target: "api.soundcloud.com" },
@@ -63,7 +64,7 @@ function isDiscordProxyHost() {
   return window.location.host.includes("discordsays.com") || window.location.host.includes("discordsez.com");
 }
 
-function resolveSyncProxyTarget() {
+function resolveConfiguredSyncProxyTarget() {
   const configuredUrl = import.meta.env.VITE_SYNC_SERVER_URL;
 
   if (configuredUrl && configuredUrl !== "auto") {
@@ -75,11 +76,11 @@ function resolveSyncProxyTarget() {
         return parsed.hostname;
       }
     } catch {
-      // Fall back to the known hosted sync service target.
+      return configuredUrl;
     }
   }
 
-  return DEFAULT_SYNC_PROXY_TARGET;
+  return undefined;
 }
 
 export function ensureDiscordActivityUrlMappingsPatched() {
@@ -87,9 +88,16 @@ export function ensureDiscordActivityUrlMappingsPatched() {
     return;
   }
 
+  const syncProxyTarget = resolveConfiguredSyncProxyTarget();
+
   patchUrlMappings([
-    { prefix: "/sync", target: resolveSyncProxyTarget() },
-    { prefix: "/api", target: resolveSyncProxyTarget() },
+    ...(syncProxyTarget
+      ? [
+          { prefix: "/ws", target: syncProxyTarget },
+          { prefix: "/sync", target: syncProxyTarget },
+          { prefix: "/api", target: syncProxyTarget },
+        ]
+      : []),
     ...STATIC_ACTIVITY_URL_MAPPINGS,
   ]);
   hasPatchedActivityUrlMappings = true;
@@ -171,7 +179,9 @@ interface InitializeEmbeddedAppOptions {
 }
 
 const FRONTEND_BUILD_ID = typeof __APP_BUILD_ID__ !== "undefined" ? __APP_BUILD_ID__ : "test-build";
+const DISCORD_SDK_READY_TIMEOUT_MS = 30_000;
 const DISCORD_AUTHORIZE_TIMEOUT_MS = 45_000;
+const DISCORD_TOKEN_EXCHANGE_TIMEOUT_MS = 25_000;
 
 export function createDiscordAuthAttemptId(now = Date.now(), randomValue = Math.random()) {
   return `auth-${now.toString(36)}-${Math.floor(randomValue * 0xffffff)
@@ -212,7 +222,7 @@ function summarizeAttemptId(attemptId: string) {
 }
 
 interface DiscordAuthorizeErrorContext {
-  authMode: "silent" | "interactive";
+  authMode: DiscordAuthorizeMode;
   attemptId: string;
   buildId: string;
   redirectUri: string;
@@ -302,7 +312,7 @@ function buildAuthorizeContextParts(context: DiscordAuthorizeErrorContext) {
     `${context.authMode} auth`,
     `attempt ${summarizeAttemptId(context.attemptId)}`,
     `build ${context.buildId}`,
-    `redirect ${context.redirectUri}`,
+    `backend redirect ${context.redirectUri}`,
     context.isDiscordProxyHost ? "discord proxy host" : "direct host",
     context.hasClientId ? "client id present" : "client id missing",
     `auth endpoint ${context.authEndpoint}`,
@@ -343,11 +353,33 @@ function emitDebugEvent(onDebugEvent: InitializeEmbeddedAppOptions["onDebugEvent
   onDebugEvent?.(event);
 }
 
-async function requestDiscordAuthorization(
+async function waitForDiscordSdkReady(sdk: DiscordSDK) {
+  return Promise.race([
+    sdk.ready(),
+    new Promise<never>((_, reject) => {
+      window.setTimeout(() => {
+        reject(new Error(`Discord SDK ready timed out after ${DISCORD_SDK_READY_TIMEOUT_MS}ms.`));
+      }, DISCORD_SDK_READY_TIMEOUT_MS);
+    }),
+  ]);
+}
+
+export async function requestCleanDiscordAuthorization(
   sdk: DiscordSDK,
-  authorizeOptions: DiscordAuthorizeRequest,
-  attemptId: string,
+  options: {
+    attemptId: string;
+    clientId: string;
+    prompt: CleanDiscordAuthorizePrompt;
+    state?: string;
+  },
 ): Promise<string> {
+  const authorizeOptions: CleanDiscordAuthorizeRequest = {
+    client_id: options.clientId,
+    response_type: "code",
+    state: options.state ?? `${Date.now()}`,
+    scope: [...DISCORD_IDENTITY_SCOPES],
+    prompt: options.prompt as "none",
+  };
   const authorizeResult = await Promise.race([
     sdk.commands.authorize(authorizeOptions),
     new Promise<never>((_, reject) => {
@@ -360,7 +392,7 @@ async function requestDiscordAuthorization(
 
   if (!code) {
     console.warn("Discord authorize returned without a usable code.", {
-      attemptId,
+      attemptId: options.attemptId,
       debugSummary,
       authorizeResult,
     });
@@ -368,6 +400,115 @@ async function requestDiscordAuthorization(
   }
 
   return code;
+}
+
+function buildAuthorizeErrorContext(sdk: DiscordSDK, attemptId: string, authMode: DiscordAuthorizeMode, clientId: string): DiscordAuthorizeErrorContext {
+  return {
+    authMode,
+    attemptId,
+    buildId: FRONTEND_BUILD_ID,
+    redirectUri: resolveDiscordRedirectUri(),
+    authEndpoint: resolveDiscordAuthEndpoint(),
+    hasClientId: Boolean(clientId),
+    isDiscordProxyHost: isDiscordProxyHost(),
+    channelId: sdk.channelId ?? undefined,
+    guildId: sdk.guildId ?? undefined,
+    instanceId: sdk.instanceId ?? undefined,
+  };
+}
+
+async function requestDiscordAuthorizationAttempt(
+  sdk: DiscordSDK,
+  options: {
+    authMode: DiscordAuthorizeMode;
+    clientId: string;
+    attemptId: string;
+    emitAuthProgress: (authStage: DiscordAuthStage, authError?: string) => void;
+    onDebugEvent?: InitializeEmbeddedAppOptions["onDebugEvent"];
+    failureLevel: "warn" | "error";
+  },
+): Promise<string> {
+  const authorizeErrorContext = buildAuthorizeErrorContext(sdk, options.attemptId, options.authMode, options.clientId);
+  const prompt: CleanDiscordAuthorizePrompt = options.authMode === "silent" ? "none" : "consent";
+
+  options.emitAuthProgress("authorizing");
+  emitDebugEvent(options.onDebugEvent, {
+    level: "info",
+    category: "auth",
+    label: `auth:${options.authMode}:start`,
+    detail: buildAuthorizeContextParts(authorizeErrorContext).join(" | "),
+  });
+
+  try {
+    const code = await requestCleanDiscordAuthorization(sdk, {
+      attemptId: options.attemptId,
+      clientId: options.clientId,
+      prompt,
+    });
+    emitDebugEvent(options.onDebugEvent, {
+      level: "info",
+      category: "auth",
+      label: `auth:${options.authMode}:success`,
+      detail: `attempt ${summarizeAttemptId(options.attemptId)}`,
+    });
+    return code;
+  } catch (error) {
+    const { normalizedMessage, debugDetail } = summarizeDiscordAuthorizeError(error, authorizeErrorContext);
+    options.emitAuthProgress("authorizing", normalizedMessage);
+    emitDebugEvent(options.onDebugEvent, {
+      level: options.failureLevel,
+      category: "auth",
+      label: `auth:${options.authMode}:failed`,
+      detail: debugDetail,
+    });
+    throw new Error(normalizedMessage);
+  }
+}
+
+async function requestDiscordAuthorizationCode(
+  sdk: DiscordSDK,
+  options: {
+    clientId: string;
+    attemptId: string;
+    authPrompt?: "none" | "interactive";
+    emitAuthProgress: (authStage: DiscordAuthStage, authError?: string) => void;
+    onDebugEvent?: InitializeEmbeddedAppOptions["onDebugEvent"];
+  },
+): Promise<string> {
+  if (options.authPrompt === "interactive") {
+    return requestDiscordAuthorizationAttempt(sdk, {
+      authMode: "consent",
+      clientId: options.clientId,
+      attemptId: options.attemptId,
+      emitAuthProgress: options.emitAuthProgress,
+      onDebugEvent: options.onDebugEvent,
+      failureLevel: "error",
+    });
+  }
+
+  try {
+    return await requestDiscordAuthorizationAttempt(sdk, {
+      authMode: "silent",
+      clientId: options.clientId,
+      attemptId: options.attemptId,
+      emitAuthProgress: options.emitAuthProgress,
+      onDebugEvent: options.onDebugEvent,
+      failureLevel: "warn",
+    });
+  } catch (error) {
+    if (!isDiscordAuthorizeFailure(error)) {
+      throw error;
+    }
+
+    return requestDiscordAuthorizationAttempt(sdk, {
+      authMode: "consent",
+      clientId: options.clientId,
+      attemptId: options.attemptId,
+      emitAuthProgress: options.emitAuthProgress,
+      onDebugEvent: options.onDebugEvent,
+      failureLevel: "error",
+    });
+  }
 }
 
 function buildProfileFromDiscordIdentity(user: DiscordUserLike, guildMember?: DiscordGuildMemberLike): LocalProfile {
@@ -438,13 +579,28 @@ async function resolveBestEffortDiscordProfile(sdk: DiscordSDK): Promise<LocalPr
 
 async function exchangeDiscordAuthCode(code: string, attemptId: string): Promise<string> {
   const authEndpoint = resolveDiscordAuthEndpoint();
-  const response = await fetch(authEndpoint, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ code, attemptId }),
-  });
+  const controller = new AbortController();
+  const timeoutId = window.setTimeout(() => {
+    controller.abort();
+  }, DISCORD_TOKEN_EXCHANGE_TIMEOUT_MS);
+
+  let response: Response;
+
+  try {
+    response = await fetch(authEndpoint, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ code, attemptId }),
+      signal: controller.signal,
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Network request failed.";
+    throw new Error(`Discord token exchange request failed after ${DISCORD_TOKEN_EXCHANGE_TIMEOUT_MS}ms via ${authEndpoint}: ${message}`);
+  } finally {
+    window.clearTimeout(timeoutId);
+  }
 
   const payload = (await response.json().catch(() => null)) as (DiscordTokenExchangeErrorResponse & Partial<DiscordTokenExchangeResponse>) | null;
 
@@ -510,7 +666,7 @@ async function resolveDiscordIdentity(
   sdk: DiscordSDK,
   clientId: string,
   onProfileUpdate?: (localProfile: LocalProfile, identitySource: EmbeddedIdentitySource) => void,
-  authPrompt: "none" | "interactive" = "none",
+  authPrompt: "none" | "interactive" | undefined = "none",
   attemptId = createDiscordAuthAttemptId(),
   onAuthProgress?: (progress: DiscordAuthProgress) => void,
   onDebugEvent?: InitializeEmbeddedAppOptions["onDebugEvent"],
@@ -522,60 +678,14 @@ async function resolveDiscordIdentity(
       authError,
     });
   };
-  const authMode = authPrompt === "none" ? "silent" : "interactive";
 
-  const authorizeOptions = {
-    client_id: clientId,
-    response_type: "code" as const,
-    state: `${Date.now()}`,
-    scope: [...DISCORD_IDENTITY_SCOPES],
-    redirect_uri: resolveDiscordRedirectUri(),
-    ...(authPrompt === "none" ? { prompt: "none" as const } : {}),
-  };
-  let code: string;
-  const authorizeErrorContext: DiscordAuthorizeErrorContext = {
-    authMode,
+  const code = await requestDiscordAuthorizationCode(sdk, {
+    clientId,
     attemptId,
-    buildId: FRONTEND_BUILD_ID,
-    redirectUri: authorizeOptions.redirect_uri,
-    authEndpoint: resolveDiscordAuthEndpoint(),
-    hasClientId: Boolean(clientId),
-    isDiscordProxyHost: isDiscordProxyHost(),
-    channelId: sdk.channelId ?? undefined,
-    guildId: sdk.guildId ?? undefined,
-    instanceId: sdk.instanceId ?? undefined,
-  };
-
-  emitAuthProgress("authorizing");
-  emitDebugEvent(onDebugEvent, {
-    level: "info",
-    category: "auth",
-    label: `auth:${authMode}:start`,
-    detail: buildAuthorizeContextParts(authorizeErrorContext).join(" | "),
+    authPrompt,
+    emitAuthProgress,
+    onDebugEvent,
   });
-
-  try {
-    code = await requestDiscordAuthorization(sdk, authorizeOptions, attemptId);
-  } catch (error) {
-    const { normalizedMessage, debugDetail } = summarizeDiscordAuthorizeError(error, authorizeErrorContext);
-    emitAuthProgress("authorizing", normalizedMessage);
-    emitDebugEvent(onDebugEvent, {
-      level: "error",
-      category: "auth",
-      label: `auth:${authMode}:failed`,
-      detail: debugDetail,
-    });
-    throw new Error(normalizedMessage);
-  }
-
-  if (authMode === "interactive") {
-    emitDebugEvent(onDebugEvent, {
-      level: "info",
-      category: "auth",
-      label: "auth:interactive:success",
-      detail: `attempt ${summarizeAttemptId(attemptId)}`,
-    });
-  }
 
   let accessToken: string;
 
@@ -726,40 +836,17 @@ async function resolveDiscordIdentityWithFallbackPrompt(
   options: Pick<InitializeEmbeddedAppOptions, "onProfileUpdate" | "authPrompt" | "attemptId" | "onAuthProgress" | "onDebugEvent"> = {},
 ): Promise<{ localProfile: LocalProfile; cleanup: () => void }> {
   const attemptId = options.attemptId ?? createDiscordAuthAttemptId();
-  const initialPrompt = options.authPrompt ?? "interactive";
+  const initialPrompt = options.authPrompt ?? "none";
 
-  try {
-    return await resolveDiscordIdentity(
-      sdk,
-      clientId,
-      options.onProfileUpdate,
-      initialPrompt,
-      attemptId,
-      options.onAuthProgress,
-      options.onDebugEvent,
-    );
-  } catch (error) {
-    if (initialPrompt !== "none" || !isDiscordAuthorizeFailure(error)) {
-      throw error;
-    }
-
-    emitDebugEvent(options.onDebugEvent, {
-      level: "warn",
-      category: "auth",
-      label: "auth:silent:escalated",
-      detail: error instanceof Error ? error.message : "Escalating to interactive auth.",
-    });
-
-    return resolveDiscordIdentity(
-      sdk,
-      clientId,
-      options.onProfileUpdate,
-      "interactive",
-      attemptId,
-      options.onAuthProgress,
-      options.onDebugEvent,
-    );
-  }
+  return resolveDiscordIdentity(
+    sdk,
+    clientId,
+    options.onProfileUpdate,
+    initialPrompt,
+    attemptId,
+    options.onAuthProgress,
+    options.onDebugEvent,
+  );
 }
 
 export async function retryDiscordIdentity(
@@ -904,7 +991,7 @@ export async function initializeEmbeddedApp(options: InitializeEmbeddedAppOption
   });
 
   try {
-    await sdk.ready();
+    await waitForDiscordSdkReady(sdk);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Discord SDK failed to become ready.";
     console.error("Discord SDK ready() failed.", error);

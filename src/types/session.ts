@@ -223,6 +223,7 @@ export interface SharedStudioGuitarState {
 export interface SyncStatus {
   mode: SyncTransportMode;
   connection: SyncConnectionState;
+  debugDetail?: string;
   lastEventAt?: string;
   latencyMs?: number;
   serverTimeOffsetMs?: number;

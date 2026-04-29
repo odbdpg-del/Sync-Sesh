@@ -8,15 +8,37 @@ function isDiscordProxyHost() {
 }
 
 function buildActivityProxyWebSocketUrl() {
-  const url = new URL("/sync", window.location.href);
+  const url = new URL("/ws", window.location.href);
   url.protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
   return url.toString();
 }
 
+function normalizeWebSocketUrl(configuredUrl: string) {
+  const parsed = new URL(configuredUrl);
+
+  parsed.protocol = parsed.protocol === "https:" || parsed.protocol === "wss:" ? "wss:" : "ws:";
+
+  if (parsed.pathname === "/" || parsed.pathname === "") {
+    parsed.pathname = "/ws";
+  }
+
+  return parsed.toString();
+}
+
 function resolveSyncServerUrl() {
+  const directSyncUrl = import.meta.env.VITE_SYNC_DIRECT_URL;
+
+  if (directSyncUrl && directSyncUrl !== "auto" && !isDiscordProxyHost()) {
+    try {
+      return normalizeWebSocketUrl(directSyncUrl);
+    } catch {
+      return directSyncUrl;
+    }
+  }
+
   const configuredUrl = import.meta.env.VITE_SYNC_SERVER_URL;
 
-  if (!configuredUrl || configuredUrl === "auto" || isDiscordProxyHost()) {
+  if (!configuredUrl || configuredUrl === "auto") {
     return buildActivityProxyWebSocketUrl();
   }
 
@@ -29,9 +51,9 @@ function resolveSyncServerUrl() {
       return buildActivityProxyWebSocketUrl();
     }
 
-    return parsed.toString();
+    return normalizeWebSocketUrl(parsed.toString());
   } catch {
-    return configuredUrl;
+    return isDiscordProxyHost() ? buildActivityProxyWebSocketUrl() : configuredUrl;
   }
 }
 

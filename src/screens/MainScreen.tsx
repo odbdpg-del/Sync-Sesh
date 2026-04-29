@@ -271,8 +271,18 @@ export function MainScreen() {
       debugConsoleState.appendCommandOutput({
         level: "info",
         label: "command:help",
-        detail: "Available commands: hide, clear, help, copy, snapshot, filter all, filter auth, filter sdk, filter profile, filter sync, filter network, filter ui, filter command.",
+        detail: "Available commands: hide, clear, help, copy, snapshot, retry, filter all, filter auth, filter sdk, filter profile, filter sync, filter network, filter ui, filter command.",
       });
+      return;
+    }
+
+    if (normalizedCommand === "retry") {
+      debugConsoleState.appendCommandOutput({
+        level: "info",
+        label: "command:retry",
+        detail: "Retrying Discord identity.",
+      });
+      void retryDiscordProfile();
       return;
     }
 
@@ -335,9 +345,9 @@ export function MainScreen() {
     debugConsoleState.appendCommandOutput({
       level: "warn",
       label: "command:unknown",
-      detail: `Unknown command: ${rawCommand}. Available now: filter all, filter auth, filter sdk, filter profile, filter sync, filter network, filter ui, filter command.`,
+      detail: `Unknown command: ${rawCommand}. Available now: hide, clear, help, copy, snapshot, retry, filter all, filter auth, filter sdk, filter profile, filter sync, filter network, filter ui, filter command.`,
     });
-  }, [debugConsoleState]);
+  }, [debugConsoleState, retryDiscordProfile]);
   const countdownDisplay = useCountdownDisplay(state);
   const { playCue, playSecretCodeStep } = useSoundEffects(state, lobbyState, countdownDisplay);
   const { isOpen: isAdminOpen, setIsOpen: setIsAdminOpen } = useAdminPanelHotkey(lobbyState.canUseAdminTools);

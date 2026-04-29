@@ -8,6 +8,98 @@ Entries must be in reverse chronological order. New entries go at the top, above
 
 Use a level-two heading for every entry so the editor can fold each change.
 
+## [2371] - 2026-04-28 22:27 - `codex/merge-ui-and-3d-world / Prefer Same-Origin Activity WebSocket`
+
+- Changed `VITE_SYNC_DIRECT_URL` so it is ignored inside Discord's Activity proxy host, keeping live Activity tests on the same-origin `/ws` websocket route.
+- Included `/ws` in explicit remote Activity mapping patches for hosted sync targets while preserving local Developer Portal mappings in `auto` mode.
+- Touched `src/lib/sync/createSyncClient.ts`, `src/lib/discord/embeddedApp.ts`, and `changelog.md`.
+- Build/test: `npm.cmd run build` passed.
+
+## [2370] - 2026-04-28 22:24 - `codex/merge-ui-and-3d-world / Test Repo Style WebSocket Path`
+
+- Switched the default Discord Activity websocket URL from `/sync` to `/ws` to match the proven Discord-Test-Farding synced timer pattern.
+- Added a Vite `/ws` websocket proxy alias to the local sync server while keeping the existing `/sync` proxy path for compatibility.
+- Touched `src/lib/sync/createSyncClient.ts`, `vite.config.ts`, and `changelog.md`.
+- Build/test: `npm.cmd run build` passed.
+
+## [2369] - 2026-04-28 22:19 - `codex/merge-ui-and-3d-world / Direct Cloudflare Sync WebSocket`
+
+- Added `VITE_SYNC_DIRECT_URL` for local Discord Activity testing so the sync websocket can connect directly to a Cloudflare tunnel when Discord's `/sync` proxy mapping times out.
+- Normalized configured HTTP(S) sync URLs into WS(S) websocket URLs and defaulted root paths to `/sync` while keeping the existing Activity proxy websocket behavior for `auto`.
+- Touched `src/lib/sync/createSyncClient.ts`, `src/env.d.ts`, and `changelog.md`.
+- Build/test: `npm.cmd run build` passed.
+
+## [2368] - 2026-04-28 22:15 - `codex/merge-ui-and-3d-world / Discord Token Exchange Timeout Diagnostics`
+
+- Added explicit frontend and sync-server timeouts for Discord token exchange so stalled local Cloudflare tests report a clear token exchange network failure instead of hanging until the auth watchdog fires.
+- Added sync-server logs before forwarding the OAuth code to Discord and when that upstream token request fails, including timeout and redirect URI context.
+- Touched `src/lib/discord/embeddedApp.ts`, `server/sync-server.ts`, and `changelog.md`.
+- Build/test: `npm.cmd run build` passed.
+
+## [2367] - 2026-04-28 22:10 - `codex/merge-ui-and-3d-world / Sync WebSocket Diagnostics`
+
+- Added sync transport debug details for websocket open, timeout, error, close, snapshot, and pong events so Discord Activity console logs show the exact `/sync` URL and failure shape during local Cloudflare testing.
+- Updated the debug console connection event bridge to prefer those sync transport details when reporting connect, success, failure, and disconnect events.
+- Touched `src/types/session.ts`, `src/lib/sync/wsSyncClient.ts`, `src/hooks/useDabSyncSession.ts`, and `changelog.md`.
+- Build/test: `npm.cmd run build` passed.
+
+## [2366] - 2026-04-28 22:04 - `codex/merge-ui-and-3d-world / Local Cloudflare Sync Mapping`
+
+- Changed Discord Activity URL mapping patching so `VITE_SYNC_SERVER_URL=auto` preserves the Developer Portal `/api` and `/sync` mappings instead of overriding them to a hosted sync target during local Cloudflare tests.
+- Kept explicit remote sync targets supported: when `VITE_SYNC_SERVER_URL` is a non-local URL, runtime mapping still patches `/api` and `/sync` to that host.
+- Touched `src/lib/discord/embeddedApp.ts` and `changelog.md`.
+- Build/test: `npm.cmd run build` passed.
+
+## [2365] - 2026-04-28 21:53 - `codex/merge-ui-and-3d-world / Discord Auth Single Launch In Dev`
+
+- Removed the React StrictMode wrapper from the app entry so Vite dev testing no longer double-runs Discord SDK and OAuth startup effects inside the Activity.
+- This prevents simultaneous silent/consent authorization attempts from poisoning local Cloudflare Discord Activity tests while keeping the existing auth flow unchanged.
+- Touched `src/main.tsx` and `changelog.md`.
+- Build/test: `npm.cmd run build` passed.
+
+## [2364] - 2026-04-28 21:46 - `codex/merge-ui-and-3d-world / Bug 1 SDK Ready Timeout`
+
+- Added a 30 second timeout around `sdk.ready()` so Discord Activity tests report `sdk:ready:failed` instead of hanging indefinitely at `sdk:ready:start`.
+- Preserved the auth flow; this makes the current Discord SDK handshake blocker visible before authorization begins.
+- Touched `src/lib/discord/embeddedApp.ts` and `changelog.md`.
+- Build/test: `npm.cmd run build` passed.
+
+## [2363] - 2026-04-28 21:34 - `codex/merge-ui-and-3d-world / Debug Console Retry Command`
+
+- Added a `retry` command to the hidden debug console so live Discord Activity tests can rerun Discord identity bootstrap without needing a visible retry banner.
+- Updated debug console help and unknown-command guidance to include the new retry command.
+- Touched `src/screens/MainScreen.tsx` and `changelog.md`.
+- Build/test: `npm.cmd run build` passed.
+
+## [2362] - 2026-04-28 21:32 - `codex/merge-ui-and-3d-world / Bug 1 SDK Startup Visibility`
+
+- Set Discord SDK state to `sdk_init` immediately before initial and retry identity bootstrap calls so the debug snapshot no longer stays at `n/a` when startup is in progress or early logs are missed.
+- Kept the auth flow unchanged; this is an observability patch to make the live Discord Activity test distinguish "not started" from "stuck during SDK startup."
+- Touched `src/hooks/useDabSyncSession.ts` and `changelog.md`.
+- Build/test: `npm.cmd run build` passed.
+
+## [2361] - 2026-04-28 20:31 - `codex/merge-ui-and-3d-world / Bug 1 Recovery Chunk 3 Authorize Redirect Cleanup`
+
+- Verified the live Discord authorize path uses the clean request shape without a frontend `redirect_uri`, and aligned the diagnostic harness authorize request with that same frontend payload.
+- Renamed redirect diagnostics to `backend redirect` / `Backend Redirect URI` so debug output describes the server token-exchange configuration instead of implying a frontend authorize field.
+- Ignored the local `tools/cloudflared.exe` testing binary and local `.env` files so Cloudflare tunnel testing does not accidentally add a large executable or secrets to future commits.
+- Touched `.gitignore`, `src/lib/discord/embeddedApp.ts`, `src/hooks/useDebugConsoleState.ts`, `src/screens/AuthHarnessScreen.tsx`, and `changelog.md`.
+- Build/test: `npm.cmd run build` passed.
+
+## [2360] - 2026-04-28 20:27 - `codex/merge-ui-and-3d-world / Bug 1 Recovery Chunk 2 Silent Then Consent Auth`
+
+- Wired Discord identity authorization through the clean helper so the default flow now tries silent `prompt: "none"` first and falls back once to runtime consent `prompt: "consent"` when silent authorization fails.
+- Added safe `auth:silent:*` and `auth:consent:*` debug events while preserving token exchange, `authenticate()`, profile creation, subscriptions, endpoint resolution, scopes, and local fallback behavior.
+- Touched `src/lib/discord/embeddedApp.ts` and `changelog.md`.
+- Build/test: `npm.cmd run build` passed.
+
+## [2358] - 2026-04-28 20:23 - `codex/merge-ui-and-3d-world / Bug 1 Recovery Chunk 1 Clean Auth Helper`
+
+- Added an isolated clean Discord authorization helper based on the working Discord-Test-Farding flow, supporting silent `prompt: "none"` and runtime consent `prompt: "consent"` modes behind one narrow SDK type cast.
+- Kept the helper scoped to the minimal `identify` authorize request, omitted frontend `redirect_uri`, and preserved the existing timeout/code-extraction failure behavior for the next recovery chunk to wire in.
+- Touched `src/lib/discord/embeddedApp.ts` and `changelog.md`.
+- Build/test: `npm.cmd run build` passed.
+
 ## [2357] - 2026-04-28 14:43 - `codex/merge-ui-and-3d-world / Bug 1 Attempt 8 Embed Diagnostics`
 
 - Implemented Attempt 8 as a standalone `public/embed-diagnostics.html` page that reports iframe/runtime context and same-origin response headers for the root page, static probe page, and diagnostics page without using React, the app bundle, or the Discord SDK.

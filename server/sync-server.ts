@@ -35,6 +35,7 @@ interface SocketSessionInfo {
 }
 
 const port = Number(process.env.PORT ?? 8787);
+const DISCORD_TOKEN_EXCHANGE_TIMEOUT_MS = 20_000;
 const serverDirname = dirname(fileURLToPath(import.meta.url));
 const generatedNamesPath = resolve(serverDirname, "../src/data/generatedNames.txt");
 const rooms = new Map<string, SessionRoom>();
@@ -307,19 +308,52 @@ async function handleDiscordTokenExchange(request: import("node:http").IncomingM
     return;
   }
 
-  const tokenResponse = await fetch("https://discord.com/api/oauth2/token", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/x-www-form-urlencoded",
-    },
-    body: new URLSearchParams({
-      client_id: discordClientId,
-      client_secret: discordClientSecret,
-      grant_type: "authorization_code",
-      code,
+  const tokenExchangeController = new AbortController();
+  const tokenExchangeTimeout = setTimeout(() => {
+    tokenExchangeController.abort();
+  }, DISCORD_TOKEN_EXCHANGE_TIMEOUT_MS);
+
+  let tokenResponse: Response;
+
+  try {
+    console.log("Discord token exchange forwarding to Discord.", {
+      attemptId,
+      build_id: buildId,
       redirect_uri: discordRedirectUri,
-    }),
-  });
+      timeout_ms: DISCORD_TOKEN_EXCHANGE_TIMEOUT_MS,
+    });
+
+    tokenResponse = await fetch("https://discord.com/api/oauth2/token", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: new URLSearchParams({
+        client_id: discordClientId,
+        client_secret: discordClientSecret,
+        grant_type: "authorization_code",
+        code,
+        redirect_uri: discordRedirectUri,
+      }),
+      signal: tokenExchangeController.signal,
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown Discord token exchange network error.";
+    console.error("Discord token exchange network failed.", {
+      attemptId,
+      build_id: buildId,
+      error: message,
+      timeout_ms: DISCORD_TOKEN_EXCHANGE_TIMEOUT_MS,
+    });
+    sendJson(response, 504, {
+      error: `Discord token exchange network failed: ${message}`,
+      attemptId,
+      buildId,
+    });
+    return;
+  } finally {
+    clearTimeout(tokenExchangeTimeout);
+  }
 
   const payload = (await tokenResponse.json().catch(() => null)) as Record<string, unknown> | null;
 

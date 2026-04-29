@@ -53,6 +53,7 @@ export class WebSocketSyncClient implements SyncClient {
     this.syncStatus = {
       ...this.syncStatus,
       connection: "connecting",
+      debugDetail: `Opening ${this.serverUrl} for session ${this.sessionId}.`,
       warning: this.reconnectAttempt > 0 ? "Reconnecting to sync server" : "Connecting to sync server",
     };
     this.emit();
@@ -71,6 +72,7 @@ export class WebSocketSyncClient implements SyncClient {
         this.syncStatus = {
           ...this.syncStatus,
           connection: "error",
+          debugDetail: `Timed out after 15000ms while opening ${this.serverUrl}.`,
           warning: "Sync server is still waking up. Retrying shortly.",
         };
         this.emit();
@@ -84,6 +86,7 @@ export class WebSocketSyncClient implements SyncClient {
         this.syncStatus = {
           ...this.syncStatus,
           connection: "connected",
+          debugDetail: `Opened ${this.serverUrl}.`,
           warning: undefined,
         };
 
@@ -128,6 +131,7 @@ export class WebSocketSyncClient implements SyncClient {
           this.syncStatus = {
             ...this.syncStatus,
             connection: "error",
+            debugDetail: `Received invalid sync data from ${this.serverUrl}.`,
             warning: "Received invalid sync data from server.",
           };
           this.emit();
@@ -140,6 +144,7 @@ export class WebSocketSyncClient implements SyncClient {
           this.syncStatus = {
             ...this.syncStatus,
             connection: "connected",
+            debugDetail: `Received snapshot from ${this.serverUrl}.`,
             serverTimeOffsetMs: payload.serverNow - Date.now(),
             lastEventAt: new Date().toISOString(),
             warning: undefined,
@@ -153,6 +158,7 @@ export class WebSocketSyncClient implements SyncClient {
           const estimatedServerNow = payload.serverNow + latencyMs / 2;
           this.syncStatus = {
             ...this.syncStatus,
+            debugDetail: `Received pong from ${this.serverUrl}.`,
             latencyMs,
             serverTimeOffsetMs: estimatedServerNow - now,
             warning: latencyMs > 500 ? "High sync latency detected" : undefined,
@@ -164,6 +170,7 @@ export class WebSocketSyncClient implements SyncClient {
           this.syncStatus = {
             ...this.syncStatus,
             connection: "error",
+            debugDetail: `Server error from ${this.serverUrl}: ${payload.message}`,
             warning: payload.message,
             serverTimeOffsetMs: payload.serverNow - Date.now(),
           };
@@ -176,13 +183,14 @@ export class WebSocketSyncClient implements SyncClient {
         this.syncStatus = {
           ...this.syncStatus,
           connection: "error",
+          debugDetail: `WebSocket error while opening ${this.serverUrl}.`,
           warning: "Unable to reach the sync server. Retrying...",
         };
         this.emit();
         finish();
       });
 
-      socket.addEventListener("close", () => {
+      socket.addEventListener("close", (event) => {
         window.clearTimeout(timeoutId);
         if (this.pingIntervalId !== undefined) {
           window.clearInterval(this.pingIntervalId);
@@ -192,6 +200,7 @@ export class WebSocketSyncClient implements SyncClient {
         this.syncStatus = {
           ...this.syncStatus,
           connection: this.syncStatus.connection === "error" ? "error" : "offline",
+          debugDetail: `WebSocket closed code=${event.code} reason=${event.reason || "n/a"} clean=${event.wasClean} url=${this.serverUrl}.`,
           warning:
             this.syncStatus.connection === "error"
               ? this.syncStatus.warning

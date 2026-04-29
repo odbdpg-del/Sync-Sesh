@@ -24,7 +24,6 @@ interface HarnessAuthorizeRequest {
   response_type: "code";
   state: string;
   scope: Array<"identify">;
-  redirect_uri: string;
 }
 
 function formatHarnessTimestamp(timestamp: number) {
@@ -176,7 +175,7 @@ export function AuthHarnessScreen() {
     appendLog(
       "info",
       "auth:interactive:start",
-      `build ${typeof __APP_BUILD_ID__ !== "undefined" ? __APP_BUILD_ID__ : "test-build"} | redirect ${config.redirectUri} | endpoint ${config.authEndpoint} | channel ${sdk.channelId ?? "n/a"} | guild ${sdk.guildId ?? "n/a"} | instance ${sdk.instanceId ?? "n/a"}`,
+      `build ${typeof __APP_BUILD_ID__ !== "undefined" ? __APP_BUILD_ID__ : "test-build"} | backend redirect ${config.redirectUri} | endpoint ${config.authEndpoint} | channel ${sdk.channelId ?? "n/a"} | guild ${sdk.guildId ?? "n/a"} | instance ${sdk.instanceId ?? "n/a"}`,
     );
     window.__AUTH_HARNESS_BOOT_STATUS__?.setPhase("auth:interactive:start");
     window.__AUTH_HARNESS_BOOT_STATUS__?.setDetail("Discord authorize request started. Waiting for popup or failure.");
@@ -187,7 +186,6 @@ export function AuthHarnessScreen() {
         response_type: "code" as const,
         state: `${Date.now()}`,
         scope: ["identify"],
-        redirect_uri: config.redirectUri,
       };
       const authorizeResult = await Promise.race([
         sdk.commands.authorize(authorizeOptions),
@@ -251,7 +249,7 @@ export function AuthHarnessScreen() {
             <span>{formatValue(Boolean(clientId))}</span>
           </div>
           <div className="auth-harness-card">
-            <strong>Redirect URI</strong>
+            <strong>Backend Redirect URI</strong>
             <span>{formatValue(config.redirectUri)}</span>
           </div>
           <div className="auth-harness-card">

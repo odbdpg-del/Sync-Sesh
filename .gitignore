@@ -3,8 +3,11 @@ dist
 .local-run
 .DS_Store
 *.local
+.env
+.env.local
 *.tsbuildinfo
 vite.config.js
 vite.config.d.ts
 test-results/
 tmp-*
+tools/cloudflared.exe
