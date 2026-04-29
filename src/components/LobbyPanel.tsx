@@ -8,9 +8,11 @@ interface LobbyPanelProps {
   users: SessionUser[];
   lobbyState: DerivedLobbyState;
   generatedDisplayNames: string[];
+  discordDisplayName?: string;
   onJoinSession: () => void;
   onRollDisplayName: () => void;
   onSelectDisplayName: (displayName: string) => void;
+  onUseDiscordDisplayName: () => void;
 }
 
 interface NamePickerPosition {
@@ -72,9 +74,11 @@ export function LobbyPanel({
   users,
   lobbyState,
   generatedDisplayNames,
+  discordDisplayName,
   onJoinSession,
   onRollDisplayName,
   onSelectDisplayName,
+  onUseDiscordDisplayName,
 }: LobbyPanelProps) {
   const [isNamePickerOpen, setIsNamePickerOpen] = useState(false);
   const [namePickerPosition, setNamePickerPosition] = useState<NamePickerPosition>({ left: 0, top: 0 });
@@ -272,6 +276,16 @@ export function LobbyPanel({
                 <span className={`presence-chip presence-${user.presence}`}>{getStateLabel(user.presence)}</span>
                 {user.id === lobbyState.localUser?.id ? (
                   <div className="roll-name-wrapper">
+                    {discordDisplayName && user.displayName !== discordDisplayName ? (
+                      <button
+                        type="button"
+                        className="roll-name-button discord-name-button"
+                        onClick={onUseDiscordDisplayName}
+                        title={`Use ${discordDisplayName}`}
+                      >
+                        Discord
+                      </button>
+                    ) : null}
                     <button
                       type="button"
                       className="roll-name-button"

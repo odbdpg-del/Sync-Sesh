@@ -196,9 +196,11 @@ export function MainScreen() {
     lobbyState,
     sdkState,
     generatedDisplayNames,
+    discordDisplayName,
     joinSession,
     rollDisplayName,
     selectDisplayName,
+    useDiscordDisplayName,
     startReadyHold,
     endReadyHold,
     setTimerDuration,
@@ -903,9 +905,11 @@ export function MainScreen() {
             users={state.users}
             lobbyState={lobbyState}
             generatedDisplayNames={generatedDisplayNames}
+            discordDisplayName={discordDisplayName}
             onJoinSession={handleJoinSession}
             onRollDisplayName={rollDisplayName}
             onSelectDisplayName={selectDisplayName}
+            onUseDiscordDisplayName={useDiscordDisplayName}
           />
           <TimerPanel
             state={state}

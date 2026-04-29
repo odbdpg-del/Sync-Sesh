@@ -186,15 +186,57 @@ function selectGeneratedProfile(room: SessionRoom, localProfile: LocalProfile, r
   return isTaken ? null : createProfileWithDisplayName(localProfile, canonicalName);
 }
 
+function selectActorProfile(room: SessionRoom, localProfile: LocalProfile, requestedName: string): LocalProfile | null {
+  const displayName = requestedName.trim();
+
+  if (!displayName || displayName !== localProfile.displayName) {
+    return null;
+  }
+
+  const isTaken = room.snapshot.users.some((user) => (
+    user.id !== localProfile.id &&
+    user.displayName.trim().toLowerCase() === displayName.toLowerCase()
+  ));
+
+  return isTaken ? null : localProfile;
+}
+
+function assignActorProfileIfAvailable(room: SessionRoom, localProfile: LocalProfile): LocalProfile | null {
+  const displayName = localProfile.displayName.trim();
+
+  if (!displayName) {
+    return null;
+  }
+
+  const isTaken = room.snapshot.users.some((user) => (
+    user.id !== localProfile.id &&
+    user.displayName.trim().toLowerCase() === displayName.toLowerCase()
+  ));
+
+  return isTaken ? null : localProfile;
+}
+
 function assignGeneratedProfile(room: SessionRoom, localProfile: LocalProfile, event?: SessionEvent): LocalProfile {
   const existingUser = room.snapshot.users.find((user) => user.id === localProfile.id);
 
   if (event?.type === "select_display_name") {
+    if (event.source === "discord") {
+      return selectActorProfile(room, localProfile, event.displayName) ?? getExistingProfile(localProfile, existingUser);
+    }
+
     return selectGeneratedProfile(room, localProfile, event.displayName) ?? getExistingProfile(localProfile, existingUser);
   }
 
   if (existingUser && event?.type !== "roll_display_name") {
     return getExistingProfile(localProfile, existingUser);
+  }
+
+  if (event?.type !== "roll_display_name") {
+    const actorProfile = assignActorProfileIfAvailable(room, localProfile);
+
+    if (actorProfile) {
+      return actorProfile;
+    }
   }
 
   const takenNames = room.snapshot.users

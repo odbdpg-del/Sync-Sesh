@@ -8,6 +8,42 @@ Entries must be in reverse chronological order. New entries go at the top, above
 
 Use a level-two heading for every entry so the editor can fold each change.
 
+## [2376] - 2026-04-28 22:48 - `codex/merge-ui-and-3d-world / Discord Name Default`
+
+- Updated first-join sync server profile assignment to keep the actor's current profile display name by default when it is available and not already taken.
+- Kept generated nickname assignment as the fallback and preserved explicit Roll behavior as the opt-in generated nickname path.
+- Touched `server/sync-server.ts` and `changelog.md`.
+- Build/test: `npm.cmd run build` passed.
+
+## [2375] - 2026-04-28 22:43 - `codex/merge-ui-and-3d-world / Explicit Discord Name Selection`
+
+- Added an explicit `source` field to display-name selection events so the sync server can distinguish generated nickname picks from Discord identity restores.
+- Updated Discord-name restore to send `source: "discord"` and kept generated name picker events on `source: "generated"`.
+- Made display-name debug settling wait for a fresh sync snapshot instead of the local optimistic profile update.
+- Touched `src/types/session.ts`, `src/hooks/useDabSyncSession.ts`, `server/sync-server.ts`, and `changelog.md`.
+- Build/test: `npm.cmd run build` passed.
+
+## [2374] - 2026-04-28 22:40 - `codex/merge-ui-and-3d-world / Display Name Debug Events`
+
+- Added debug console events for rolled, picked, and Discord display-name requests so live tests show the requested name and current lobby name.
+- Added synced-name settle and timeout diagnostics to reveal whether the server accepted the display-name change or kept the existing nickname.
+- Touched `src/hooks/useDabSyncSession.ts` and `changelog.md`.
+- Build/test: `npm.cmd run build` passed.
+
+## [2373] - 2026-04-28 22:36 - `codex/merge-ui-and-3d-world / Discord Name Restore Server Path`
+
+- Updated the sync server display-name assignment so `select_display_name` can restore the actor's authenticated Discord display name, not only names from the generated nickname pool.
+- Preserved duplicate-name protection and kept generated nickname selection behavior unchanged.
+- Touched `server/sync-server.ts` and `changelog.md`.
+- Build/test: `npm.cmd run build` passed.
+
+## [2372] - 2026-04-28 22:33 - `codex/merge-ui-and-3d-world / Discord Name Toggle`
+
+- Added a local lobby control that lets authenticated Discord users switch back to their Discord display name after rolling a generated nickname.
+- Reused the existing display-name sync event path so nickname rolls and Discord-name restores stay synchronized across the session.
+- Touched `src/hooks/useDabSyncSession.ts`, `src/screens/MainScreen.tsx`, `src/components/LobbyPanel.tsx`, `src/styles/global.css`, and `changelog.md`.
+- Build/test: `npm.cmd run build` passed.
+
 ## [2371] - 2026-04-28 22:27 - `codex/merge-ui-and-3d-world / Prefer Same-Origin Activity WebSocket`
 
 - Changed `VITE_SYNC_DIRECT_URL` so it is ignored inside Discord's Activity proxy host, keeping live Activity tests on the same-origin `/ws` websocket route.

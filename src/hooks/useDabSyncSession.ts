@@ -66,6 +66,37 @@ export function useDabSyncSession(options: UseDabSyncSessionOptions = {}) {
   const activeAuthAttemptIdRef = useRef<string | undefined>();
   const previousIdentitySourceRef = useRef<EmbeddedAppState["identitySource"]>();
   const previousSyncConnectionRef = useRef<DabSyncState["syncStatus"]["connection"]>();
+  const pendingDisplayNameRef = useRef<{ requestedName: string; source: "discord" | "picker" | "roll"; requestedLastEventAt?: string } | null>(null);
+  const pendingDisplayNameTimeoutRef = useRef<number | undefined>();
+
+  const queueDisplayNameDebug = useCallback((requestedName: string, source: "discord" | "picker" | "roll") => {
+    pendingDisplayNameRef.current = { requestedName, source, requestedLastEventAt: state.syncStatus.lastEventAt };
+
+    if (pendingDisplayNameTimeoutRef.current !== undefined) {
+      window.clearTimeout(pendingDisplayNameTimeoutRef.current);
+    }
+
+    pendingDisplayNameTimeoutRef.current = window.setTimeout(() => {
+      const pendingDisplayName = pendingDisplayNameRef.current;
+
+      if (!pendingDisplayName) {
+        return;
+      }
+
+      onDebugEvent?.({
+        level: "warn",
+        category: "profile",
+        label: "profile:name-settle:timeout",
+        detail: `${pendingDisplayName.source} requested "${pendingDisplayName.requestedName}", but no synced lobby name change was observed. If the sync server was just patched, restart dev:sync-server.`,
+      });
+    }, 2000);
+  }, [onDebugEvent, state.syncStatus.lastEventAt]);
+
+  useEffect(() => () => {
+    if (pendingDisplayNameTimeoutRef.current !== undefined) {
+      window.clearTimeout(pendingDisplayNameTimeoutRef.current);
+    }
+  }, []);
 
   useEffect(() => {
     if (sdkState.startupStage !== "sdk_ready" || sdkState.authStage !== "idle" || sdkState.startupError) {
@@ -487,6 +518,30 @@ export function useDabSyncSession(options: UseDabSyncSessionOptions = {}) {
   const lobbyState = useMemo(() => deriveLobbyState(state), [state]);
 
   useEffect(() => {
+    const pendingDisplayName = pendingDisplayNameRef.current;
+
+    if (!pendingDisplayName || !lobbyState.localUser) {
+      return;
+    }
+
+    if (state.syncStatus.lastEventAt === pendingDisplayName.requestedLastEventAt) {
+      return;
+    }
+
+    onDebugEvent?.({
+      level: lobbyState.localUser.displayName === pendingDisplayName.requestedName ? "info" : "warn",
+      category: "profile",
+      label: "profile:name-settled",
+      detail: `${pendingDisplayName.source} requested "${pendingDisplayName.requestedName}"; synced lobby name is "${lobbyState.localUser.displayName}".`,
+    });
+    pendingDisplayNameRef.current = null;
+    if (pendingDisplayNameTimeoutRef.current !== undefined) {
+      window.clearTimeout(pendingDisplayNameTimeoutRef.current);
+      pendingDisplayNameTimeoutRef.current = undefined;
+    }
+  }, [lobbyState.localUser?.displayName, lobbyState.localUser, onDebugEvent, state.syncStatus.lastEventAt]);
+
+  useEffect(() => {
     if (!state.timerConfig.autoJoinOnLoad || state.syncStatus.connection !== "connected" || !lobbyState.canJoinSession) {
       return;
     }
@@ -530,10 +585,17 @@ export function useDabSyncSession(options: UseDabSyncSessionOptions = {}) {
       avatarSeed: getAvatarSeedFromName(displayName),
     };
 
+    queueDisplayNameDebug(displayName, "roll");
+    onDebugEvent?.({
+      level: "info",
+      category: "profile",
+      label: "profile:name-roll:requested",
+      detail: `Rolling from "${currentDisplayName}" to "${displayName}".`,
+    });
     persistLocalProfile(nextProfile);
     syncClient.setLocalProfile(nextProfile);
     syncClient.send({ type: "roll_display_name", rollKey });
-  }, [lobbyState.localUser?.displayName, state.localProfile, state.users, syncClient]);
+  }, [lobbyState.localUser?.displayName, onDebugEvent, queueDisplayNameDebug, state.localProfile, state.users, syncClient]);
 
   const selectDisplayName = useCallback((displayName: string) => {
     const nextProfile = {
@@ -542,10 +604,49 @@ export function useDabSyncSession(options: UseDabSyncSessionOptions = {}) {
       avatarSeed: getAvatarSeedFromName(displayName),
     };
 
+    queueDisplayNameDebug(displayName, "picker");
+    onDebugEvent?.({
+      level: "info",
+      category: "profile",
+      label: "profile:name-picker:requested",
+      detail: `Selecting generated name "${displayName}".`,
+    });
     persistLocalProfile(nextProfile);
     syncClient.setLocalProfile(nextProfile);
-    syncClient.send({ type: "select_display_name", displayName });
-  }, [state.localProfile, syncClient]);
+    syncClient.send({ type: "select_display_name", displayName, source: "generated" });
+  }, [onDebugEvent, queueDisplayNameDebug, state.localProfile, syncClient]);
+
+  const useDiscordDisplayName = useCallback(() => {
+    const discordProfile = sdkState.localProfile;
+
+    if (!discordProfile?.displayName) {
+      onDebugEvent?.({
+        level: "warn",
+        category: "profile",
+        label: "profile:name-discord:missing",
+        detail: "Discord display name is not available yet.",
+      });
+      return;
+    }
+
+    const nextProfile = {
+      ...state.localProfile,
+      displayName: discordProfile.displayName,
+      avatarSeed: discordProfile.avatarSeed,
+      avatarUrl: discordProfile.avatarUrl,
+    };
+
+    queueDisplayNameDebug(discordProfile.displayName, "discord");
+    onDebugEvent?.({
+      level: "info",
+      category: "profile",
+      label: "profile:name-discord:requested",
+      detail: `Requesting Discord name "${discordProfile.displayName}" from current lobby name "${lobbyState.localUser?.displayName ?? state.localProfile.displayName}". avatar=${discordProfile.avatarUrl ? "yes" : "no"}.`,
+    });
+    persistLocalProfile(nextProfile);
+    syncClient.setLocalProfile(nextProfile);
+    syncClient.send({ type: "select_display_name", displayName: discordProfile.displayName, source: "discord" });
+  }, [lobbyState.localUser?.displayName, onDebugEvent, queueDisplayNameDebug, sdkState.localProfile, state.localProfile, syncClient]);
 
   const startReadyHold = useCallback(() => {
     syncClient.send({ type: "ready_hold_start" });
@@ -683,9 +784,11 @@ export function useDabSyncSession(options: UseDabSyncSessionOptions = {}) {
     lobbyState,
     sdkState,
     generatedDisplayNames,
+    discordDisplayName: sdkState.localProfile?.displayName,
     joinSession,
     rollDisplayName,
     selectDisplayName,
+    useDiscordDisplayName,
     startReadyHold,
     endReadyHold,
     setTimerDuration,

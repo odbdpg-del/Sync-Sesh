@@ -1857,6 +1857,19 @@ h2 {
 
 .roll-name-wrapper {
   position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.discord-name-button {
+  border-color: rgba(92, 255, 76, 0.34);
+  color: #ddffd8;
+}
+
+.discord-name-button:hover {
+  border-color: rgba(92, 255, 76, 0.62);
+  box-shadow: 0 0 12px rgba(92, 255, 76, 0.12);
 }
 
 .roll-name-menu {

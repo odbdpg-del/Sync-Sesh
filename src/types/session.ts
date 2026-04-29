@@ -279,7 +279,7 @@ export type SessionEvent =
   | { type: "join_session" }
   | { type: "leave_session" }
   | { type: "roll_display_name"; rollKey: string }
-  | { type: "select_display_name"; displayName: string }
+  | { type: "select_display_name"; displayName: string; source?: "generated" | "discord" }
   | { type: "ready_hold_start" }
   | { type: "ready_hold_end" }
   | { type: "set_timer_duration"; durationSeconds: number }
