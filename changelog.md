@@ -8,6 +8,43 @@ Entries must be in reverse chronological order. New entries go at the top, above
 
 Use a level-two heading for every entry so the editor can fold each change.
 
+## [2408] - 2026-04-29 00:39 - `codex/merge-ui-and-3d-world / Canonical Startup Console Log`
+
+- Shared startup console event formatting between the loading screen and debug console, then bridged load-in status changes into the debug console's canonical log store.
+- Categorized startup events for the debug console while keeping the loading screen's paced Matrix terminal as a visual presentation layer.
+- Updated the Matrix debug console curtain plan to record the startup log bridge decision.
+- Touched `src/components/LoadingScreen.tsx`, `src/screens/MainScreen.tsx`, `docs/matrix-debug-console-curtain-plan.md`, and `changelog.md`.
+- Build/test: `npm.cmd run build` passed.
+
+## [2407] - 2026-04-29 00:39 - `codex/merge-ui-and-3d-world / Matrix Curtain Free Height`
+
+- Changed the Matrix debug console curtain so releasing in the middle keeps the user-selected height instead of snapping to one fixed partial height.
+- Updated the curtain plan to describe arbitrary-height reveal behavior.
+- Touched `src/components/DebugConsoleFullscreen.tsx`, `docs/matrix-debug-console-curtain-plan.md`, and `changelog.md`.
+- Build/test: `npm.cmd run build` passed.
+
+## [2406] - 2026-04-29 00:36 - `codex/merge-ui-and-3d-world / Matrix Debug Console Curtain Phase 3`
+
+- Added draggable curtain reveal behavior to the full-screen Matrix debug console with snap-back, partial reveal, and hide thresholds.
+- Updated the full-screen console styles so revealed Sync Sesh UI areas can receive pointer input while the console remains interactive where it covers the screen.
+- Updated the Matrix debug console curtain plan with MDC-3 implementation status.
+- Touched `src/components/DebugConsoleFullscreen.tsx`, `src/styles/global.css`, `docs/matrix-debug-console-curtain-plan.md`, and `changelog.md`.
+- Build/test: `npm.cmd run build` passed.
+
+## [2405] - 2026-04-29 00:32 - `codex/merge-ui-and-3d-world / Matrix Debug Console Fullscreen Phase 2`
+
+- Added a full-screen Matrix debug console renderer with live logs, compact snapshot data, command input focus, and `float`/`fullscreen` mode switching.
+- Updated the Matrix debug console curtain plan with MDC-2 implementation status.
+- Touched `src/components/DebugConsoleFullscreen.tsx`, `src/screens/MainScreen.tsx`, `src/styles/global.css`, `docs/matrix-debug-console-curtain-plan.md`, and `changelog.md`.
+- Build/test: `npm.cmd run build` passed.
+
+## [2404] - 2026-04-29 00:28 - `codex/merge-ui-and-3d-world / Matrix Debug Console Modes Phase 1`
+
+- Added debug console display mode state, made the hidden `console` trigger select fullscreen mode, and added `float`/`fullscreen` debug commands.
+- Updated the Matrix debug console curtain plan with MDC-1 implementation status.
+- Touched `src/screens/MainScreen.tsx`, `docs/matrix-debug-console-curtain-plan.md`, and `changelog.md`.
+- Build/test: `npm.cmd run build` passed.
+
 ## [2403] - 2026-04-29 00:18 - `codex/merge-ui-and-3d-world / Header-Spanning Loading Speed Rail`
 
 - Moved the loading-screen speed control onto its own terminal header row so it spans the full Room Link Protocol window width.

@@ -29,8 +29,10 @@ interface TerminalLogEntry {
   status: StartupProgressStep["status"];
 }
 
-interface TrackedConsoleEvent {
+export interface StartupConsoleEvent {
   key: string;
+  label: string;
+  detail: string;
   line: string;
   progress: number;
   signature: string;
@@ -76,6 +78,47 @@ function getDiagnosticConsoleLine(diagnostic: LoadingScreenDiagnosticEvent, inde
   return `${getLogIndex(index)} > ${diagnostic.label} :: ${getStatusLabel(diagnostic.status ?? "complete")} :: ${diagnostic.detail} :: ${diagnostic.progress ?? 100}%`;
 }
 
+export function getStartupConsoleEvents(progress: StartupProgress, diagnostics: LoadingScreenDiagnosticEvent[] = []): StartupConsoleEvent[] {
+  const stepEvents = progress.steps.map((step, index) => ({
+    key: step.id,
+    label: getTerminalPhaseLabel(step.id),
+    detail: step.detail,
+    line: getConsoleLine(step, index),
+    progress: step.progress,
+    signature: `${step.status}|${step.progress}|${step.detail}`,
+    status: step.status,
+  }));
+  const bootGateStatus: StartupProgressStep["status"] = progress.isBlocking ? "active" : "complete";
+  const bootGateDetail = progress.blockingReason ?? "required systems online";
+
+  return [
+    ...stepEvents,
+    {
+      key: "boot_gate",
+      label: "BOOT_GATE",
+      detail: bootGateDetail,
+      line: `${getLogIndex(progress.steps.length)} > BOOT_GATE :: ${progress.isBlocking ? "WAIT" : "PASS"} :: ${bootGateDetail}`,
+      progress: progress.requiredProgress,
+      signature: `${bootGateStatus}|${progress.requiredProgress}|${bootGateDetail}`,
+      status: bootGateStatus,
+    },
+    ...diagnostics.map((diagnostic, index) => {
+      const status = diagnostic.status ?? "complete";
+      const diagnosticProgress = diagnostic.progress ?? 100;
+
+      return {
+        key: `diagnostic:${diagnostic.key}`,
+        label: diagnostic.label,
+        detail: diagnostic.detail,
+        line: getDiagnosticConsoleLine(diagnostic, progress.steps.length + 1 + index),
+        progress: diagnosticProgress,
+        signature: `${status}|${diagnosticProgress}|${diagnostic.detail}`,
+        status,
+      };
+    }),
+  ];
+}
+
 function getTerminalLogPrintDelay(speed: number) {
   if (speed === DEFAULT_LOADING_SPEED) {
     return DEFAULT_TERMINAL_LOG_PRINT_DELAY_MS;
@@ -102,40 +145,7 @@ export function LoadingScreen({ progress, diagnostics = [], isPaused = false, on
   const terminalLogIndexRef = useRef(0);
   const previousConsoleSignaturesRef = useRef<Map<string, string>>(new Map());
   const terminalLogPrintDelayMs = getTerminalLogPrintDelay(loadingSpeed);
-  const trackedConsoleEvents = useMemo<TrackedConsoleEvent[]>(() => {
-    const stepEvents = progress.steps.map((step, index) => ({
-      key: step.id,
-      line: getConsoleLine(step, index),
-      progress: step.progress,
-      signature: `${step.status}|${step.progress}|${step.detail}`,
-      status: step.status,
-    }));
-    const bootGateStatus: StartupProgressStep["status"] = progress.isBlocking ? "active" : "complete";
-    const bootGateDetail = progress.blockingReason ?? "required systems online";
-
-    return [
-      ...stepEvents,
-      {
-        key: "boot_gate",
-        line: `${getLogIndex(progress.steps.length)} > BOOT_GATE :: ${progress.isBlocking ? "WAIT" : "PASS"} :: ${bootGateDetail}`,
-        progress: progress.requiredProgress,
-        signature: `${bootGateStatus}|${progress.requiredProgress}|${bootGateDetail}`,
-        status: bootGateStatus,
-      },
-      ...diagnostics.map((diagnostic, index) => {
-        const status = diagnostic.status ?? "complete";
-        const diagnosticProgress = diagnostic.progress ?? 100;
-
-        return {
-          key: `diagnostic:${diagnostic.key}`,
-          line: getDiagnosticConsoleLine(diagnostic, progress.steps.length + 1 + index),
-          progress: diagnosticProgress,
-          signature: `${status}|${diagnosticProgress}|${diagnostic.detail}`,
-          status,
-        };
-      }),
-    ];
-  }, [diagnostics, progress.blockingReason, progress.isBlocking, progress.requiredProgress, progress.steps]);
+  const trackedConsoleEvents = useMemo(() => getStartupConsoleEvents(progress, diagnostics), [diagnostics, progress]);
   const matrixOverlayLines = terminalLogEntries.slice(-MATRIX_OVERLAY_LINE_COUNT).map((entry, index) => `${entry.line} // TRACE_${getLogIndex(index)}`);
 
   useEffect(() => {

@@ -1,8 +1,9 @@
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AdminPanel } from "../components/AdminPanel";
 import { AppHeader } from "../components/AppHeader";
+import { DebugConsoleFullscreen } from "../components/DebugConsoleFullscreen";
 import { DebugConsoleWindow } from "../components/DebugConsoleWindow";
-import { LoadingScreen, type LoadingScreenDiagnosticEvent } from "../components/LoadingScreen";
+import { getStartupConsoleEvents, LoadingScreen, type LoadingScreenDiagnosticEvent, type StartupConsoleEvent } from "../components/LoadingScreen";
 import { LobbyPanel } from "../components/LobbyPanel";
 import { SoundCloudDeckPanel } from "../components/SoundCloudDeckPanel";
 import { type SoundCloudPanelMode } from "../components/SoundCloudModeToggle";
@@ -38,6 +39,49 @@ const RenderingStackSpike = lazy(() =>
 const ThreeDModeShell = lazy(() =>
   import("../3d/ThreeDModeShell").then((module) => ({ default: module.ThreeDModeShell })),
 );
+
+type DebugConsoleDisplayMode = "fullscreen" | "float";
+
+const DEBUG_CONSOLE_COMMAND_HELP =
+  "Available commands: hide, clear, help, copy, snapshot, retry, float, fullscreen, filter all, filter auth, filter sdk, filter profile, filter sync, filter network, filter ui, filter command.";
+
+function getStartupDebugCategory(event: StartupConsoleEvent): DebugLogCategory {
+  const key = event.key.toLowerCase();
+
+  if (key.includes("discord_auth") || key.includes("discord_identity")) {
+    return "auth";
+  }
+
+  if (key.includes("discord") || key.includes("sdk")) {
+    return "sdk";
+  }
+
+  if (key.includes("profile")) {
+    return "profile";
+  }
+
+  if (key.includes("sync_transport") || key.includes("sync_server")) {
+    return "network";
+  }
+
+  if (key.includes("sync")) {
+    return "sync";
+  }
+
+  return "ui";
+}
+
+function getStartupDebugLevel(status: StartupProgressStep["status"]) {
+  if (status === "error") {
+    return "error";
+  }
+
+  if (status === "degraded") {
+    return "warn";
+  }
+
+  return "info";
+}
 
 function hasRenderingSpikeParam() {
   return new URLSearchParams(window.location.search).get("spike3d") === "1";
@@ -200,6 +244,7 @@ function getDiscordIdentityBannerMessage(sdkState: ReturnType<typeof useDabSyncS
 
 export function MainScreen() {
   const [isDebugConsoleOpen, setIsDebugConsoleOpen] = useState(false);
+  const [debugConsoleDisplayMode, setDebugConsoleDisplayMode] = useState<DebugConsoleDisplayMode>("float");
   const debugEventHandlerRef = useRef<((event: DebugConsoleEventInput) => void) | undefined>();
   const [isRenderingSpikeOpen, setIsRenderingSpikeOpen] = useState(hasRenderingSpikeParam);
   const [isThreeDModeOpen, setIsThreeDModeOpen] = useState(false);
@@ -219,6 +264,8 @@ export function MainScreen() {
   const [pausedStartupProgress, setPausedStartupProgress] = useState<StartupProgress | null>(null);
   const threeDJoinAttemptKeyRef = useRef<string | null>(null);
   const wasStartupBlockingRef = useRef(false);
+  const startupConsoleCaptureClosedRef = useRef(false);
+  const startupConsoleSignaturesRef = useRef<Map<string, string>>(new Map());
   const previousSoundCloudTrackUrlRef = useRef<Record<SoundCloudDeckId, string | null>>({ A: null, B: null });
   const previousSoundCloudWidgetReadyRef = useRef<Record<SoundCloudDeckId, boolean>>({ A: false, B: false });
   const previousSoundCloudErrorRef = useRef<Record<SoundCloudDeckId, string | null>>({ A: null, B: null });
@@ -264,7 +311,10 @@ export function MainScreen() {
   } = useDabSyncSession({
     onDebugEvent: handleDebugEvent,
   });
-  const openDebugConsole = useCallback(() => setIsDebugConsoleOpen(true), []);
+  const openDebugConsole = useCallback(() => {
+    setDebugConsoleDisplayMode("fullscreen");
+    setIsDebugConsoleOpen(true);
+  }, []);
   useDebugConsoleTrigger(openDebugConsole);
   const debugConsoleState = useDebugConsoleState({
     isOpen: isDebugConsoleOpen,
@@ -352,7 +402,27 @@ export function MainScreen() {
       debugConsoleState.appendCommandOutput({
         level: "info",
         label: "command:help",
-        detail: "Available commands: hide, clear, help, copy, snapshot, retry, filter all, filter auth, filter sdk, filter profile, filter sync, filter network, filter ui, filter command.",
+        detail: DEBUG_CONSOLE_COMMAND_HELP,
+      });
+      return;
+    }
+
+    if (normalizedCommand === "float") {
+      setDebugConsoleDisplayMode("float");
+      debugConsoleState.appendCommandOutput({
+        level: "info",
+        label: "command:float",
+        detail: "Debug console display mode set to floating window.",
+      });
+      return;
+    }
+
+    if (normalizedCommand === "fullscreen") {
+      setDebugConsoleDisplayMode("fullscreen");
+      debugConsoleState.appendCommandOutput({
+        level: "info",
+        label: "command:fullscreen",
+        detail: "Debug console display mode set to fullscreen.",
       });
       return;
     }
@@ -426,7 +496,7 @@ export function MainScreen() {
     debugConsoleState.appendCommandOutput({
       level: "warn",
       label: "command:unknown",
-      detail: `Unknown command: ${rawCommand}. Available now: hide, clear, help, copy, snapshot, retry, filter all, filter auth, filter sdk, filter profile, filter sync, filter network, filter ui, filter command.`,
+      detail: `Unknown command: ${rawCommand}. ${DEBUG_CONSOLE_COMMAND_HELP}`,
     });
   }, [debugConsoleState, retryDiscordProfile]);
   const countdownDisplay = useCountdownDisplay(state);
@@ -1056,6 +1126,34 @@ export function MainScreen() {
   ]);
   const loadingScreenProgress = isStartupDebugPaused && pausedStartupProgress ? pausedStartupProgress : startupProgress;
   const shouldShowLoadingScreen = startupProgress.isBlocking || isStartupDebugPaused || isStartupConsoleDraining || isStartupCompletionHeld;
+  useEffect(() => {
+    if (startupConsoleCaptureClosedRef.current) {
+      return;
+    }
+
+    const nextSignatures = new Map(startupConsoleSignaturesRef.current);
+    const startupConsoleEvents = getStartupConsoleEvents(loadingScreenProgress, loadingScreenDiagnostics);
+
+    for (const event of startupConsoleEvents) {
+      if (startupConsoleSignaturesRef.current.get(event.key) === event.signature) {
+        continue;
+      }
+
+      nextSignatures.set(event.key, event.signature);
+      debugConsoleState.appendLog({
+        level: getStartupDebugLevel(event.status),
+        category: getStartupDebugCategory(event),
+        label: `startup:${event.label.toLowerCase()}`,
+        detail: `${event.detail} :: ${event.progress}%`,
+      });
+    }
+
+    startupConsoleSignaturesRef.current = nextSignatures;
+
+    if (!loadingScreenProgress.isBlocking) {
+      startupConsoleCaptureClosedRef.current = true;
+    }
+  }, [debugConsoleState.appendLog, loadingScreenDiagnostics, loadingScreenProgress]);
 
   return (
     <div className="app-stage">
@@ -1205,14 +1303,25 @@ export function MainScreen() {
 
         <StatusFooter syncStatus={state.syncStatus} sdkState={sdkState} />
 
-        <DebugConsoleWindow
-          isOpen={isDebugConsoleOpen}
-          onClose={() => setIsDebugConsoleOpen(false)}
-          snapshot={debugConsoleState.snapshot}
-          logs={debugConsoleState.visibleLogs}
-          activeFilter={debugConsoleState.activeFilter}
-          onSubmitCommand={handleDebugConsoleCommand}
-        />
+        {debugConsoleDisplayMode === "float" ? (
+          <DebugConsoleWindow
+            isOpen={isDebugConsoleOpen}
+            onClose={() => setIsDebugConsoleOpen(false)}
+            snapshot={debugConsoleState.snapshot}
+            logs={debugConsoleState.visibleLogs}
+            activeFilter={debugConsoleState.activeFilter}
+            onSubmitCommand={handleDebugConsoleCommand}
+          />
+        ) : (
+          <DebugConsoleFullscreen
+            isOpen={isDebugConsoleOpen}
+            onClose={() => setIsDebugConsoleOpen(false)}
+            snapshot={debugConsoleState.snapshot}
+            logs={debugConsoleState.visibleLogs}
+            activeFilter={debugConsoleState.activeFilter}
+            onSubmitCommand={handleDebugConsoleCommand}
+          />
+        )}
 
         {isThreeDModeOpen ? (
           <Suspense fallback={<HiddenWorldLoadingPanel label="Loading 3D world" />}>
