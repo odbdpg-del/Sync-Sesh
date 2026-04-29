@@ -3,6 +3,7 @@ import type { DebugConsoleEventInput } from "../debug/debugConsole";
 import type { LocalProfile } from "../../types/session";
 import { buildDiscordLocalProfile, type DiscordGuildMemberLike, type DiscordUserLike } from "./user";
 import { buildAvatarSeed, getLocalProfile, persistLocalProfile } from "../session/localProfile";
+import { isOfflineModeEnabled } from "../startup/offlineMode";
 
 export interface EmbeddedAppState {
   enabled: boolean;
@@ -915,10 +916,30 @@ export async function retryDiscordIdentity(
 export async function initializeEmbeddedApp(options: InitializeEmbeddedAppOptions = {}): Promise<EmbeddedAppState> {
   const clientId = import.meta.env.VITE_DISCORD_CLIENT_ID;
   const enabled = import.meta.env.VITE_ENABLE_DISCORD_SDK === "true";
+  const isOfflineMode = isOfflineModeEnabled();
   const fallbackLocalProfile = getLocalProfile();
   let resolvedLocalProfile = fallbackLocalProfile;
   const attemptId = options.attemptId ?? createDiscordAuthAttemptId();
   const config = getDiscordAuthConfigSummary();
+
+  if (isOfflineMode) {
+    emitDebugEvent(options.onDebugEvent, {
+      level: "warn",
+      category: "sdk",
+      label: "sdk:init:offline",
+      detail: "Offline mode active; skipping Discord SDK, auth, and token exchange.",
+    });
+    return {
+      enabled: false,
+      buildId: FRONTEND_BUILD_ID,
+      attemptId,
+      localProfile: fallbackLocalProfile,
+      identitySource: "local_fallback",
+      authStage: "idle",
+      startupStage: "disabled",
+      startupError: "Offline mode is active for this browser session.",
+    };
+  }
 
   if (!enabled || !clientId) {
     emitDebugEvent(options.onDebugEvent, {

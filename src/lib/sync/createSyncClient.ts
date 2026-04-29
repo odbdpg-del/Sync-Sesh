@@ -1,6 +1,7 @@
 import { MockSyncClient } from "./mockSyncClient";
 import type { SyncClient } from "./types";
 import { getLocalProfile } from "../session/localProfile";
+import { isOfflineModeEnabled } from "../startup/offlineMode";
 import { WebSocketSyncClient } from "./wsSyncClient";
 
 function isDiscordProxyHost() {
@@ -74,6 +75,10 @@ function resolveSessionId() {
 }
 
 export function createSyncClient(): SyncClient {
+  if (isOfflineModeEnabled()) {
+    return new MockSyncClient(getLocalProfile());
+  }
+
   const mode = import.meta.env.VITE_SYNC_MODE ?? (import.meta.env.VITE_ENABLE_DISCORD_SDK === "true" ? "ws" : "mock");
   const localProfile = getLocalProfile();
 

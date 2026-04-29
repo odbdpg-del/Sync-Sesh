@@ -39,7 +39,7 @@ Notes:
 - The sync server falls back from `DISCORD_CLIENT_ID` to `VITE_DISCORD_CLIENT_ID`, and from `DISCORD_REDIRECT_URI` to `VITE_DISCORD_REDIRECT_URI`, but production setup should still provide the server-side variables explicitly.
 - Set `VITE_SYNC_MODE=ws` to use the local WebSocket sync server.
 - `VITE_SYNC_SESSION_ID` lets multiple browser windows join the same room.
-- In hosted environments, the frontend now derives the Discord token-exchange endpoint from `VITE_SYNC_SERVER_URL`, so your deployed sync server should be the service that exposes `/api/discord/token`.
+- In the current hosted Discord Activity deployment, `/api` is routed through Discord Activity URL mappings to the Cloudflare Worker token exchange endpoint. Render still handles frontend hosting and WebSocket sync.
 
 Recommended split:
 
@@ -62,26 +62,61 @@ Recommended split:
 3. Add the redirect URI in the Developer Portal exactly as configured in:
    - `VITE_DISCORD_REDIRECT_URI`
    - `DISCORD_REDIRECT_URI`
-4. Set `DISCORD_CLIENT_SECRET` only on the sync server.
-5. Make sure the deployed sync server used by `VITE_SYNC_SERVER_URL` exposes `POST /api/discord/token`.
+4. Set `DISCORD_CLIENT_SECRET` only on the backend that owns token exchange. In the current hosted deployment, that is the Cloudflare Worker.
+5. Make sure Discord Activity URL mappings send `/api` to the token Worker and `/ws` to the Render sync server.
 6. Start the Activity with `VITE_ENABLE_DISCORD_SDK=true`.
+
+## Current hosted Discord Activity deployment
+
+The current hosted architecture is documented in:
+
+- `docs/Discord-Auth/current-architecture.md`
+
+Current Discord Activity URL mappings:
+
+```text
+/      -> sync-sesh-front-test.onrender.com
+/api   -> sync-sesh-discord-token.syncseshtest.workers.dev/api
+/ws    -> sync-sesh-1.onrender.com
+/sync  -> sync-sesh-1.onrender.com
+```
+
+Render hosts the frontend and WebSocket sync backend. Cloudflare Worker handles Discord OAuth token exchange because Render outbound requests to Discord's OAuth token endpoint were blocked by Discord/Cloudflare during testing.
 
 ## Render sync server deployment
 
-The sync and Discord token-exchange server is ready to run as a Render Web Service.
+The sync server is ready to run as a Render Web Service. It still contains token-exchange routes for local/testing compatibility, but the current hosted Discord Activity maps `/api` to Cloudflare Worker rather than Render.
 
 1. Create a new Render Blueprint from `render.yaml`, or create a Node Web Service manually.
 2. Use `npm ci` as the build command.
 3. Use `npm run start:sync-server` as the start command.
-4. Set these Render environment variables:
+4. Set Discord OAuth Render variables only if you are testing Render token exchange directly:
    - `DISCORD_CLIENT_ID`
    - `DISCORD_CLIENT_SECRET`
    - `DISCORD_REDIRECT_URI=https://127.0.0.1`
 5. After deploy, open `https://your-service.onrender.com/health` and confirm `discord_oauth.missing` is empty.
 6. Set the frontend Activity env `VITE_SYNC_SERVER_URL` to the Render service origin, for example `https://your-service.onrender.com`.
-7. In the Discord Developer Portal Activity URL mappings, point `/api`, `/ws`, and `/sync` at the Render service host.
+7. In the Discord Developer Portal Activity URL mappings, point `/ws` and `/sync` at the Render service host.
 
 Inside Discord, Sync Sesh uses same-origin `/api/discord/token` and `/ws` paths through the Activity proxy mappings. The sync server also accepts `/api/token` as a compatibility alias for token exchange diagnostics. Outside Discord, `VITE_SYNC_SERVER_URL` can still point directly at the Render service for browser testing.
+
+## Cloudflare Worker token exchange
+
+The current hosted `/api` token exchange lives in:
+
+- `workers/discord-token-exchange`
+
+Deploy/update it with:
+
+```powershell
+npx.cmd wrangler deploy --config workers/discord-token-exchange/wrangler.jsonc
+```
+
+Update the Discord client secret with:
+
+```powershell
+npx.cmd wrangler secret put DISCORD_CLIENT_SECRET --config workers/discord-token-exchange/wrangler.jsonc
+```
 
 ## GitHub Pages legal pages
 

@@ -8,6 +8,247 @@ Entries must be in reverse chronological order. New entries go at the top, above
 
 Use a level-two heading for every entry so the editor can fold each change.
 
+## [2455] - 2026-04-29 16:55 - `codex/merge-ui-and-3d-world / Console2 Help Placeholder`
+
+- Changed the console2 command input placeholder from `try: fullscreen` to `help`.
+- Touched `src/components/DebugConsoleFullscreen2.tsx` and `changelog.md`.
+- Build/test: `npm.cmd run build` passed with the existing Vite large-chunk warning.
+
+## [2454] - 2026-04-29 16:34 - `codex/merge-ui-and-3d-world / Console2 Opacity Presets`
+
+- Added console2 visual presets for input-only, compact, and full mode controls.
+- Mapped console2 empty-input shortcuts to `1` for input-only, `2` for compact, and `3` for full.
+- Split the console2 command row background opacity from the content background opacity.
+- Kept `background 0-100` and `trans-text 0-100` from changing console2 height or display mode.
+- Touched `src/components/DebugConsoleFullscreen2.tsx`, `src/screens/MainScreen.tsx`, `src/styles/global.css`, and `changelog.md`.
+- Build/test: `npm.cmd run build` passed with the existing Vite large-chunk warning.
+
+## [2453] - 2026-04-29 16:25 - `codex/merge-ui-and-3d-world / Console2 Height Shortcuts`
+
+- Added console2 input shortcuts: `1` opens the compact one-third curtain and `2` opens the full curtain.
+- Limited the shortcuts to an empty command row so numeric command text still types normally.
+- Touched `src/components/DebugConsoleFullscreen2.tsx` and `changelog.md`.
+- Build/test: `npm.cmd run build` passed with the existing Vite large-chunk warning.
+
+## [2452] - 2026-04-29 16:23 - `codex/merge-ui-and-3d-world / Console2 Close Timer Stability`
+
+- Stabilized the console2 close-animation completion callback so parent renders cannot cancel the close timer indefinitely.
+- Cleared any stale close request when opening console2 again.
+- Touched `src/components/DebugConsoleFullscreen2.tsx`, `src/screens/MainScreen.tsx`, and `changelog.md`.
+- Build/test: `npm.cmd run build` passed with the existing Vite large-chunk warning.
+
+## [2451] - 2026-04-29 16:21 - `codex/merge-ui-and-3d-world / Console2 Reopen After Close`
+
+- Cleared the console2 close request after the reverse curtain animation completes.
+- Fixed repeated Backquote toggling so console2 can reopen after being closed.
+- Touched `src/screens/MainScreen.tsx` and `changelog.md`.
+- Build/test: `npm.cmd run build` passed with the existing Vite large-chunk warning.
+
+## [2450] - 2026-04-29 16:19 - `codex/merge-ui-and-3d-world / Console2 Focused Backquote Close`
+
+- Added focused-input Backquote handling for console2 when the command row is empty.
+- Pressing Backquote in an empty console2 command input now closes with the same reverse curtain animation instead of inserting a character.
+- Touched `src/components/DebugConsoleFullscreen2.tsx`, `src/screens/MainScreen.tsx`, and `changelog.md`.
+- Build/test: `npm.cmd run build` passed with the existing Vite large-chunk warning.
+
+## [2449] - 2026-04-29 16:16 - `codex/merge-ui-and-3d-world / Console2 Backquote Close`
+
+- Made Backquote toggle console2 closed when it is already open.
+- Added a reverse bottom-curtain close animation before unmounting the console.
+- Touched `src/components/DebugConsoleFullscreen2.tsx`, `src/screens/MainScreen.tsx`, and `changelog.md`.
+- Build/test: `npm.cmd run build` passed with the existing Vite large-chunk warning.
+
+## [2448] - 2026-04-29 16:14 - `codex/merge-ui-and-3d-world / Console2 Bottom-Anchored Curtain`
+
+- Anchored fullscreen2 to the bottom of the viewport so Backquote grows the input row upward instead of sliding from the top.
+- Switched the open-mode reset to layout timing so the console no longer paints the old fullscreen state before animating.
+- Touched `src/components/DebugConsoleFullscreen2.tsx`, `src/styles/global.css`, and `changelog.md`.
+- Build/test: `npm.cmd run build` passed with the existing Vite large-chunk warning.
+
+## [2447] - 2026-04-29 16:12 - `codex/merge-ui-and-3d-world / Console2 Bottom Curtain Open`
+
+- Added a bottom-curtain open animation for console2 input-only requests.
+- Prevented the previous fullscreen flash by starting the console below the viewport for a frame before animating to the `>` row.
+- Touched `src/components/DebugConsoleFullscreen2.tsx` and `changelog.md`.
+- Build/test: `npm.cmd run build` passed with the existing Vite large-chunk warning.
+
+## [2446] - 2026-04-29 16:10 - `codex/merge-ui-and-3d-world / Backquote Console2 Admin Command`
+
+- Reassigned Backquote from direct admin-panel toggling to opening console2 in `>` input-only mode.
+- Added an `admin` console command to open admin tools when available.
+- Added console2 open-mode reset props so shortcuts can reopen the background console in a specific mode.
+- Touched `src/components/DebugConsoleFullscreen2.tsx`, `src/screens/MainScreen.tsx`, and `changelog.md`.
+- Build/test: `npm.cmd run build` passed with the existing Vite large-chunk warning.
+
+## [2445] - 2026-04-29 16:06 - `codex/merge-ui-and-3d-world / Console2 Default`
+
+- Changed the default hidden `console` trigger to open the new fullscreen2 background console.
+- Added `console1` for the legacy fullscreen console and `console2` for the new background console command path.
+- Touched `src/screens/MainScreen.tsx` and `changelog.md`.
+- Build/test: `npm.cmd run build` passed with the existing Vite large-chunk warning.
+
+## [2444] - 2026-04-29 16:03 - `codex/merge-ui-and-3d-world / Background Console Input Height`
+
+- Tightened the fullscreen2 `>` input-only height to match the command row used in compact and full modes.
+- Kept the existing command row styling unchanged across all three fullscreen2 states.
+- Touched `src/components/DebugConsoleFullscreen2.tsx` and `changelog.md`.
+- Build/test: `npm.cmd run build` passed with the existing Vite large-chunk warning.
+
+## [2443] - 2026-04-29 16:02 - `codex/merge-ui-and-3d-world / Background Console Input Row Clamp`
+
+- Clamped fullscreen2 `>` input-only mode so no log row peeks above the command input at rest.
+- Kept the log content available during top-edge drag so pulling upward reveals the console normally.
+- Touched `src/styles/global.css` and `changelog.md`.
+- Build/test: `npm.cmd run build` passed with the existing Vite large-chunk warning.
+
+## [2442] - 2026-04-29 15:58 - `codex/merge-ui-and-3d-world / Background Console Input Edge`
+
+- Removed the extra visible glow from the fullscreen2 input-only drag edge.
+- Kept the content pulled down to the command row so the top of the input row acts as the drag edge in `>` mode.
+- Touched `src/components/DebugConsoleFullscreen2.tsx`, `src/styles/global.css`, and `changelog.md`.
+- Build/test: `npm.cmd run build` passed with the existing Vite large-chunk warning.
+
+## [2441] - 2026-04-29 15:56 - `codex/merge-ui-and-3d-world / Background Console Input Drag Reveal`
+
+- Fixed fullscreen2 input-only mode so dragging the top edge reveals console content instead of keeping the content row collapsed.
+- Preserved the same command input height and styling across input-only, compact, and full modes.
+- Touched `src/styles/global.css` and `changelog.md`.
+- Build/test: `npm.cmd run build` passed with the existing Vite large-chunk warning.
+
+## [2440] - 2026-04-29 15:54 - `codex/merge-ui-and-3d-world / Background Console Three-Way Toggle`
+
+- Added a three-way fullscreen2 prompt toggle: `>` for input-only, `^` for compact, and `<` for full background console.
+- Kept the fullscreen2 top edge draggable in all three modes so the console can be pulled open or pushed down from any state.
+- Touched `src/components/DebugConsoleFullscreen2.tsx`, `src/styles/global.css`, and `changelog.md`.
+- Build/test: `npm.cmd run build` passed with the existing Vite large-chunk warning.
+
+## [2439] - 2026-04-29 15:50 - `codex/merge-ui-and-3d-world / Background Console Curtain Rows`
+
+- Changed fullscreen2 console rows from fractional grid rows to fixed-height text rows.
+- Dragging the top edge down now crops the visible console content instead of squeezing the text rows together.
+- Touched `src/styles/global.css` and `changelog.md`.
+- Build/test: `npm.cmd run build` passed with the existing Vite large-chunk warning.
+
+## [2438] - 2026-04-29 15:47 - `codex/merge-ui-and-3d-world / Debug Console Command History`
+
+- Added shared debug console command history for recalling previous commands with Up and Down.
+- Wired the history through floating, fullscreen, compact, and background console inputs.
+- Touched `src/hooks/useDebugCommandHistory.ts`, `src/components/DebugConsoleWindow.tsx`, `src/components/DebugConsoleFullscreen.tsx`, `src/components/DebugConsoleFullscreen2.tsx`, `src/screens/MainScreen.tsx`, and `changelog.md`.
+- Build/test: `npm.cmd run build` passed with the existing Vite large-chunk warning.
+
+## [2437] - 2026-04-29 15:44 - `codex/merge-ui-and-3d-world / Background Console Text Opacity Command`
+
+- Added a `trans-text 0-100` console command for changing the background console text opacity.
+- Preserved the alternating line opacity variation except at 100%, where all console rows render fully solid.
+- Touched `src/components/DebugConsoleFullscreen2.tsx`, `src/screens/MainScreen.tsx`, `src/styles/global.css`, and `changelog.md`.
+- Build/test: `npm.cmd run build` passed with the existing Vite large-chunk warning.
+
+## [2436] - 2026-04-29 15:40 - `codex/merge-ui-and-3d-world / Background Console Opacity Command`
+
+- Added the `background` console command as the named entry point for the background-style console view.
+- Added `background 0-100` support to adjust the fullscreen2 background opacity while keeping the default at 82%.
+- Touched `src/components/DebugConsoleFullscreen2.tsx`, `src/screens/MainScreen.tsx`, `src/styles/global.css`, and `changelog.md`.
+- Build/test: `npm.cmd run build` passed with the existing Vite large-chunk warning.
+
+## [2435] - 2026-04-29 16:35 - `codex/merge-ui-and-3d-world / Background Console Fullscreen2`
+
+- Added a `fullscreen2` console view styled after the startup screen background console list.
+- Kept the view full-screen with no outer padding and added a top-edge curtain drag reveal for the dashboard behind it.
+- Added the `fullscreen2` command and renderer branch.
+- Touched `src/components/DebugConsoleFullscreen2.tsx`, `src/screens/MainScreen.tsx`, `src/styles/global.css`, and `changelog.md`.
+- Build/test: `npm.cmd run build` passed with the existing Vite large-chunk warning.
+
+## [2434] - 2026-04-29 16:25 - `codex/merge-ui-and-3d-world / Console Opens Compact`
+
+- Changed the hidden `console` trigger to open the full-screen console in compact mode by default.
+- Kept the explicit `fullscreen` command opening the expanded full console.
+- Touched `src/components/DebugConsoleFullscreen.tsx`, `src/screens/MainScreen.tsx`, and `changelog.md`.
+- Build/test: `npm.cmd run build` passed with the existing Vite large-chunk warning.
+
+## [2433] - 2026-04-29 16:20 - `codex/merge-ui-and-3d-world / Console Prompt Toggle Rotation`
+
+- Turned the console command prompt glyph into a two-way compact/fullscreen toggle.
+- Compact mode shows the normal `>` prompt, while full console mode rotates it upward with a transition and clicking toggles back.
+- Touched `src/components/DebugConsoleFullscreen.tsx`, `src/styles/global.css`, and `changelog.md`.
+- Build/test: `npm.cmd run build` passed with the existing Vite large-chunk warning.
+
+## [2432] - 2026-04-29 16:15 - `codex/merge-ui-and-3d-world / Compact Prompt Up Cue`
+
+- Rotated the compact console clickable `>` prompt so it points upward as the expand cue.
+- Preserved the existing prompt styling and click behavior.
+- Touched `src/styles/global.css` and `changelog.md`.
+- Build/test: `npm.cmd run build` passed with the existing Vite large-chunk warning.
+
+## [2431] - 2026-04-29 16:10 - `codex/merge-ui-and-3d-world / Compact Prompt Expand`
+
+- Made the compact console command prompt `>` clickable to expand back to full-screen console mode.
+- Preserved the prompt's visual styling so it does not look like a new button.
+- Touched `src/components/DebugConsoleFullscreen.tsx`, `src/styles/global.css`, and `changelog.md`.
+- Build/test: `npm.cmd run build` passed with the existing Vite large-chunk warning.
+
+## [2430] - 2026-04-29 16:05 - `codex/merge-ui-and-3d-world / Compact Resize Full Height`
+
+- Removed the fixed compact console max-height cap so the top edge can be dragged up to the full viewport height.
+- Kept the minimum compact height clamp to avoid collapsing the command strip.
+- Touched `src/components/DebugConsoleFullscreen.tsx` and `changelog.md`.
+- Build/test: `npm.cmd run build` passed with the existing Vite large-chunk warning.
+
+## [2429] - 2026-04-29 16:00 - `codex/merge-ui-and-3d-world / Compact Resize Smoothing`
+
+- Smoothed compact console edge resizing by updating the CSS height directly during pointer drag and committing React state on release.
+- Disabled shell transitions while compact resizing is active.
+- Touched `src/components/DebugConsoleFullscreen.tsx`, `src/styles/global.css`, and `changelog.md`.
+- Build/test: `npm.cmd run build` passed with the existing Vite large-chunk warning.
+
+## [2428] - 2026-04-29 15:50 - `codex/merge-ui-and-3d-world / Compact Console Edge Resize`
+
+- Added a compact-mode top-edge resize handle for dragging the console taller or shorter.
+- Kept compact mode docked to the bottom while preserving the log and command input layout.
+- Touched `src/components/DebugConsoleFullscreen.tsx`, `src/styles/global.css`, and `changelog.md`.
+- Build/test: `npm.cmd run build` passed with the existing Vite large-chunk warning.
+
+## [2427] - 2026-04-29 15:40 - `codex/merge-ui-and-3d-world / Compact Console Header Hide`
+
+- Hid the compact-mode console header, including status text and compact button, so the log window has more vertical room.
+- Kept the `compact` command as the way to expand back out of compact mode.
+- Touched `src/components/DebugConsoleFullscreen.tsx`, `src/styles/global.css`, and `changelog.md`.
+- Build/test: `npm.cmd run build` passed with the existing Vite large-chunk warning.
+
+## [2426] - 2026-04-29 15:30 - `codex/merge-ui-and-3d-world / Console Compact Mode`
+
+- Added a full-screen console compact toggle button and `compact` command.
+- Compact mode shrinks the console to a short bottom strip, hides the drag rail and close button, and keeps logs plus command input available.
+- Touched `src/components/DebugConsoleFullscreen.tsx`, `src/screens/MainScreen.tsx`, `src/styles/global.css`, and `changelog.md`.
+- Build/test: `npm.cmd run build` passed with the existing Vite large-chunk warning.
+
+## [2425] - 2026-04-29 15:15 - `codex/merge-ui-and-3d-world / Console Details Toggle`
+
+- Added a full-screen console details toggle next to the close button.
+- The toggle hides or shows the operator title and snapshot strip while keeping logs, command input, status, and close controls visible.
+- Touched `src/components/DebugConsoleFullscreen.tsx`, `src/styles/global.css`, and `changelog.md`.
+- Build/test: `npm.cmd run build` passed with the existing Vite large-chunk warning.
+
+## [2424] - 2026-04-29 15:00 - `codex/merge-ui-and-3d-world / Offline Startup Safety Trigger`
+
+- Added a hidden `offline` typed trigger that enables session-scoped offline mode and reloads once.
+- Offline mode skips Discord SDK/auth/token exchange and forces mock sync so local UI testing does not keep contacting remote services.
+- Touched `src/lib/startup/offlineMode.ts`, `src/lib/discord/embeddedApp.ts`, `src/lib/sync/createSyncClient.ts`, `src/screens/MainScreen.tsx`, and `changelog.md`.
+- Build/test: `npm.cmd run build` passed with the existing Vite large-chunk warning.
+
+## [2423] - 2026-04-29 14:45 - `codex/merge-ui-and-3d-world / Startup Overlay Goaway Trigger`
+
+- Added a hidden `goaway` typed trigger that hides the startup overlay while leaving startup work and diagnostics running underneath.
+- Logged the visual bypass into the debug console so blocked startup state remains visible while testing local UI.
+- Touched `src/screens/MainScreen.tsx` and `changelog.md`.
+- Build/test: `npm.cmd run build` passed with the existing Vite large-chunk warning.
+
+## [2422] - 2026-04-29 14:00 - `codex/merge-ui-and-3d-world / Console Close Button X`
+
+- Changed the full-screen debug console close control from a word label to a compact X icon.
+- Kept close behavior and keyboard/accessibility semantics untouched while updating the visual affordance.
+- Touched `src/components/DebugConsoleFullscreen.tsx` and `changelog.md`.
+- Build/test: not run in this pass.
+
 ## [2421] - 2026-04-29 12:04 - `codex/merge-ui-and-3d-world / Cloudflare Token Worker`
 
 - Added an isolated Cloudflare Worker for Discord OAuth token exchange, supporting `/api/discord/token`, `/api/token`, and `/health`.

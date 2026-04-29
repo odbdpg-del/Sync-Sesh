@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent, type UIEvent } from "react";
 import type { DebugLogEntry } from "../lib/debug/debugConsole";
 import { DEBUG_CONSOLE_SNAPSHOT_ROWS, formatDebugConsoleTimestamp, type DebugConsoleFilter, type DebugConsoleSnapshot } from "../hooks/useDebugConsoleState";
+import { useDebugCommandHistory } from "../hooks/useDebugCommandHistory";
 import { FloatingWindow } from "./FloatingWindow";
 
 interface DebugConsoleWindowProps {
@@ -8,6 +9,7 @@ interface DebugConsoleWindowProps {
   onClose: () => void;
   snapshot: DebugConsoleSnapshot;
   logs: DebugLogEntry[];
+  commandHistory: string[];
   activeFilter: DebugConsoleFilter;
   onSubmitCommand: (command: string) => void;
 }
@@ -31,11 +33,16 @@ function formatSnapshotValue(value: boolean | number | string | undefined) {
   return String(value);
 }
 
-export function DebugConsoleWindow({ isOpen, onClose, snapshot, logs, activeFilter, onSubmitCommand }: DebugConsoleWindowProps) {
+export function DebugConsoleWindow({ isOpen, onClose, snapshot, logs, commandHistory, activeFilter, onSubmitCommand }: DebugConsoleWindowProps) {
   const [commandValue, setCommandValue] = useState("");
   const [isSnapshotExpanded, setIsSnapshotExpanded] = useState(false);
   const [isAutoScrollPinned, setIsAutoScrollPinned] = useState(true);
   const logListRef = useRef<HTMLDivElement | null>(null);
+  const { handleCommandHistoryKeyDown, handleCommandValueChange } = useDebugCommandHistory({
+    commandHistory,
+    commandValue,
+    setCommandValue,
+  });
   const snapshotSummary = useMemo(
     () => `${snapshot.identitySource ?? "n/a"} | ${snapshot.syncConnection} | ${snapshot.authStage ?? "idle"}`,
     [snapshot.authStage, snapshot.identitySource, snapshot.syncConnection],
@@ -172,7 +179,8 @@ export function DebugConsoleWindow({ isOpen, onClose, snapshot, logs, activeFilt
               id="debug-console-command-input"
               type="text"
               value={commandValue}
-              onChange={(event) => setCommandValue(event.target.value)}
+              onChange={(event) => handleCommandValueChange(event.target.value)}
+              onKeyDown={handleCommandHistoryKeyDown}
               placeholder="Try: filter auth"
               aria-label="Debug console command input"
               autoComplete="off"

@@ -2,6 +2,7 @@ import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } fro
 import { AdminPanel } from "../components/AdminPanel";
 import { AppHeader } from "../components/AppHeader";
 import { DebugConsoleFullscreen } from "../components/DebugConsoleFullscreen";
+import { DebugConsoleFullscreen2, type Fullscreen2ConsoleMode } from "../components/DebugConsoleFullscreen2";
 import { DebugConsoleWindow } from "../components/DebugConsoleWindow";
 import { getStartupConsoleEvents, LoadingScreen, type LoadingScreenDiagnosticEvent, type StartupConsoleEvent } from "../components/LoadingScreen";
 import { LobbyPanel } from "../components/LobbyPanel";
@@ -18,7 +19,6 @@ import type {
   SoundCloudBoothGridPadId,
   SoundCloudBoothState,
 } from "../3d/soundCloudBooth";
-import { useAdminPanelHotkey } from "../hooks/useAdminPanelHotkey";
 import { useAppViewportControls } from "../hooks/useAppViewportControls";
 import { useCountdownDisplay } from "../hooks/useCountdownDisplay";
 import { useDebugConsoleState } from "../hooks/useDebugConsoleState";
@@ -29,6 +29,7 @@ import { useSoundCloudGridController } from "../hooks/useSoundCloudGridControlle
 import { useSoundCloudPlayer, type SoundCloudAcceptedBpmState } from "../hooks/useSoundCloudPlayer";
 import { useSoundEffects } from "../hooks/useSoundEffects";
 import type { DebugConsoleEventInput, DebugLogCategory } from "../lib/debug/debugConsole";
+import { enableOfflineMode } from "../lib/startup/offlineMode";
 import type { StartupProgress, StartupProgressStep } from "../lib/startup/startupProgress";
 import type { SyncConnectionState } from "../types/session";
 import backgroundVideo from "../../media/202587-918431513.mp4";
@@ -40,10 +41,16 @@ const ThreeDModeShell = lazy(() =>
   import("../3d/ThreeDModeShell").then((module) => ({ default: module.ThreeDModeShell })),
 );
 
-type DebugConsoleDisplayMode = "fullscreen" | "float";
+type DebugConsoleDisplayMode = "fullscreen" | "fullscreen2" | "float";
+const DEBUG_CONSOLE_COMMAND_HISTORY_LIMIT = 50;
 
 const DEBUG_CONSOLE_COMMAND_HELP =
-  "Available commands: hide, clear, help, copy, snapshot, retry, radio, float, fullscreen, filter all, filter auth, filter sdk, filter profile, filter sync, filter network, filter ui, filter command.";
+  "Available commands: hide, clear, help, admin, copy, snapshot, retry, radio, float, console1, console2, fullscreen, background, background 0-100, trans-text 0-100, compact, filter all, filter auth, filter sdk, filter profile, filter sync, filter network, filter ui, filter command.";
+const CONSOLE2_INPUT_COMMAND_BACKGROUND_OPACITY_PERCENT = 100;
+const CONSOLE2_COMPACT_BACKGROUND_OPACITY_PERCENT = 20;
+const CONSOLE2_COMPACT_TEXT_OPACITY_PERCENT = 75;
+const CONSOLE2_FULL_BACKGROUND_OPACITY_PERCENT = 100;
+const CONSOLE2_FULL_TEXT_OPACITY_PERCENT = 100;
 
 function getStartupDebugCategory(event: StartupConsoleEvent): DebugLogCategory {
   const key = event.key.toLowerCase();
@@ -245,6 +252,17 @@ function getDiscordIdentityBannerMessage(sdkState: ReturnType<typeof useDabSyncS
 export function MainScreen() {
   const [isDebugConsoleOpen, setIsDebugConsoleOpen] = useState(false);
   const [debugConsoleDisplayMode, setDebugConsoleDisplayMode] = useState<DebugConsoleDisplayMode>("float");
+  const [fullscreen2StartMode, setFullscreen2StartMode] = useState<Fullscreen2ConsoleMode>("full");
+  const [fullscreen2OpenRequestId, setFullscreen2OpenRequestId] = useState(0);
+  const [fullscreen2CloseRequestId, setFullscreen2CloseRequestId] = useState(0);
+  const [backgroundConsoleOpacityPercent, setBackgroundConsoleOpacityPercent] = useState(82);
+  const [backgroundConsoleCommandOpacityPercent, setBackgroundConsoleCommandOpacityPercent] = useState(
+    CONSOLE2_INPUT_COMMAND_BACKGROUND_OPACITY_PERCENT,
+  );
+  const [backgroundConsoleTextOpacityPercent, setBackgroundConsoleTextOpacityPercent] = useState(18);
+  const [shouldStartDebugConsoleCompact, setShouldStartDebugConsoleCompact] = useState(true);
+  const [debugCommandHistory, setDebugCommandHistory] = useState<string[]>([]);
+  const [isAdminOpen, setIsAdminOpen] = useState(false);
   const debugEventHandlerRef = useRef<((event: DebugConsoleEventInput) => void) | undefined>();
   const [isRenderingSpikeOpen, setIsRenderingSpikeOpen] = useState(hasRenderingSpikeParam);
   const [isThreeDModeOpen, setIsThreeDModeOpen] = useState(false);
@@ -260,6 +278,7 @@ export function MainScreen() {
   const [soundCloudDeckSyncLabels, setSoundCloudDeckSyncLabels] = useState<Record<SoundCloudDeckId, string>>({ A: "SYNC", B: "SYNC" });
   const [soundCloudBoothConsoleEvents, setSoundCloudBoothConsoleEvents] = useState<SoundCloudBoothConsoleEvent[]>([]);
   const [isStartupDebugPaused, setIsStartupDebugPaused] = useState(false);
+  const [isStartupOverlayHidden, setIsStartupOverlayHidden] = useState(false);
   const [isStartupConsoleDraining, setIsStartupConsoleDraining] = useState(false);
   const [isStartupCompletionHeld, setIsStartupCompletionHeld] = useState(false);
   const [pausedStartupProgress, setPausedStartupProgress] = useState<StartupProgress | null>(null);
@@ -312,17 +331,100 @@ export function MainScreen() {
   } = useDabSyncSession({
     onDebugEvent: handleDebugEvent,
   });
-  const openDebugConsole = useCallback(() => {
+  const applyConsole2ModePreset = useCallback((mode: Fullscreen2ConsoleMode) => {
+    if (mode === "input") {
+      setBackgroundConsoleCommandOpacityPercent(CONSOLE2_INPUT_COMMAND_BACKGROUND_OPACITY_PERCENT);
+      return;
+    }
+
+    if (mode === "compact") {
+      setBackgroundConsoleOpacityPercent(CONSOLE2_COMPACT_BACKGROUND_OPACITY_PERCENT);
+      setBackgroundConsoleCommandOpacityPercent(CONSOLE2_COMPACT_BACKGROUND_OPACITY_PERCENT);
+      setBackgroundConsoleTextOpacityPercent(CONSOLE2_COMPACT_TEXT_OPACITY_PERCENT);
+      return;
+    }
+
+    setBackgroundConsoleOpacityPercent(CONSOLE2_FULL_BACKGROUND_OPACITY_PERCENT);
+    setBackgroundConsoleCommandOpacityPercent(CONSOLE2_FULL_BACKGROUND_OPACITY_PERCENT);
+    setBackgroundConsoleTextOpacityPercent(CONSOLE2_FULL_TEXT_OPACITY_PERCENT);
+  }, []);
+  const openDebugConsole = useCallback((startMode: Fullscreen2ConsoleMode = "full") => {
+    applyConsole2ModePreset(startMode);
+    setFullscreen2CloseRequestId(0);
+    setFullscreen2StartMode(startMode);
+    setFullscreen2OpenRequestId((current) => current + 1);
+    setDebugConsoleDisplayMode("fullscreen2");
+    setIsDebugConsoleOpen(true);
+  }, [applyConsole2ModePreset]);
+  const closeDebugConsole2 = useCallback(() => {
+    setFullscreen2CloseRequestId((current) => current + 1);
+  }, []);
+  const handleConsole2CloseAnimationEnd = useCallback(() => {
+    setIsDebugConsoleOpen(false);
+    setFullscreen2CloseRequestId(0);
+  }, []);
+  useDebugConsoleTrigger(openDebugConsole);
+  useEffect(() => {
+    const handleBackquoteConsoleHotkey = (event: KeyboardEvent) => {
+      if (event.code !== "Backquote" || event.repeat || isEditableHotkeyTarget(event.target)) {
+        return;
+      }
+
+      event.preventDefault();
+
+      if (isDebugConsoleOpen && debugConsoleDisplayMode === "fullscreen2") {
+        closeDebugConsole2();
+        return;
+      }
+
+      openDebugConsole("input");
+    };
+
+    window.addEventListener("keydown", handleBackquoteConsoleHotkey);
+    return () => window.removeEventListener("keydown", handleBackquoteConsoleHotkey);
+  }, [closeDebugConsole2, debugConsoleDisplayMode, isDebugConsoleOpen, openDebugConsole]);
+  const openLegacyDebugConsole = useCallback(() => {
+    setShouldStartDebugConsoleCompact(false);
     setDebugConsoleDisplayMode("fullscreen");
     setIsDebugConsoleOpen(true);
   }, []);
-  useDebugConsoleTrigger(openDebugConsole);
+  useDebugConsoleTrigger(openLegacyDebugConsole, "console1");
   const debugConsoleState = useDebugConsoleState({
     isOpen: isDebugConsoleOpen,
     sdkState,
     syncStatus: state.syncStatus,
     localProfile: state.localProfile,
   });
+  const hideStartupOverlay = useCallback(() => {
+    if (isStartupOverlayHidden) {
+      return;
+    }
+
+    setIsStartupOverlayHidden(true);
+    debugConsoleState.appendLog({
+      level: "warn",
+      category: "ui",
+      label: "startup:overlay:hidden",
+      detail: "Startup overlay hidden by goaway command; startup work continues in the background.",
+    });
+  }, [debugConsoleState.appendLog, isStartupOverlayHidden]);
+  useDebugConsoleTrigger(hideStartupOverlay, "goaway");
+  const activateOfflineMode = useCallback(() => {
+    enableOfflineMode();
+    debugConsoleState.appendLog({
+      level: "warn",
+      category: "ui",
+      label: "startup:offline:enabled",
+      detail: "Offline mode enabled; reloading with Discord SDK and websocket sync disabled.",
+    });
+    window.setTimeout(() => window.location.reload(), 75);
+  }, [debugConsoleState.appendLog]);
+  useDebugConsoleTrigger(activateOfflineMode, "offline");
+  useEffect(() => {
+    if (!lobbyState.canUseAdminTools) {
+      setIsAdminOpen(false);
+    }
+  }, [lobbyState.canUseAdminTools]);
   useEffect(() => {
     debugEventHandlerRef.current = debugConsoleState.appendLog;
 
@@ -376,6 +478,11 @@ export function MainScreen() {
   }, [startupProgress.isBlocking]);
   const handleDebugConsoleCommand = useCallback((rawCommand: string) => {
     const normalizedCommand = rawCommand.trim().toLowerCase().replace(/\s+/g, " ");
+    const submittedCommand = rawCommand.trim();
+    setDebugCommandHistory((current) => {
+      const withoutAdjacentDuplicate = current[current.length - 1] === submittedCommand ? current : [...current, submittedCommand];
+      return withoutAdjacentDuplicate.slice(-DEBUG_CONSOLE_COMMAND_HISTORY_LIMIT);
+    });
     debugConsoleState.appendCommandInput(rawCommand);
 
     if (normalizedCommand === "hide") {
@@ -408,6 +515,25 @@ export function MainScreen() {
       return;
     }
 
+    if (normalizedCommand === "admin") {
+      if (!lobbyState.canUseAdminTools) {
+        debugConsoleState.appendCommandOutput({
+          level: "warn",
+          label: "command:admin",
+          detail: "Admin tools are unavailable for this user/session.",
+        });
+        return;
+      }
+
+      setIsAdminOpen(true);
+      debugConsoleState.appendCommandOutput({
+        level: "info",
+        label: "command:admin",
+        detail: "Admin tools opened.",
+      });
+      return;
+    }
+
     if (normalizedCommand === "float") {
       setDebugConsoleDisplayMode("float");
       debugConsoleState.appendCommandOutput({
@@ -418,12 +544,97 @@ export function MainScreen() {
       return;
     }
 
+    if (normalizedCommand === "console1") {
+      setShouldStartDebugConsoleCompact(false);
+      setDebugConsoleDisplayMode("fullscreen");
+      debugConsoleState.appendCommandOutput({
+        level: "info",
+        label: "command:console1",
+        detail: "Debug console display mode set to legacy fullscreen console.",
+      });
+      return;
+    }
+
+    if (normalizedCommand === "console2") {
+      openDebugConsole("full");
+      debugConsoleState.appendCommandOutput({
+        level: "info",
+        label: "command:console2",
+        detail: "Debug console display mode set to background console.",
+      });
+      return;
+    }
+
     if (normalizedCommand === "fullscreen") {
+      setShouldStartDebugConsoleCompact(false);
       setDebugConsoleDisplayMode("fullscreen");
       debugConsoleState.appendCommandOutput({
         level: "info",
         label: "command:fullscreen",
         detail: "Debug console display mode set to fullscreen.",
+      });
+      return;
+    }
+
+    if (normalizedCommand === "fullscreen2" || normalizedCommand === "background" || normalizedCommand.startsWith("background ")) {
+      const requestedOpacity = normalizedCommand.startsWith("background ") ? Number(normalizedCommand.split(" ")[1]) : undefined;
+
+      if (requestedOpacity !== undefined) {
+        if (!Number.isFinite(requestedOpacity)) {
+          debugConsoleState.appendCommandOutput({
+            level: "warn",
+            label: "command:background",
+            detail: "Use background 0-100 to set the background console opacity.",
+          });
+          return;
+        }
+
+        const nextOpacityPercent = Math.max(0, Math.min(100, Math.round(requestedOpacity)));
+        setBackgroundConsoleOpacityPercent(nextOpacityPercent);
+        debugConsoleState.appendCommandOutput({
+          level: "info",
+          label: "command:background",
+          detail: `Background console opacity set to ${nextOpacityPercent}%.`,
+        });
+        return;
+      }
+
+      openDebugConsole("full");
+      debugConsoleState.appendCommandOutput({
+        level: "info",
+        label: normalizedCommand === "fullscreen2" ? "command:fullscreen2" : "command:background",
+        detail: "Debug console display mode set to background console.",
+      });
+      return;
+    }
+
+    if (normalizedCommand.startsWith("trans-text")) {
+      const requestedOpacity = normalizedCommand === "trans-text" ? undefined : Number(normalizedCommand.split(" ")[1]);
+
+      if (requestedOpacity === undefined || !Number.isFinite(requestedOpacity)) {
+        debugConsoleState.appendCommandOutput({
+          level: "warn",
+          label: "command:trans-text",
+          detail: "Use trans-text 0-100 to set the background console text opacity.",
+        });
+        return;
+      }
+
+      const nextOpacityPercent = Math.max(0, Math.min(100, Math.round(requestedOpacity)));
+      setBackgroundConsoleTextOpacityPercent(nextOpacityPercent);
+      debugConsoleState.appendCommandOutput({
+        level: "info",
+        label: "command:trans-text",
+        detail: `Background console text opacity set to ${nextOpacityPercent}%.`,
+      });
+      return;
+    }
+
+    if (normalizedCommand === "compact") {
+      debugConsoleState.appendCommandOutput({
+        level: "info",
+        label: "command:compact",
+        detail: "Full-screen debug console compact mode toggled.",
       });
       return;
     }
@@ -510,10 +721,9 @@ export function MainScreen() {
       label: "command:unknown",
       detail: `Unknown command: ${rawCommand}. ${DEBUG_CONSOLE_COMMAND_HELP}`,
     });
-  }, [debugConsoleState, retryDiscordProfile]);
+  }, [debugConsoleState, lobbyState.canUseAdminTools, openDebugConsole, retryDiscordProfile]);
   const countdownDisplay = useCountdownDisplay(state);
   const { playCue, playSecretCodeStep } = useSoundEffects(state, lobbyState, countdownDisplay);
-  const { isOpen: isAdminOpen, setIsOpen: setIsAdminOpen } = useAdminPanelHotkey(lobbyState.canUseAdminTools);
   const frontEndSoundCloudPlayer = useSoundCloudPlayer({
     waveformBarCount: soundCloudWaveformBarCount,
   });
@@ -1139,6 +1349,7 @@ export function MainScreen() {
   ]);
   const loadingScreenProgress = isStartupDebugPaused && pausedStartupProgress ? pausedStartupProgress : startupProgress;
   const shouldShowLoadingScreen = startupProgress.isBlocking || isStartupDebugPaused || isStartupConsoleDraining || isStartupCompletionHeld;
+  const shouldRenderLoadingScreen = shouldShowLoadingScreen && !isStartupOverlayHidden;
   useEffect(() => {
     if (startupConsoleCaptureClosedRef.current) {
       return;
@@ -1180,7 +1391,7 @@ export function MainScreen() {
         <div className="app-background-stage-atmosphere" />
       </div>
 
-      {shouldShowLoadingScreen ? (
+      {shouldRenderLoadingScreen ? (
         <LoadingScreen
           progress={loadingScreenProgress}
           diagnostics={loadingScreenDiagnostics}
@@ -1322,15 +1533,34 @@ export function MainScreen() {
             onClose={() => setIsDebugConsoleOpen(false)}
             snapshot={debugConsoleState.snapshot}
             logs={debugConsoleState.visibleLogs}
+            commandHistory={debugCommandHistory}
             activeFilter={debugConsoleState.activeFilter}
+            onSubmitCommand={handleDebugConsoleCommand}
+          />
+        ) : debugConsoleDisplayMode === "fullscreen2" ? (
+          <DebugConsoleFullscreen2
+            isOpen={isDebugConsoleOpen}
+            openRequestId={fullscreen2OpenRequestId}
+            closeRequestId={fullscreen2CloseRequestId}
+            startMode={fullscreen2StartMode}
+            backgroundOpacityPercent={backgroundConsoleOpacityPercent}
+            commandBackgroundOpacityPercent={backgroundConsoleCommandOpacityPercent}
+            textOpacityPercent={backgroundConsoleTextOpacityPercent}
+            logs={debugConsoleState.visibleLogs}
+            commandHistory={debugCommandHistory}
+            onCloseAnimationEnd={handleConsole2CloseAnimationEnd}
+            onRequestClose={closeDebugConsole2}
+            onApplyModePreset={applyConsole2ModePreset}
             onSubmitCommand={handleDebugConsoleCommand}
           />
         ) : (
           <DebugConsoleFullscreen
             isOpen={isDebugConsoleOpen}
+            startCompact={shouldStartDebugConsoleCompact}
             onClose={() => setIsDebugConsoleOpen(false)}
             snapshot={debugConsoleState.snapshot}
             logs={debugConsoleState.visibleLogs}
+            commandHistory={debugCommandHistory}
             activeFilter={debugConsoleState.activeFilter}
             onSubmitCommand={handleDebugConsoleCommand}
           />
