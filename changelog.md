@@ -8,6 +8,70 @@ Entries must be in reverse chronological order. New entries go at the top, above
 
 Use a level-two heading for every entry so the editor can fold each change.
 
+## [2464] - 2026-04-29 17:46 - `codex/merge-ui-and-3d-world / Minimized Background Console`
+
+- Kept the full-screen startup background console visible when the Room Link Protocol window is minimized into its widget.
+- Raised the minimized widget above the background console layer and updated the visible startup window version to `v2464`.
+- Touched `src/components/LoadingScreen.tsx`, `src/styles/global.css`, and `changelog.md`.
+- Build/test: `npm.cmd run build` passed with the existing Vite large-chunk warning.
+
+## [2463] - 2026-04-29 17:43 - `codex/merge-ui-and-3d-world / Room Link Inline Toggle`
+
+- Moved the Room Link Protocol version and minimize toggle into the visible required-progress block beside the percent readout.
+- Updated the visible startup window version to `v2463`.
+- Touched `src/components/LoadingScreen.tsx`, `src/styles/global.css`, and `changelog.md`.
+- Build/test: `npm.cmd run build` passed with the existing Vite large-chunk warning.
+
+## [2462] - 2026-04-29 17:39 - `codex/merge-ui-and-3d-world / Room Link Window Version Control`
+
+- Added `v2462` to the Room Link Protocol window controls using the changelog entry id as the visible version number.
+- Moved the minimize and expand controls into an explicit top-right control strip so the button is visible in expanded and minimized startup windows.
+- Touched `src/components/LoadingScreen.tsx`, `src/styles/global.css`, and `changelog.md`.
+- Build/test: `npm.cmd run build` passed with the existing Vite large-chunk warning.
+
+## [2461] - 2026-04-29 17:36 - `codex/merge-ui-and-3d-world / Room Link Minimized Widget`
+
+- Added a minimize mode for the startup Room Link Protocol window with a compact loading-bars widget and one expand control.
+- Kept separate drag and resize positions for expanded and minimized startup windows, with all-edge and corner resizing in both modes.
+- Restored the dark blurred startup backdrop for expanded mode and removed it in minimized mode so the background console remains visible and interactive.
+- Touched `src/components/LoadingScreen.tsx`, `src/styles/global.css`, and `changelog.md`.
+- Build/test: `npm.cmd run build` passed with the existing Vite large-chunk warning.
+
+## [2460] - 2026-04-29 17:18 - `codex/merge-ui-and-3d-world / Startup Background Console Contrast`
+
+- Increased startup background console log text opacity from faint overlay values to near-solid green terminal text.
+- Touched `src/styles/global.css` and `changelog.md`.
+- Build/test: not run yet.
+
+## [2459] - 2026-04-29 17:11 - `codex/merge-ui-and-3d-world / Startup Window Drag`
+
+- Made the startup room-link protocol title bar draggable so the window can be moved around the viewport.
+- Started startup window movement directly from the title-bar pointer down so the marked top band drags reliably.
+- Kept the startup speed slider interactive instead of treating slider drags as window movement.
+- Touched `src/components/LoadingScreen.tsx`, `src/styles/global.css`, and `changelog.md`.
+- Build/test: `npm.cmd run build` passed with the existing Vite large-chunk warning.
+
+## [2458] - 2026-04-29 17:05 - `codex/merge-ui-and-3d-world / Startup Scrollbar Theme`
+
+- Hid the default startup room-link window scrollbar until the window is user-resized.
+- Added green/black terminal-themed scrollbars for resized startup overflow and the startup feed.
+- Moved startup shell scrolling to an inner content layer so right-side resize handles sit outside the scrollbar lane.
+- Touched `src/components/LoadingScreen.tsx`, `src/styles/global.css`, and `changelog.md`.
+- Build/test: `npm.cmd run build` passed with the existing Vite large-chunk warning.
+
+## [2457] - 2026-04-29 17:02 - `codex/merge-ui-and-3d-world / Startup Resize Handles`
+
+- Made the startup room-link protocol window resizable from all edges and corners.
+- Added viewport clamps so the startup window stays usable while resizing.
+- Touched `src/components/LoadingScreen.tsx`, `src/styles/global.css`, and `changelog.md`.
+- Build/test: `npm.cmd run build` passed with the existing Vite large-chunk warning.
+
+## [2456] - 2026-04-29 16:59 - `codex/merge-ui-and-3d-world / Startup Text Scale`
+
+- Reduced text inside the startup room-link protocol window by about 20%.
+- Touched `src/styles/global.css` and `changelog.md`.
+- Build/test: `npm.cmd run build` passed with the existing Vite large-chunk warning.
+
 ## [2455] - 2026-04-29 16:55 - `codex/merge-ui-and-3d-world / Console2 Help Placeholder`
 
 - Changed the console2 command input placeholder from `try: fullscreen` to `help`.
