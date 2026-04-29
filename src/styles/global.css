@@ -4927,8 +4927,11 @@ h2 {
   position: fixed;
   inset: 0;
   z-index: 1400;
+  width: 100vw;
+  height: 100vh;
+  height: 100dvh;
   overflow: hidden;
-  padding: clamp(12px, 2vw, 28px);
+  padding: 0 clamp(12px, 2vw, 28px) 0 0;
   color: #caffd2;
   font-family: var(--font-mono);
   pointer-events: none;
@@ -4948,17 +4951,20 @@ h2 {
 .debug-console-fullscreen-shell {
   position: relative;
   z-index: 1;
-  width: min(1440px, 100%);
-  height: 100%;
+  width: 100%;
+  height: calc(100vh - var(--debug-console-curtain-offset, 0px));
+  height: calc(100dvh - var(--debug-console-curtain-offset, 0px));
+  max-height: calc(100vh - var(--debug-console-curtain-offset, 0px));
+  max-height: calc(100dvh - var(--debug-console-curtain-offset, 0px));
   min-height: 0;
-  margin: 0 auto;
+  overflow: hidden;
+  margin: var(--debug-console-curtain-offset, 0px) auto 0;
   display: grid;
   grid-template-rows: auto auto auto minmax(0, 1fr) auto;
   gap: 12px;
   border: 1px solid rgba(64, 255, 95, 0.56);
   pointer-events: auto;
-  transform: translateY(var(--debug-console-curtain-offset, 0));
-  transition: transform 180ms ease;
+  transition: height 180ms ease, max-height 180ms ease, margin-top 180ms ease;
   background:
     linear-gradient(rgba(38, 255, 82, 0.035) 1px, transparent 1px),
     linear-gradient(90deg, rgba(38, 255, 82, 0.03) 1px, transparent 1px),
@@ -5236,10 +5242,14 @@ h2 {
 
 @media (max-width: 760px) {
   .debug-console-fullscreen {
-    padding: 8px;
+    padding: 0 8px 0 0;
   }
 
   .debug-console-fullscreen-shell {
+    height: calc(100vh - var(--debug-console-curtain-offset, 0px));
+    height: calc(100dvh - var(--debug-console-curtain-offset, 0px));
+    max-height: calc(100vh - var(--debug-console-curtain-offset, 0px));
+    max-height: calc(100dvh - var(--debug-console-curtain-offset, 0px));
     padding: 12px;
   }
 

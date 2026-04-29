@@ -39,7 +39,7 @@ This is a debug/operator feature, not a normal player-facing workflow.
 Recommendation:
 
 - Start with a top grab rail that drags the console downward.
-- Let dropped curtain height persist, with only near-top snap-back and near-bottom hide behavior.
+- Let dropped curtain height persist, with only near-bottom hide behavior.
 - Add `float`/`fullscreen` commands before drag mechanics.
 - Bridge startup logs later only if we need exact parity between the loading terminal and debug console.
 
@@ -248,8 +248,7 @@ Let the user drag the full-screen Matrix console downward to reveal the Sync Ses
 - Use pointer events to drag the console down.
 - Clamp movement between fully covering the app and mostly hidden.
 - On release, settle to sensible states:
-  - near top: full-screen
-  - middle: user-selected dropped height
+  - near top/middle: user-selected dropped height
   - near bottom: hidden or close
 - Ensure covered areas still intercept pointer events.
 - Ensure revealed areas can be clicked/used in Sync Sesh.
@@ -274,7 +273,7 @@ Status: `[x]` completed.
 
 - Added local curtain offset and drag state to `DebugConsoleFullscreen`.
 - Added a Matrix-styled drag rail at the top of the full-screen console.
-- Added pointer capture based drag handling with snap-back, arbitrary-height reveal, and hide thresholds.
+- Added pointer capture based drag handling with arbitrary-height reveal and hide thresholds.
 - Moved the full-screen Matrix visual treatment onto the draggable shell so revealed Sync Sesh UI areas are visible.
 - Updated pointer-event behavior so the revealed area can receive clicks while the console shell remains interactive.
 - Verification: `npm.cmd run build` passed.
@@ -308,8 +307,7 @@ Implementation details:
 - Use `pointerdown` on the rail to start dragging.
 - On `pointermove`, set `curtainOffset` to the clamped drag distance from `0` to `window.innerHeight`.
 - On `pointerup`/`pointercancel`, settle:
-  - `< 22%` viewport height: `0` full-screen.
-  - `22%` to `< 70%`: keep the user-selected dropped height.
+  - `< 70%`: keep the user-selected dropped height.
   - `>= 70%`: call `onClose()`.
 - While offset is greater than `0`, move the entire console down with `transform: translateY(var(--debug-console-curtain-offset))`.
 - The fixed overlay root should allow pointer events only on the moved console panel, so the revealed app area above it remains clickable:
@@ -340,7 +338,7 @@ Recommended MDC-3 patch order:
 Manual checks after build:
 
 - Type `console`; full-screen console opens at offset `0`.
-- Drag the rail downward a small amount and release; it snaps back full-screen.
+- Drag the rail downward a small amount and release; it keeps the dropped height.
 - Drag to the middle and release; it keeps the dropped height.
 - Click the revealed Sync Sesh UI above the curtain; it receives clicks.
 - Continue typing commands in the partially revealed console.

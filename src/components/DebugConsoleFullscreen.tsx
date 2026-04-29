@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent, type PointerEvent, type UIEvent } from "react";
+import { createPortal } from "react-dom";
 import { DEBUG_CONSOLE_SNAPSHOT_ROWS, formatDebugConsoleTimestamp, type DebugConsoleFilter, type DebugConsoleSnapshot } from "../hooks/useDebugConsoleState";
 import type { DebugLogEntry } from "../lib/debug/debugConsole";
 
@@ -21,7 +22,6 @@ const FULLSCREEN_SNAPSHOT_KEYS: Array<keyof DebugConsoleSnapshot> = [
   "localProfileDisplayName",
   "instanceId",
 ];
-const SNAP_BACK_OFFSET_RATIO = 0.22;
 const HIDE_CURTAIN_OFFSET_RATIO = 0.7;
 
 interface CurtainDragState {
@@ -139,11 +139,6 @@ export function DebugConsoleFullscreen({ isOpen, onClose, snapshot, logs, active
     const viewportHeight = Math.max(1, window.innerHeight);
     const offsetRatio = curtainOffsetRef.current / viewportHeight;
 
-    if (offsetRatio < SNAP_BACK_OFFSET_RATIO) {
-      updateCurtainOffset(0);
-      return;
-    }
-
     if (offsetRatio >= HIDE_CURTAIN_OFFSET_RATIO) {
       onClose();
       return;
@@ -157,8 +152,8 @@ export function DebugConsoleFullscreen({ isOpen, onClose, snapshot, logs, active
     return null;
   }
 
-  return (
-    <section className="debug-console-fullscreen" role="dialog" aria-modal="true" aria-label="Matrix debug console">
+  return createPortal(
+    <section className="debug-console-fullscreen" role="dialog" aria-modal="true" aria-label="Console">
       <div className="debug-console-fullscreen-shell" data-dragging={isDraggingCurtain ? "true" : "false"} style={shellStyle}>
         <div className="debug-console-fullscreen-noise" aria-hidden="true" />
         <button
@@ -175,7 +170,7 @@ export function DebugConsoleFullscreen({ isOpen, onClose, snapshot, logs, active
         <header className="debug-console-fullscreen-header">
           <div>
             <p>SYNC_SESH_OPERATOR</p>
-            <h2>Matrix debug console</h2>
+            <h2>Console</h2>
           </div>
           <div className="debug-console-fullscreen-status" aria-label="Debug console status">
             <span>{isAutoScrollPinned ? "LIVE" : "PAUSED"}</span>
@@ -241,6 +236,7 @@ export function DebugConsoleFullscreen({ isOpen, onClose, snapshot, logs, active
           <button type="submit">run</button>
         </form>
       </div>
-    </section>
+    </section>,
+    document.body,
   );
 }

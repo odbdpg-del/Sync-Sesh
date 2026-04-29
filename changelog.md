@@ -8,6 +8,52 @@ Entries must be in reverse chronological order. New entries go at the top, above
 
 Use a level-two heading for every entry so the editor can fold each change.
 
+## [2415] - 2026-04-29 00:57 - `codex/merge-ui-and-3d-world / Body Portal Console Overlay`
+
+- Rendered the full-screen console through a body portal so it spans the actual browser viewport instead of inheriting Sync Sesh app container positioning on wide screens.
+- Touched `src/components/DebugConsoleFullscreen.tsx` and `changelog.md`.
+- Build/test: `npm.cmd run build` passed.
+
+## [2414] - 2026-04-29 00:56 - `codex/merge-ui-and-3d-world / Console Top Left Edge`
+
+- Removed the outer top and left padding from the full-screen console so the shell begins at the viewport's top-left edge.
+- Updated viewport height calculations to match the new padding shape.
+- Touched `src/styles/global.css` and `changelog.md`.
+- Build/test: `npm.cmd run build` passed.
+
+## [2413] - 2026-04-29 00:55 - `codex/merge-ui-and-3d-world / Free Console Height Adjustment`
+
+- Removed the near-top snap-back behavior from the Matrix console curtain so small height adjustments stay where the user drops them.
+- Updated the curtain plan to document free height adjustment with only the near-bottom hide threshold remaining.
+- Touched `src/components/DebugConsoleFullscreen.tsx`, `docs/matrix-debug-console-curtain-plan.md`, and `changelog.md`.
+- Build/test: `npm.cmd run build` passed.
+
+## [2412] - 2026-04-29 00:54 - `codex/merge-ui-and-3d-world / Full Width Console Title`
+
+- Expanded the full-screen console shell to the full viewport width and shortened the title to `Console`.
+- Touched `src/components/DebugConsoleFullscreen.tsx`, `src/styles/global.css`, and `changelog.md`.
+- Build/test: `npm.cmd run build` passed.
+
+## [2411] - 2026-04-29 00:52 - `codex/merge-ui-and-3d-world / Matrix Console Bottom Edge`
+
+- Removed the outer bottom gap from the full-screen Matrix console so the green shell border reaches the bottom of the browser viewport.
+- Touched `src/styles/global.css` and `changelog.md`.
+- Build/test: `npm.cmd run build` passed.
+
+## [2410] - 2026-04-29 00:51 - `codex/merge-ui-and-3d-world / Resizing Matrix Curtain`
+
+- Changed Matrix console curtain dragging from translating the whole console to shrinking the console height from the top.
+- Kept the command input pinned to the bottom of the viewport-sized console while revealing Sync Sesh above it.
+- Touched `src/styles/global.css` and `changelog.md`.
+- Build/test: `npm.cmd run build` passed.
+
+## [2409] - 2026-04-29 00:48 - `codex/merge-ui-and-3d-world / Viewport Matrix Console`
+
+- Locked the full-screen Matrix debug console to the browser viewport with `100dvh` sizing so it no longer follows the taller Sync Sesh page height.
+- Kept the command input inside the bottom grid row of the viewport-sized console while the log area remains the internal scroller.
+- Touched `src/styles/global.css` and `changelog.md`.
+- Build/test: `npm.cmd run build` passed.
+
 ## [2408] - 2026-04-29 00:39 - `codex/merge-ui-and-3d-world / Canonical Startup Console Log`
 
 - Shared startup console event formatting between the loading screen and debug console, then bridged load-in status changes into the debug console's canonical log store.
