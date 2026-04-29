@@ -32,7 +32,7 @@ Notes:
 
 - `VITE_ENABLE_DISCORD_SDK` defaults to `false` for browser-only local work.
 - `VITE_DISCORD_CLIENT_ID` is read by the frontend Discord Activity runtime.
-- `VITE_DISCORD_REDIRECT_URI` is read by the frontend when it requests authorization from Discord.
+- `VITE_DISCORD_REDIRECT_URI` is retained for diagnostics and local parity, but the live frontend authorize request does not send `redirect_uri`.
 - `DISCORD_CLIENT_ID` and `DISCORD_CLIENT_SECRET` are read by the sync server for OAuth code exchange.
 - `DISCORD_CLIENT_SECRET` is read only by the sync server for OAuth token exchange. Do not expose it publicly.
 - `DISCORD_REDIRECT_URI` should match the placeholder Redirect URI configured in the Discord Developer Portal exactly. Discord's Activity guide uses `https://127.0.0.1`.
@@ -65,6 +65,23 @@ Recommended split:
 4. Set `DISCORD_CLIENT_SECRET` only on the sync server.
 5. Make sure the deployed sync server used by `VITE_SYNC_SERVER_URL` exposes `POST /api/discord/token`.
 6. Start the Activity with `VITE_ENABLE_DISCORD_SDK=true`.
+
+## Render sync server deployment
+
+The sync and Discord token-exchange server is ready to run as a Render Web Service.
+
+1. Create a new Render Blueprint from `render.yaml`, or create a Node Web Service manually.
+2. Use `npm ci` as the build command.
+3. Use `npm run start:sync-server` as the start command.
+4. Set these Render environment variables:
+   - `DISCORD_CLIENT_ID`
+   - `DISCORD_CLIENT_SECRET`
+   - `DISCORD_REDIRECT_URI=https://127.0.0.1`
+5. After deploy, open `https://your-service.onrender.com/health` and confirm `discord_oauth.missing` is empty.
+6. Set the frontend Activity env `VITE_SYNC_SERVER_URL` to the Render service origin, for example `https://your-service.onrender.com`.
+7. In the Discord Developer Portal Activity URL mappings, point `/api`, `/ws`, and `/sync` at the Render service host.
+
+Inside Discord, Sync Sesh uses same-origin `/api/discord/token` and `/ws` paths through the Activity proxy mappings. The sync server also accepts `/api/token` as a compatibility alias for token exchange diagnostics. Outside Discord, `VITE_SYNC_SERVER_URL` can still point directly at the Render service for browser testing.
 
 ## GitHub Pages legal pages
 

@@ -125,7 +125,7 @@ If the clean auth flow works in Sync Sesh, mark those probes as obsolete or remo
 
 Each chunk should be small enough for one Codex turn.
 
-### Chunk 1: Add A Clean Auth Helper
+### [x] Chunk 1: Add A Clean Auth Helper
 
 Goal:
 
@@ -146,7 +146,7 @@ Success criteria:
 - helper is isolated and easy to inspect
 - no app behavior changes beyond using the new helper if this chunk wires it in
 
-### Chunk 2: Wire Silent Then Consent Authorization
+### [x] Chunk 2: Wire Silent Then Consent Authorization
 
 Goal:
 
@@ -283,7 +283,7 @@ Implement Chunk 2 from `docs/bugs/bug_1_discord_auth_recovery_plan.md`.
 Wire Sync Sesh Discord auth to use the new `requestCleanDiscordAuthorization()` helper with a silent-first, consent-fallback flow. The default path should try `prompt: "none"` first, then retry once with `prompt: "consent"` only when silent authorization fails at the authorize step. Preserve token exchange, `authenticate()`, profile creation, subscriptions, pre-auth best-effort profile ordering, endpoint resolution, local fallback behavior, and scopes. Add safe debug events for `auth:silent:start/success/failed` and `auth:consent:start/success/failed`. Update `changelog.md` and run `npm.cmd run build`.
 ```
 
-### Chunk 3: Remove Frontend Redirect URI From Authorize
+### [x] Chunk 3: Remove Frontend Redirect URI From Authorize
 
 Goal:
 
@@ -364,7 +364,7 @@ Implement Chunk 3 from `docs/bugs/bug_1_discord_auth_recovery_plan.md`.
 Verify and clean up the authorize request shape after Chunk 2. Ensure no active Sync Sesh frontend `sdk.commands.authorize(...)` payload includes `redirect_uri`, while preserving backend token exchange use of `DISCORD_REDIRECT_URI` and invalid-grant diagnostics. Update any misleading debug text so redirect URI is described as backend exchange configuration, not a frontend authorize field. If the auth harness still sends `redirect_uri`, either align it with the clean repo authorize shape or clearly leave it as historical diagnostic code with no effect on the live path. Keep changes tightly scoped, update `changelog.md`, and run `npm.cmd run build`.
 ```
 
-### Chunk 4: Simplify Discord Identity Startup Ordering
+### [x] Chunk 4: Simplify Discord Identity Startup Ordering
 
 Goal:
 
@@ -384,7 +384,91 @@ Success criteria:
 - no participant/current-user SDK probes happen before the first auth attempt
 - local fallback still protects non-Discord or failed-auth sessions
 
-### Chunk 5: Normalize Token Route Behavior
+#### Chunk 4 Prep
+
+Current behavior:
+
+- `initializeEmbeddedApp(...)` waits for `sdk.ready()`.
+- Immediately after `sdk:ready:success`, it emits `profile:best-effort:start`.
+- It calls `resolveBestEffortDiscordProfile(sdk)` before the main OAuth path.
+- If a best-effort profile is found, it persists that profile and emits `onProfileUpdate(..., "participant_discord")` before auth.
+- Only after that does it call `resolveDiscordIdentityWithFallbackPrompt(...)`.
+- If auth fails, the catch block returns:
+  - `identitySource: "participant_discord"` when a best-effort profile was found
+  - otherwise `identitySource: "local_fallback"`
+
+Target behavior:
+
+- `sdk.ready()` remains the first runtime gate.
+- The first identity action after `sdk:ready:success` should be the auth path:
+  - `resolveDiscordIdentityWithFallbackPrompt(...)`
+  - silent `prompt: "none"`
+  - consent `prompt: "consent"` fallback
+  - token exchange
+  - `authenticate()`
+- Best-effort participant/current-user profile resolution should run only if authenticated Discord identity fails.
+- If auth succeeds, do not run best-effort profile resolution in the startup path.
+- If auth fails and best-effort succeeds, return participant identity with the auth error preserved.
+- If auth fails and best-effort also fails or misses, return local fallback with the auth error preserved.
+- Preserve existing cleanup behavior from authenticated identity subscriptions.
+
+Suggested implementation shape:
+
+1. Move the `bestEffortDiscordProfile` and `bestEffortProfileError` logic below the `resolveDiscordIdentityWithFallbackPrompt(...)` catch path.
+2. In the auth `try` block, return authenticated Discord identity exactly as it does now.
+3. In the auth `catch` block:
+   - capture the safe auth failure message
+   - emit or preserve the existing auth failure state
+   - then run best-effort profile resolution
+   - emit `profile:best-effort:start/success/miss/failed` only after auth failure
+4. If best-effort succeeds:
+   - persist it
+   - emit `onProfileUpdate(bestEffortDiscordProfile, "participant_discord")`
+   - return `identitySource: "participant_discord"`
+   - keep `startupStage: "auth"` and `authError` set to the auth failure
+5. If best-effort misses or fails:
+   - persist local fallback as today
+   - return `identitySource: "local_fallback"`
+   - keep `startupStage: "auth"` and `authError` set to the auth failure
+
+Debug event expectations:
+
+- Healthy auth startup should no longer show `profile:best-effort:*` before `auth:silent:start`.
+- Successful authenticated startup should not need any `profile:best-effort:*` events.
+- Failed auth followed by participant fallback should show:
+  - auth failure events first
+  - then `profile:best-effort:start`
+  - then `profile:best-effort:success`
+- Failed auth with no participant fallback should show:
+  - auth failure events first
+  - then `profile:best-effort:start`
+  - then `profile:best-effort:miss` or `profile:best-effort:failed`
+
+Files likely to change:
+
+- `src/lib/discord/embeddedApp.ts`
+- `changelog.md`
+
+Do not change in this chunk:
+
+- clean authorize helper behavior
+- silent/consent prompt behavior
+- token exchange endpoint resolution
+- Render or Discord URL mappings
+- scopes
+- token storage behavior
+- debug console rendering
+- auth harness, static probe, or embed diagnostics cleanup
+
+Chunk 4 implementation prompt:
+
+```md
+Implement Chunk 4 from `docs/bugs/bug_1_discord_auth_recovery_plan.md`.
+
+Simplify Discord identity startup ordering so the main auth path runs immediately after `sdk.ready()` and before any best-effort participant/current-user profile lookup. Preserve the existing silent-then-consent auth flow, token exchange, `authenticate()`, authenticated profile creation, subscription cleanup, local fallback behavior, scopes, and endpoint resolution. If auth succeeds, do not run best-effort profile resolution during startup. If auth fails, then run best-effort profile resolution as a fallback; return `participant_discord` when that succeeds and `local_fallback` when it misses/fails, while preserving the auth failure in `authError`/`startupError`. Update `changelog.md` and run `npm.cmd run build`.
+```
+
+### [x] Chunk 5: Normalize Token Route Behavior
 
 Goal:
 
@@ -403,7 +487,86 @@ Success criteria:
 - local development still works
 - backend logs show token exchange requests clearly
 
-### Chunk 6: Manual Discord Verification
+#### Chunk 5 Prep
+
+Current behavior:
+
+- Frontend token exchange uses `resolveDiscordAuthEndpoint()`.
+- Inside Discord proxy hosts, `resolveDiscordAuthEndpoint()` returns same-origin `/api/discord/token`.
+- When `VITE_SYNC_SERVER_URL` is unset, `"auto"`, local-while-remote, or invalid, token exchange falls back to `/api/discord/token`.
+- Outside Discord, a valid non-local `VITE_SYNC_SERVER_URL` becomes an absolute `/api/discord/token` URL on that origin.
+- Websocket sync inside Discord uses same-origin `/ws`.
+- `ensureDiscordActivityUrlMappingsPatched()` includes explicit mapping hints for `/ws`, `/sync`, and `/api` when `VITE_SYNC_SERVER_URL` is a non-local host.
+- The sync server currently handles:
+  - `OPTIONS /api/discord/token`
+  - `POST /api/discord/token`
+- The sync server does not yet handle:
+  - `OPTIONS /api/token`
+  - `POST /api/token`
+
+Target behavior:
+
+- Keep `/api/discord/token` as the canonical Sync Sesh token route.
+- Add `/api/token` as a compatibility alias to match the clean repo shape and simplify Render/portal experiments.
+- Keep both routes using the same `handleDiscordTokenExchange(...)` implementation.
+- Keep CORS preflight behavior identical for both token routes.
+- Do not change frontend endpoint resolution unless a concrete bug is found.
+- Do not switch the Discord embedded Activity to an absolute Render URL from inside Discord.
+- Keep `/ws` as the preferred Activity websocket route and `/sync` as compatibility.
+
+Render cutover gate:
+
+- Do not change Discord Developer Portal URL mappings until:
+  1. Render service is deployed.
+  2. `https://<render-service>.onrender.com/health` returns `ok: true`.
+  3. `discord_oauth.missing` is empty.
+  4. The frontend build/env points `VITE_SYNC_SERVER_URL` at the Render service origin.
+
+When the gate is met, tell the user to update Discord Developer Portal mappings:
+
+```text
+Root mapping:
+/      -> current frontend host, unless frontend also moved
+
+Proxy path mappings:
+/api   -> <render-service>.onrender.com
+/ws    -> <render-service>.onrender.com
+/sync  -> <render-service>.onrender.com
+```
+
+Important mapping note:
+
+- Use the Render host as the target, not the full `/api/discord/token` URL.
+- Discord applies the prefix path. For example, `/api/discord/token` should proxy through the `/api` mapping.
+
+Suggested implementation:
+
+1. Add a small `isDiscordTokenExchangePath(pathname)` helper in `server/sync-server.ts`.
+2. Return `true` for `/api/discord/token` and `/api/token`.
+3. Use that helper for both the `OPTIONS` and `POST` token route checks.
+4. Keep `handleDiscordTokenExchange(...)` unchanged except for any route label logging if useful.
+5. Update README only if the alias needs to be mentioned for operators.
+6. Update `changelog.md`.
+7. Run `npm.cmd run build`.
+
+Do not change in this chunk:
+
+- clean authorize helper behavior
+- silent/consent prompt behavior
+- Discord identity startup ordering
+- best-effort profile fallback
+- Render blueprint shape unless the route alias requires docs
+- Discord Developer Portal mappings directly; the user will do that after the Render gate is met
+
+Chunk 5 implementation prompt:
+
+```md
+Implement Chunk 5 from `docs/bugs/bug_1_discord_auth_recovery_plan.md`.
+
+Normalize token route behavior for the Render migration while keeping `/api/discord/token` as the canonical route. Add `/api/token` as a backend compatibility alias using the same token exchange handler and identical OPTIONS preflight behavior. Preserve frontend endpoint resolution, same-origin `/api/discord/token` inside Discord, `/ws` websocket behavior, clean auth prompt behavior, identity startup ordering, scopes, and token storage behavior. Update docs only where useful for Render operators, update `changelog.md`, and run `npm.cmd run build`. Do not tell the user to change Discord Developer Portal mappings until the Render health/config gate is met.
+```
+
+### [~] Chunk 6: Manual Discord Verification
 
 Goal:
 
@@ -429,7 +592,156 @@ Success criteria:
 - `authenticate()` succeeds
 - Sync Sesh uses real Discord identity instead of local fallback
 
-### Chunk 7: Cleanup Obsolete Bug 1 Diagnostics
+#### Chunk 6 Prep
+
+This is a manual verification phase. It should not make app code changes unless the live test finds a concrete bug.
+
+Preflight checklist before changing Discord Developer Portal mappings:
+
+1. Render service is deployed from the current branch.
+2. Render service uses:
+   - build command: `npm ci`
+   - start command: `npm run start:sync-server`
+3. Render env contains:
+   - `DISCORD_CLIENT_ID`
+   - `DISCORD_CLIENT_SECRET`
+   - `DISCORD_REDIRECT_URI=https://127.0.0.1`
+4. Open:
+   - `https://<render-service>.onrender.com/health`
+5. Confirm health JSON:
+   - `ok: true`
+   - `discord_oauth.has_client_id: true`
+   - `discord_oauth.has_client_secret: true`
+   - `discord_oauth.redirect_uri: "https://127.0.0.1"`
+   - `discord_oauth.missing: []`
+6. Frontend deploy/env points:
+   - `VITE_SYNC_SERVER_URL=https://<render-service>.onrender.com`
+   - `VITE_ENABLE_DISCORD_SDK=true`
+   - `VITE_DISCORD_CLIENT_ID=<same Discord application id>`
+
+Only after the preflight passes, tell the user to change Discord Developer Portal mappings:
+
+```text
+Root mapping:
+/      -> current frontend host, unless frontend also moved
+
+Proxy path mappings:
+/api   -> <render-service>.onrender.com
+/ws    -> <render-service>.onrender.com
+/sync  -> <render-service>.onrender.com
+```
+
+Portal mapping notes:
+
+- Do not enter `https://`.
+- Do not include `/api/discord/token` in the target.
+- Keep `/api` as a prefix and the Render host as the target.
+- Add `/ws` if it is missing.
+- Keep `/sync` for compatibility even though `/ws` is preferred.
+
+Discord Activity test matrix:
+
+1. DM launch with an account that has already granted consent.
+2. DM launch after revoking/removing app consent if practical.
+3. Small test server launch with the app owner/developer account.
+4. Small test server launch with a second account if available.
+
+For each row:
+
+1. Launch the Activity.
+2. Open the hidden console by typing `console`.
+3. Run `clear`.
+4. Run `snapshot`.
+5. Run `filter auth`.
+6. Click `Retry Discord Identity` or run `retry`.
+7. Wait until auth settles.
+8. Run `filter all`.
+9. Run `copy` and preserve the copied log if the result is unexpected.
+
+Expected success log sequence:
+
+```text
+sdk:ready:success
+auth:silent:start
+auth:silent:success
+auth:token-exchange:start
+auth:token-exchange:success
+auth:authenticate:start
+auth:authenticate:success
+identity:authenticated_discord
+sync:connect:success
+```
+
+Expected first-consent sequence:
+
+```text
+sdk:ready:success
+auth:silent:start
+auth:silent:failed
+auth:consent:start
+auth:consent:success
+auth:token-exchange:start
+auth:token-exchange:success
+auth:authenticate:start
+auth:authenticate:success
+identity:authenticated_discord
+sync:connect:success
+```
+
+Expected loading-screen signals:
+
+- `DISCORD_RUNTIME` reaches ready or degraded.
+- `DISCORD_AUTH` reaches ready or degraded.
+- `SYNC_TRANSPORT` reaches connected.
+- The app leaves the loading screen once required sync/lobby steps complete.
+
+Failure interpretation:
+
+- `auth:consent:success` appears but `auth:token-exchange:failed` follows:
+  - inspect Render logs for `/api/discord/token`
+  - check `DISCORD_CLIENT_SECRET`
+  - check `DISCORD_REDIRECT_URI`
+  - check `/api` portal mapping
+- no token exchange request reaches Render:
+  - check Discord `/api` mapping target
+  - check Activity is using the expected app/client id
+  - check frontend `VITE_SYNC_SERVER_URL`
+- sync never connects but auth succeeds:
+  - check `/ws` mapping
+  - check Render websocket service is alive
+  - keep `/sync` as fallback mapping
+- auth succeeds but identity remains fallback:
+  - capture `snapshot` and `filter auth` output before changing code
+
+Evidence to record in this doc after testing:
+
+```text
+Row:
+Date/time:
+Frontend host:
+Render host:
+Account/context:
+Portal mappings changed: yes/no
+Permission prompt shown: yes/no
+Final identity source:
+Token exchange reached Render: yes/no
+Sync connected: yes/no
+Left loading screen: yes/no
+Key auth lines:
+Notes:
+```
+
+Chunk 6 completion rule:
+
+- Mark Chunk 6 `[x]` only after at least one Discord Activity launch reaches:
+  - authenticated Discord identity
+  - successful token exchange through Render
+  - successful sync connection through Render
+  - app leaves the loading screen
+
+Do not start Chunk 7 cleanup until Chunk 6 is marked `[x]`.
+
+### [ ] Chunk 7: Cleanup Obsolete Bug 1 Diagnostics
 
 Goal:
 

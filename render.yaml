@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: sync-sesh-sync
+    env: node
+    plan: free
+    buildCommand: npm ci
+    startCommand: npm run start:sync-server
+    healthCheckPath: /health
+    envVars:
+      - key: DISCORD_CLIENT_ID
+        sync: false
+      - key: DISCORD_CLIENT_SECRET
+        sync: false
+      - key: DISCORD_REDIRECT_URI
+        value: https://127.0.0.1

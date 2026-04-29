@@ -441,10 +441,14 @@ async function handleDiscordTokenExchange(request: import("node:http").IncomingM
   });
 }
 
+function isDiscordTokenExchangePath(pathname: string) {
+  return pathname === "/api/discord/token" || pathname === "/api/token";
+}
+
 const httpServer = createServer((request, response) => {
   const pathname = request.url ? new URL(request.url, "http://localhost").pathname : "/";
 
-  if (request.method === "OPTIONS" && pathname === "/api/discord/token") {
+  if (request.method === "OPTIONS" && isDiscordTokenExchangePath(pathname)) {
     response.writeHead(204, {
       "Access-Control-Allow-Origin": "*",
       "Access-Control-Allow-Headers": "Content-Type",
@@ -467,7 +471,7 @@ const httpServer = createServer((request, response) => {
     return;
   }
 
-  if (request.method === "POST" && pathname === "/api/discord/token") {
+  if (request.method === "POST" && isDiscordTokenExchangePath(pathname)) {
     void handleDiscordTokenExchange(request, response);
     return;
   }

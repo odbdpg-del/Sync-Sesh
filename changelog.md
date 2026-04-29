@@ -8,6 +8,29 @@ Entries must be in reverse chronological order. New entries go at the top, above
 
 Use a level-two heading for every entry so the editor can fold each change.
 
+## [2418] - 2026-04-29 08:35 - `codex/merge-ui-and-3d-world / Render Token Route Alias`
+
+- Added `/api/token` as a backend compatibility alias for the Discord token exchange while keeping `/api/discord/token` canonical.
+- Reused the same token exchange handler and CORS preflight behavior for both token routes.
+- Updated Render/operator docs and marked Chunk 5 complete in the Discord auth recovery plan.
+- Touched `server/sync-server.ts`, `README.md`, `docs/bugs/bug_1_discord_auth_recovery_plan.md`, and `changelog.md`.
+- Build/test: `npm.cmd run build` passed with the existing Vite large-chunk warning.
+
+## [2417] - 2026-04-29 08:24 - `codex/merge-ui-and-3d-world / Discord Auth Before Best Effort Profile`
+
+- Moved best-effort Discord participant/current-user profile resolution out of the pre-auth startup path so full auth runs immediately after `sdk.ready()`.
+- Kept best-effort participant identity as an auth-failure fallback while preserving the auth error and existing local fallback behavior.
+- Marked Chunk 4 complete in the Discord auth recovery plan.
+- Touched `src/lib/discord/embeddedApp.ts`, `docs/bugs/bug_1_discord_auth_recovery_plan.md`, and `changelog.md`.
+- Build/test: `npm.cmd run build` passed with the existing Vite large-chunk warning.
+
+## [2416] - 2026-04-29 08:18 - `codex/merge-ui-and-3d-world / Render Sync Server Deployment`
+
+- Added a Render web-service blueprint and sync-server start script for deploying the Discord token-exchange and websocket backend on Render.
+- Updated README deployment guidance for Render env vars, health checks, Discord Activity URL mappings, and the clean auth redirect behavior.
+- Touched `package.json`, `render.yaml`, `README.md`, and `changelog.md`.
+- Build/test: `npm.cmd run build` passed with the existing Vite large-chunk warning.
+
 ## [2415] - 2026-04-29 00:57 - `codex/merge-ui-and-3d-world / Body Portal Console Overlay`
 
 - Rendered the full-screen console through a body portal so it spans the actual browser viewport instead of inheriting Sync Sesh app container positioning on wide screens.

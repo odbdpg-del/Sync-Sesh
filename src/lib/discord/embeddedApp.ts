@@ -1026,51 +1026,6 @@ export async function initializeEmbeddedApp(options: InitializeEmbeddedAppOption
     detail: `instance ${sdk.instanceId ?? "n/a"}`,
   });
 
-  emitDebugEvent(options.onDebugEvent, {
-    level: "info",
-    category: "profile",
-    label: "profile:best-effort:start",
-    detail: "Attempting participant/current-user Discord profile resolution.",
-  });
-
-  let bestEffortDiscordProfile: LocalProfile | undefined;
-  let bestEffortProfileError: unknown;
-
-  try {
-    bestEffortDiscordProfile = await resolveBestEffortDiscordProfile(sdk);
-  } catch (error) {
-    bestEffortProfileError = error;
-  }
-
-  if (bestEffortProfileError) {
-    emitDebugEvent(options.onDebugEvent, {
-      level: "error",
-      category: "profile",
-      label: "profile:best-effort:failed",
-      detail: bestEffortProfileError instanceof Error ? bestEffortProfileError.message : "Best-effort profile resolution failed.",
-    });
-  } else if (bestEffortDiscordProfile) {
-    emitDebugEvent(options.onDebugEvent, {
-      level: "info",
-      category: "profile",
-      label: "profile:best-effort:success",
-      detail: bestEffortDiscordProfile.displayName,
-    });
-  } else {
-    emitDebugEvent(options.onDebugEvent, {
-      level: "warn",
-      category: "profile",
-      label: "profile:best-effort:miss",
-      detail: "No participant/current-user Discord profile was available.",
-    });
-  }
-
-  if (bestEffortDiscordProfile) {
-    resolvedLocalProfile = bestEffortDiscordProfile;
-    persistLocalProfile(bestEffortDiscordProfile);
-    options.onProfileUpdate?.(bestEffortDiscordProfile, "participant_discord");
-  }
-
   try {
     const { localProfile, cleanup } = await resolveDiscordIdentityWithFallbackPrompt(
       sdk,
@@ -1101,7 +1056,52 @@ export async function initializeEmbeddedApp(options: InitializeEmbeddedAppOption
   } catch (error) {
     const message = error instanceof Error ? error.message : "Discord identity setup failed.";
     console.error("Discord identity setup failed.", error);
-    persistLocalProfile(fallbackLocalProfile);
+
+    emitDebugEvent(options.onDebugEvent, {
+      level: "info",
+      category: "profile",
+      label: "profile:best-effort:start",
+      detail: "Auth failed; attempting participant/current-user Discord profile fallback.",
+    });
+
+    let bestEffortDiscordProfile: LocalProfile | undefined;
+    let bestEffortProfileError: unknown;
+
+    try {
+      bestEffortDiscordProfile = await resolveBestEffortDiscordProfile(sdk);
+    } catch (profileError) {
+      bestEffortProfileError = profileError;
+    }
+
+    if (bestEffortProfileError) {
+      emitDebugEvent(options.onDebugEvent, {
+        level: "error",
+        category: "profile",
+        label: "profile:best-effort:failed",
+        detail: bestEffortProfileError instanceof Error ? bestEffortProfileError.message : "Best-effort profile resolution failed.",
+      });
+    } else if (bestEffortDiscordProfile) {
+      resolvedLocalProfile = bestEffortDiscordProfile;
+      persistLocalProfile(bestEffortDiscordProfile);
+      options.onProfileUpdate?.(bestEffortDiscordProfile, "participant_discord");
+      emitDebugEvent(options.onDebugEvent, {
+        level: "info",
+        category: "profile",
+        label: "profile:best-effort:success",
+        detail: bestEffortDiscordProfile.displayName,
+      });
+    } else {
+      emitDebugEvent(options.onDebugEvent, {
+        level: "warn",
+        category: "profile",
+        label: "profile:best-effort:miss",
+        detail: "No participant/current-user Discord profile was available.",
+      });
+    }
+
+    if (!bestEffortDiscordProfile) {
+      persistLocalProfile(fallbackLocalProfile);
+    }
 
     return {
       enabled: true,
