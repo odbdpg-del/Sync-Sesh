@@ -1,0 +1,19 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "sync-sesh-discord-token",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-04-29",
+  "observability": {
+    "enabled": true
+  },
+  "vars": {
+    "DISCORD_CLIENT_ID": "1498715120480682155",
+    "DISCORD_REDIRECT_URI": "https://127.0.0.1",
+    "BUILD_ID": "worker-dev"
+  },
+  "secrets": {
+    "required": [
+      "DISCORD_CLIENT_SECRET"
+    ]
+  }
+}

@@ -43,7 +43,7 @@ const ThreeDModeShell = lazy(() =>
 type DebugConsoleDisplayMode = "fullscreen" | "float";
 
 const DEBUG_CONSOLE_COMMAND_HELP =
-  "Available commands: hide, clear, help, copy, snapshot, retry, float, fullscreen, filter all, filter auth, filter sdk, filter profile, filter sync, filter network, filter ui, filter command.";
+  "Available commands: hide, clear, help, copy, snapshot, retry, radio, float, fullscreen, filter all, filter auth, filter sdk, filter profile, filter sync, filter network, filter ui, filter command.";
 
 function getStartupDebugCategory(event: StartupConsoleEvent): DebugLogCategory {
   const key = event.key.toLowerCase();
@@ -248,6 +248,7 @@ export function MainScreen() {
   const debugEventHandlerRef = useRef<((event: DebugConsoleEventInput) => void) | undefined>();
   const [isRenderingSpikeOpen, setIsRenderingSpikeOpen] = useState(hasRenderingSpikeParam);
   const [isThreeDModeOpen, setIsThreeDModeOpen] = useState(false);
+  const [isSoundCloudPanelEnabled, setIsSoundCloudPanelEnabled] = useState(false);
   const [soundCloudPanelMode, setSoundCloudPanelMode] = useState<SoundCloudPanelMode>("radio");
   const [soundCloudWaveformBarCount, setSoundCloudWaveformBarCount] = useState(60);
   const { zoomPercent, panelOpacityPercent, setPanelOpacityPercent } = useAppViewportControls();
@@ -434,6 +435,17 @@ export function MainScreen() {
         detail: "Retrying Discord identity.",
       });
       void retryDiscordProfile();
+      return;
+    }
+
+    if (normalizedCommand === "radio") {
+      setIsSoundCloudPanelEnabled(true);
+      setSoundCloudPanelMode("radio");
+      debugConsoleState.appendCommandOutput({
+        level: "info",
+        label: "command:radio",
+        detail: "Radio panel enabled.",
+      });
       return;
     }
 
@@ -985,7 +997,8 @@ export function MainScreen() {
 
     endReadyHold();
   };
-  const shouldMountDeckWorkspace = soundCloudPanelMode === "decks" || isThreeDModeOpen;
+  const shouldMountDeckWorkspace = (isSoundCloudPanelEnabled && soundCloudPanelMode === "decks") || isThreeDModeOpen;
+  const soundCloudDiagnosticPanelMode = isSoundCloudPanelEnabled ? soundCloudPanelMode : "hidden";
   const adminSoundCloudPlayer = soundCloudPanelMode === "decks" ? soundCloudDeckA : frontEndSoundCloudPlayer;
   const loadingScreenDiagnostics = useMemo<LoadingScreenDiagnosticEvent[]>(() => {
     const syncDetailParts = [
@@ -1083,7 +1096,7 @@ export function MainScreen() {
       {
         key: "media_mount",
         label: "MEDIA_MOUNT",
-        detail: `panel=${soundCloudPanelMode} decks=${shouldMountDeckWorkspace ? "mounted" : "standby"} background_video=preload`,
+        detail: `panel=${soundCloudDiagnosticPanelMode} decks=${shouldMountDeckWorkspace ? "mounted" : "standby"} background_video=preload`,
       },
     ];
   }, [
@@ -1105,7 +1118,7 @@ export function MainScreen() {
     sdkState.startupError,
     sdkState.startupStage,
     shouldMountDeckWorkspace,
-    soundCloudPanelMode,
+    soundCloudDiagnosticPanelMode,
     state.localProfile.displayName,
     state.localProfile.id,
     state.session.capacity.max,
@@ -1248,11 +1261,11 @@ export function MainScreen() {
           />
         </div>
 
-        {soundCloudPanelMode === "radio" ? (
+        {isSoundCloudPanelEnabled && soundCloudPanelMode === "radio" ? (
           <SoundCloudPanel player={frontEndSoundCloudPlayer} mode={soundCloudPanelMode} onChangeMode={setSoundCloudPanelMode} />
         ) : null}
 
-        {soundCloudPanelMode === "widget" ? (
+        {isSoundCloudPanelEnabled && soundCloudPanelMode === "widget" ? (
           <SoundCloudWidgetPanel player={frontEndSoundCloudPlayer} mode={soundCloudPanelMode} onChangeMode={setSoundCloudPanelMode} />
         ) : null}
 

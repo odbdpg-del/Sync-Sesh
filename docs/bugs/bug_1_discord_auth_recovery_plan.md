@@ -566,11 +566,11 @@ Implement Chunk 5 from `docs/bugs/bug_1_discord_auth_recovery_plan.md`.
 Normalize token route behavior for the Render migration while keeping `/api/discord/token` as the canonical route. Add `/api/token` as a backend compatibility alias using the same token exchange handler and identical OPTIONS preflight behavior. Preserve frontend endpoint resolution, same-origin `/api/discord/token` inside Discord, `/ws` websocket behavior, clean auth prompt behavior, identity startup ordering, scopes, and token storage behavior. Update docs only where useful for Render operators, update `changelog.md`, and run `npm.cmd run build`. Do not tell the user to change Discord Developer Portal mappings until the Render health/config gate is met.
 ```
 
-### [~] Chunk 6: Manual Discord Verification
+### [x] Chunk 6: Manual Discord Verification And Hosted POC
 
 Goal:
 
-Retest the real Activity before doing cleanup.
+Retest the real Activity before doing cleanup, and identify the viable hosted split for Discord auth and sync.
 
 Manual checklist:
 
@@ -591,12 +591,51 @@ Success criteria:
 - token exchange succeeds
 - `authenticate()` succeeds
 - Sync Sesh uses real Discord identity instead of local fallback
+- WebSocket sync connects
+- app leaves the loading screen
+
+Outcome:
+
+- Render frontend works.
+- Render WebSocket sync works through `/ws`.
+- Discord Activity root, `/ws`, and `/sync` mappings work.
+- Discord SDK startup and silent authorization work.
+- Render backend token exchange does not work reliably because Discord/Cloudflare blocks Render outbound calls to Discord's OAuth token endpoint.
+- Cloudflare Tunnel to the local sync server works for `/api/discord/token`.
+- Proof-of-concept architecture is verified:
+
+```text
+/      -> Render frontend
+/api   -> Cloudflare tunnel / local sync server /api
+/ws    -> Render sync backend
+/sync  -> Render sync backend
+```
+
+Render `/api` failure evidence:
+
+```text
+Discord token exchange failed.
+status: 429
+response_preview: Access denied | discord.com used Cloudflare to restrict access
+retry_after: 75379
+```
+
+Cloudflare Tunnel proof evidence:
+
+```text
+Frontend token exchange errors referenced build 0.1.0-dev, proving /api reached the local backend.
+After correcting the local DISCORD_CLIENT_SECRET and restarting the local sync server, the Activity auth flow worked.
+```
+
+Detailed notes:
+
+- `docs/Discord-Auth/render-cloudflare-poc-notes.md`
 
 #### Chunk 6 Prep
 
 This is a manual verification phase. It should not make app code changes unless the live test finds a concrete bug.
 
-Preflight checklist before changing Discord Developer Portal mappings:
+Historical Render preflight checklist:
 
 1. Render service is deployed from the current branch.
 2. Render service uses:
@@ -619,23 +658,35 @@ Preflight checklist before changing Discord Developer Portal mappings:
    - `VITE_ENABLE_DISCORD_SDK=true`
    - `VITE_DISCORD_CLIENT_ID=<same Discord application id>`
 
-Only after the preflight passes, tell the user to change Discord Developer Portal mappings:
+Historical Render mapping that was tested and ruled out for `/api` token exchange:
 
 ```text
 Root mapping:
 /      -> current frontend host, unless frontend also moved
 
 Proxy path mappings:
-/api   -> <render-service>.onrender.com
+/api   -> <render-service>.onrender.com/api
 /ws    -> <render-service>.onrender.com
 /sync  -> <render-service>.onrender.com
 ```
 
-Portal mapping notes:
+Current POC mapping:
+
+```text
+Root mapping:
+/      -> sync-sesh-front-test.onrender.com
+
+Proxy path mappings:
+/api   -> <trycloudflare-host>.trycloudflare.com/api
+/ws    -> sync-sesh-1.onrender.com
+/sync  -> sync-sesh-1.onrender.com
+```
+
+Portal mapping notes learned during testing:
 
 - Do not enter `https://`.
 - Do not include `/api/discord/token` in the target.
-- Keep `/api` as a prefix and the Render host as the target.
+- For the current Discord Activity URL mapping behavior, the `/api` target should include `/api` at the end of the target host so `/api/discord/token` reaches the backend token route.
 - Add `/ws` if it is missing.
 - Keep `/sync` for compatibility even though `/ws` is preferred.
 
@@ -698,11 +749,11 @@ Expected loading-screen signals:
 Failure interpretation:
 
 - `auth:consent:success` appears but `auth:token-exchange:failed` follows:
-  - inspect Render logs for `/api/discord/token`
+  - inspect the active `/api` backend logs for `/api/discord/token`
   - check `DISCORD_CLIENT_SECRET`
   - check `DISCORD_REDIRECT_URI`
   - check `/api` portal mapping
-- no token exchange request reaches Render:
+- no token exchange request reaches the active `/api` backend:
   - check Discord `/api` mapping target
   - check Activity is using the expected app/client id
   - check frontend `VITE_SYNC_SERVER_URL`
@@ -719,12 +770,13 @@ Evidence to record in this doc after testing:
 Row:
 Date/time:
 Frontend host:
-Render host:
+Sync host:
+API host:
 Account/context:
 Portal mappings changed: yes/no
 Permission prompt shown: yes/no
 Final identity source:
-Token exchange reached Render: yes/no
+Token exchange reached API backend: yes/no
 Sync connected: yes/no
 Left loading screen: yes/no
 Key auth lines:
@@ -735,13 +787,273 @@ Chunk 6 completion rule:
 
 - Mark Chunk 6 `[x]` only after at least one Discord Activity launch reaches:
   - authenticated Discord identity
-  - successful token exchange through Render
+  - successful token exchange through the active `/api` backend
   - successful sync connection through Render
   - app leaves the loading screen
 
-Do not start Chunk 7 cleanup until Chunk 6 is marked `[x]`.
+Chunk 6 is complete for the proof-of-concept architecture. Do not start cleanup until the temporary Cloudflare Tunnel is replaced or deliberately documented as a non-production-only path.
 
-### [ ] Chunk 7: Cleanup Obsolete Bug 1 Diagnostics
+### [x] Chunk 7: Replace Temporary Tunnel With Always-On Token Exchange
+
+Goal:
+
+Replace the local quick Cloudflare Tunnel proof with an always-on `/api/discord/token` endpoint.
+
+Why:
+
+The POC currently depends on:
+
+```powershell
+cloudflared tunnel --url http://localhost:8787
+```
+
+That is useful for testing, but it depends on the user's local computer, terminal process, and temporary `trycloudflare.com` URL.
+
+Preferred production shape:
+
+```text
+/      -> Render frontend
+/api   -> always-on Cloudflare Worker or other non-Render token exchange host
+/ws    -> Render sync backend
+/sync  -> Render sync backend
+```
+
+Recommended implementation:
+
+1. Add a small Cloudflare Worker or equivalent always-on endpoint for `POST /api/discord/token`.
+2. Store secrets outside the frontend:
+   - `DISCORD_CLIENT_ID`
+   - `DISCORD_CLIENT_SECRET`
+   - `DISCORD_REDIRECT_URI=https://127.0.0.1`
+3. Reuse the same backend exchange shape:
+   - receive authorization `code`
+   - exchange with Discord's OAuth token endpoint
+   - return the token payload needed by the frontend
+   - preserve safe diagnostics without leaking secrets
+4. Optionally support `POST /api/token` as a compatibility alias.
+5. Update Discord Activity URL mappings:
+
+```text
+/api -> <always-on-api-host>/api
+```
+
+6. Retest the Activity using the Chunk 6 matrix.
+
+Success criteria:
+
+- no local terminal or local tunnel is required
+- token exchange succeeds without Render outbound `429`
+- authenticated Discord identity is used instead of local fallback
+- Render `/ws` sync still connects
+- app leaves the loading screen
+- docs record the production mapping and env ownership clearly
+
+#### Chunk 7 Prep
+
+Current app contract:
+
+- The embedded frontend sends `POST /api/discord/token`.
+- The request body is JSON:
+
+```json
+{
+  "code": "<discord authorization code>",
+  "attemptId": "<debug attempt id>"
+}
+```
+
+- The frontend expects a JSON response containing at least:
+
+```json
+{
+  "access_token": "<discord user access token>"
+}
+```
+
+- The existing backend also returns:
+  - `expires_in`
+  - `scope`
+  - `token_type`
+  - `attemptId`
+  - `buildId`
+
+Worker route plan:
+
+- `OPTIONS /api/discord/token`
+- `POST /api/discord/token`
+- `OPTIONS /api/token`
+- `POST /api/token`
+- Optional health route:
+  - `GET /health`
+
+The compatibility alias `/api/token` should behave exactly like `/api/discord/token`.
+
+Worker environment:
+
+Use Worker secrets for sensitive values:
+
+```text
+DISCORD_CLIENT_SECRET
+```
+
+Declare `DISCORD_CLIENT_SECRET` in `wrangler.jsonc` under `secrets.required` so deploys fail clearly if the secret is missing.
+
+Use Worker env vars or secrets for non-sensitive values:
+
+```text
+DISCORD_CLIENT_ID=1498715120480682155
+DISCORD_REDIRECT_URI=https://127.0.0.1
+BUILD_ID=<worker build/version label>
+```
+
+Cloudflare Worker implementation notes:
+
+- Use module-worker format with `export default { async fetch(request, env) { ... } }`.
+- Read bindings from the Worker `env` parameter, not frontend `VITE_*` variables.
+- Parse JSON defensively; return `400` for invalid JSON or missing `code`.
+- Exchange the code with Discord by sending `application/x-www-form-urlencoded` to:
+
+```text
+https://discord.com/api/oauth2/token
+```
+
+- Use these form fields:
+  - `client_id`
+  - `client_secret`
+  - `grant_type=authorization_code`
+  - `code`
+  - `redirect_uri`
+- Do not log or return the client secret.
+- Preserve the safe diagnostics from `server/sync-server.ts`:
+  - `attemptId`
+  - `buildId`
+  - Discord HTTP status
+  - Discord `error`
+  - Discord `error_description`
+  - trimmed non-JSON response preview
+  - `retry-after`
+  - `x-ratelimit-reset-after`
+  - `x-ratelimit-remaining`
+- Keep response previews short enough to avoid dumping large Cloudflare/Discord HTML pages.
+
+CORS and Discord proxy notes:
+
+- Inside Discord, the frontend calls same-origin `/api/discord/token` through Activity URL mappings.
+- The Worker should still answer `OPTIONS` with permissive enough CORS for the Discord Activity origin used during testing:
+
+```text
+https://1498715120480682155.discordsays.com
+```
+
+- For the first Worker POC, allow:
+  - `POST, OPTIONS`
+  - `Content-Type`
+- Once stable, tighten allowed origins if practical.
+
+Proposed files:
+
+```text
+workers/discord-token-exchange/src/index.ts
+workers/discord-token-exchange/wrangler.jsonc
+workers/discord-token-exchange/README.md
+```
+
+Keep this Worker isolated from the Vite frontend build so the app's existing Render deployment does not change.
+
+Implemented files:
+
+```text
+workers/discord-token-exchange/src/index.ts
+workers/discord-token-exchange/wrangler.jsonc
+workers/discord-token-exchange/.dev.vars.example
+workers/discord-token-exchange/README.md
+```
+
+Implementation status:
+
+- Worker code is added.
+- Local secret file is ignored via `.gitignore`.
+- Worker deployed at `https://sync-sesh-discord-token.syncseshtest.workers.dev`.
+- Discord Activity `/api` mapping points to `sync-sesh-discord-token.syncseshtest.workers.dev/api`.
+- Live Discord Activity verification passed with no local tunnel or local sync server running.
+
+Suggested `wrangler.jsonc` shape:
+
+```jsonc
+{
+  "name": "sync-sesh-discord-token",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-04-29",
+  "observability": {
+    "enabled": true
+  },
+  "vars": {
+    "DISCORD_CLIENT_ID": "1498715120480682155",
+    "DISCORD_REDIRECT_URI": "https://127.0.0.1",
+    "BUILD_ID": "worker-dev"
+  }
+}
+```
+
+Secret setup options:
+
+```powershell
+npx.cmd wrangler secret put DISCORD_CLIENT_SECRET --config workers/discord-token-exchange/wrangler.jsonc
+```
+
+or set `DISCORD_CLIENT_SECRET` in the Cloudflare dashboard under the Worker settings.
+
+Manual verification after deploy:
+
+1. Deploy the Worker.
+2. Open `https://<worker-host>/health`.
+3. Confirm:
+   - `ok: true`
+   - `has_client_id: true`
+   - `has_client_secret: true`
+   - `redirect_uri: "https://127.0.0.1"`
+   - `missing: []`
+4. Update Discord Activity mappings:
+
+```text
+/      -> sync-sesh-front-test.onrender.com
+/api   -> <worker-host>/api
+/ws    -> sync-sesh-1.onrender.com
+/sync  -> sync-sesh-1.onrender.com
+```
+
+5. Relaunch the Discord Activity.
+6. Open the debug console and run:
+
+```text
+snapshot
+filter auth
+```
+
+7. Expected auth path:
+
+```text
+auth:silent:success
+auth:token-exchange:success
+auth:authenticate:success
+identity:authenticated_discord
+```
+
+8. Confirm sync remains connected through Render:
+
+```text
+sync:connect:success
+```
+
+Research references:
+
+- Cloudflare Workers fetch handlers receive the `request` and `env` arguments and return a `Response`: https://developers.cloudflare.com/workers/runtime-apis/handlers/fetch/
+- Cloudflare Worker secrets are accessed through the same env-binding surface as other Worker environment variables, while remaining hidden in Wrangler/dashboard: https://developers.cloudflare.com/workers/configuration/secrets/
+- Cloudflare recommends secrets for sensitive values rather than plaintext env vars: https://developers.cloudflare.com/workers/configuration/environment-variables/
+- Wrangler configuration can enable observability/logging and should be treated as Worker config source of truth when using Wrangler: https://developers.cloudflare.com/workers/wrangler/configuration/
+- Discord OAuth2 user tokens represent authorized user access and should not be exposed casually; the `identify` scope reads basic profile information: https://docs.discord.com/developers/platform/oauth2-and-permissions
+
+### [ ] Chunk 8: Cleanup Obsolete Bug 1 Diagnostics
 
 Goal:
 
@@ -759,7 +1071,7 @@ Success criteria:
 
 - Bug 1 docs clearly separate historical failed attempts from the final fix
 - app code no longer carries unnecessary white-box probe baggage
-- cleanup happens only after real auth is verified
+- cleanup happens only after real auth is verified on the always-on `/api` endpoint
 
 ## Recommended First Codex Prompt
 

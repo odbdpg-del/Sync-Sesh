@@ -5,6 +5,8 @@ dist
 *.local
 .env
 .env.local
+workers/discord-token-exchange/.dev.vars
+workers/discord-token-exchange/.wrangler/
 *.tsbuildinfo
 vite.config.js
 vite.config.d.ts

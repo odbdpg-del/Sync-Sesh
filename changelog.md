@@ -8,6 +8,22 @@ Entries must be in reverse chronological order. New entries go at the top, above
 
 Use a level-two heading for every entry so the editor can fold each change.
 
+## [2421] - 2026-04-29 12:04 - `codex/merge-ui-and-3d-world / Cloudflare Token Worker`
+
+- Added an isolated Cloudflare Worker for Discord OAuth token exchange, supporting `/api/discord/token`, `/api/token`, and `/health`.
+- Mirrored the sync-server token exchange contract, safe diagnostics, CORS preflight handling, and non-secret health summary for the always-on `/api` replacement path.
+- Added Worker deployment/setup docs and ignored local Worker `.dev.vars` secrets plus Wrangler scratch output.
+- Touched `workers/discord-token-exchange/*`, `.gitignore`, and `changelog.md`.
+- Build/test: `npm.cmd run build` passed with the existing Vite large-chunk warning; `npx.cmd wrangler deploy --dry-run --config workers/discord-token-exchange/wrangler.jsonc` passed with Wrangler's experimental `secrets` config warning.
+
+## [2420] - 2026-04-29 11:46 - `codex/merge-ui-and-3d-world / Console-Gated Radio Panel`
+
+- Hid the SoundCloud radio/widget/deck panel by default so the main UI stays cleaner after startup.
+- Added a `radio` debug console command that reveals the radio panel and keeps the existing SoundCloud mode controls available after it is enabled.
+- Updated startup media diagnostics to report `panel=hidden` until the console command enables the panel.
+- Touched `src/screens/MainScreen.tsx` and `changelog.md`.
+- Build/test: `npm.cmd run build` passed with the existing Vite large-chunk warning.
+
 ## [2419] - 2026-04-29 10:37 - `codex/merge-ui-and-3d-world / Discord Token Rate Limit Diagnostics`
 
 - Expanded backend Discord token exchange diagnostics to preserve safe non-JSON response previews and rate-limit headers instead of collapsing 429 responses to `unknown_error`.
