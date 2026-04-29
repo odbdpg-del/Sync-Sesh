@@ -49,6 +49,25 @@ const discordClientSecret = process.env.DISCORD_CLIENT_SECRET;
 const discordRedirectUri = process.env.DISCORD_REDIRECT_URI ?? process.env.VITE_DISCORD_REDIRECT_URI ?? "https://127.0.0.1";
 const buildId = `${process.env.npm_package_version ?? "0.1.0"}-${(process.env.RENDER_GIT_COMMIT ?? "dev").slice(0, 7)}`;
 
+function trimDiagnosticText(value: string, maxLength = 400) {
+  const compact = value.replace(/\s+/g, " ").trim();
+
+  if (compact.length <= maxLength) {
+    return compact;
+  }
+
+  return `${compact.slice(0, maxLength - 3)}...`;
+}
+
+function parseJsonObject(text: string): Record<string, unknown> | null {
+  try {
+    const parsed = JSON.parse(text);
+    return parsed && typeof parsed === "object" ? parsed as Record<string, unknown> : null;
+  } catch {
+    return null;
+  }
+}
+
 function getMissingDiscordOAuthConfig() {
   const missing: string[] = [];
 
@@ -397,7 +416,8 @@ async function handleDiscordTokenExchange(request: import("node:http").IncomingM
     clearTimeout(tokenExchangeTimeout);
   }
 
-  const payload = (await tokenResponse.json().catch(() => null)) as Record<string, unknown> | null;
+  const responseText = await tokenResponse.text().catch(() => "");
+  const payload = responseText ? parseJsonObject(responseText) : null;
 
   if (!tokenResponse.ok || typeof payload?.access_token !== "string") {
     const discordError =
@@ -405,10 +425,18 @@ async function handleDiscordTokenExchange(request: import("node:http").IncomingM
     const discordErrorDescription =
       typeof payload?.error_description === "string" ? payload.error_description : undefined;
     const responseError =
-      discordErrorDescription ?? (typeof payload?.message === "string" ? payload.message : undefined) ?? discordError;
+      discordErrorDescription ??
+      (typeof payload?.message === "string" ? payload.message : undefined) ??
+      (responseText ? trimDiagnosticText(responseText, 180) : undefined) ??
+      discordError;
     const configHint = discordError === "invalid_grant"
       ? " Check that DISCORD_REDIRECT_URI exactly matches the Discord Developer Portal redirect URI."
       : "";
+    const retryAfter = tokenResponse.headers.get("retry-after");
+    const rateLimitResetAfter = tokenResponse.headers.get("x-ratelimit-reset-after");
+    const rateLimitRemaining = tokenResponse.headers.get("x-ratelimit-remaining");
+    const rateLimitBucket = tokenResponse.headers.get("x-ratelimit-bucket");
+    const responsePreview = responseText ? trimDiagnosticText(responseText) : undefined;
 
     console.error("Discord token exchange failed.", {
       attemptId,
@@ -416,6 +444,11 @@ async function handleDiscordTokenExchange(request: import("node:http").IncomingM
       status: tokenResponse.status,
       error: discordError,
       error_description: discordErrorDescription,
+      response_preview: responsePreview,
+      retry_after: retryAfter,
+      rate_limit_reset_after: rateLimitResetAfter,
+      rate_limit_remaining: rateLimitRemaining,
+      rate_limit_bucket: rateLimitBucket,
       redirect_uri: discordRedirectUri,
       has_client_id: Boolean(discordClientId),
       has_client_secret: Boolean(discordClientSecret),
@@ -425,8 +458,13 @@ async function handleDiscordTokenExchange(request: import("node:http").IncomingM
       error: `Discord token exchange failed: ${responseError}.${configHint}`.trim(),
       attemptId,
       buildId,
+      discordStatus: tokenResponse.status,
       discordError,
       discordErrorDescription,
+      discordResponsePreview: responsePreview,
+      retryAfter,
+      rateLimitResetAfter,
+      rateLimitRemaining,
     });
     return;
   }

@@ -8,6 +8,13 @@ Entries must be in reverse chronological order. New entries go at the top, above
 
 Use a level-two heading for every entry so the editor can fold each change.
 
+## [2419] - 2026-04-29 10:37 - `codex/merge-ui-and-3d-world / Discord Token Rate Limit Diagnostics`
+
+- Expanded backend Discord token exchange diagnostics to preserve safe non-JSON response previews and rate-limit headers instead of collapsing 429 responses to `unknown_error`.
+- Returned Discord status, response preview, and retry-after metadata to the frontend token-exchange failure path for easier live Activity debugging.
+- Touched `server/sync-server.ts` and `changelog.md`.
+- Build/test: `npm.cmd run build` passed with the existing Vite large-chunk warning.
+
 ## [2418] - 2026-04-29 08:35 - `codex/merge-ui-and-3d-world / Render Token Route Alias`
 
 - Added `/api/token` as a backend compatibility alias for the Discord token exchange while keeping `/api/discord/token` canonical.
