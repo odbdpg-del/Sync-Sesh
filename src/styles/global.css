@@ -2422,6 +2422,49 @@ h2 {
   gap: 8px;
 }
 
+.lobby-heading-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.lobby-rules-restore {
+  box-sizing: border-box;
+  width: 48px;
+  border: 1px solid rgba(136, 74, 255, 0.42);
+  border-radius: 18px;
+  padding: 10px 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background:
+    radial-gradient(circle at 50% 18%, rgba(140, 92, 255, 0.2), transparent 54%),
+    rgba(10, 16, 34, 0.9);
+  color: #c9c4ff;
+  font-family: var(--font-display);
+  font-size: 0.92rem;
+  font-weight: 800;
+  letter-spacing: 0;
+  line-height: 1;
+  cursor: pointer;
+  box-shadow: 0 0 18px rgba(140, 92, 255, 0.12);
+  animation: lobbyRulesRestoreIn 180ms ease both;
+  transition: transform 140ms ease, border-color 140ms ease, color 140ms ease, box-shadow 140ms ease;
+}
+
+.lobby-rules-restore:hover {
+  transform: translateY(-1px);
+  color: #ffffff;
+  border-color: rgba(63, 233, 255, 0.58);
+  box-shadow: 0 0 18px rgba(63, 233, 255, 0.16);
+}
+
+.lobby-rules-restore:focus-visible {
+  outline: 1px solid rgba(159, 147, 255, 0.72);
+  outline-offset: 4px;
+}
+
 .capacity-dot {
   width: 8px;
   height: 8px;
@@ -2800,10 +2843,83 @@ h2 {
   padding: 16px 20px 14px;
   background: linear-gradient(180deg, var(--bg-violet-top), var(--bg-violet-bottom));
   border-color: rgba(136, 74, 255, 0.28);
+  animation: lobbyRulesPanelIn 180ms ease both;
+}
+
+.lobby-rules[data-collapsed="true"] {
+  padding-bottom: 16px;
 }
 
 .lobby-rules-armed {
   border-color: rgba(92, 255, 76, 0.34);
+}
+
+.lobby-rules-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.lobby-rules-toggle {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #7f73ff;
+  text-align: left;
+  cursor: pointer;
+}
+
+.lobby-rules-toggle:hover {
+  color: #d9d5ff;
+}
+
+.lobby-rules-toggle:focus-visible {
+  outline: 1px solid rgba(159, 147, 255, 0.72);
+  outline-offset: 4px;
+}
+
+.lobby-rules-marker {
+  display: inline-block;
+  color: var(--cyan);
+  transform: rotate(90deg);
+  transition: transform 140ms ease, color 140ms ease;
+}
+
+.lobby-rules[data-collapsed="true"] .lobby-rules-marker {
+  transform: rotate(0deg);
+}
+
+.lobby-rules-close {
+  width: 30px;
+  height: 30px;
+  border: 1px solid rgba(136, 74, 255, 0.34);
+  border-radius: 10px;
+  padding: 0;
+  background: rgba(6, 10, 26, 0.72);
+  color: #c9c4ff;
+  font-family: var(--font-display);
+  font-size: 0.78rem;
+  font-weight: 900;
+  line-height: 1;
+  cursor: pointer;
+  transition: transform 140ms ease, border-color 140ms ease, color 140ms ease, box-shadow 140ms ease;
+}
+
+.lobby-rules-close:hover {
+  transform: translateY(-1px);
+  color: #ffffff;
+  border-color: rgba(63, 233, 255, 0.58);
+  box-shadow: 0 0 12px rgba(63, 233, 255, 0.12);
+}
+
+.lobby-rules-close:focus-visible {
+  outline: 1px solid rgba(159, 147, 255, 0.72);
+  outline-offset: 4px;
 }
 
 .instruction-list {
@@ -2813,6 +2929,30 @@ h2 {
   gap: 9px;
   color: var(--text-soft);
   font-size: 0.92rem;
+}
+
+@keyframes lobbyRulesPanelIn {
+  from {
+    opacity: 0;
+    transform: translateY(-8px) scale(0.985);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes lobbyRulesRestoreIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.86);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
 }
 
 .empty-state-card,
@@ -5810,13 +5950,30 @@ h2 {
 
 .debug-console-fullscreen2-lines {
   min-height: 0;
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-color: rgba(97, 255, 127, 0.58) rgba(0, 20, 7, 0.8);
+  scrollbar-width: thin;
   color: rgba(109, 255, 137, var(--debug-console-fullscreen2-text-alpha, 0.18));
   font-size: 0.68rem;
   line-height: 1.55;
   text-shadow: 0 0 10px rgba(82, 255, 126, 0.26);
   text-transform: uppercase;
   mix-blend-mode: screen;
+}
+
+.debug-console-fullscreen2-lines::-webkit-scrollbar {
+  width: 8px;
+}
+
+.debug-console-fullscreen2-lines::-webkit-scrollbar-track {
+  background: rgba(0, 20, 7, 0.8);
+}
+
+.debug-console-fullscreen2-lines::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, rgba(97, 255, 127, 0.72), rgba(37, 207, 84, 0.45));
+  border: 1px solid rgba(164, 255, 184, 0.35);
+  box-shadow: 0 0 10px rgba(77, 255, 129, 0.28);
 }
 
 .debug-console-fullscreen2-line {

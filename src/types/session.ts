@@ -288,7 +288,9 @@ export type SessionEvent =
   | { type: "set_precount_duration"; preCountSeconds: number }
   | { type: "reset_round" }
   | { type: "admin_force_start_round" }
+  | { type: "admin_force_stop_round" }
   | { type: "admin_force_complete_round" }
+  | { type: "admin_set_round_number"; roundNumber: number }
   | { type: "admin_reset_session" }
   | { type: "admin_add_test_participant" }
   | { type: "admin_toggle_test_participants_ready" }

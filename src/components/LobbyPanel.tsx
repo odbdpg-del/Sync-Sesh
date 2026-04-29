@@ -9,6 +9,7 @@ interface LobbyPanelProps {
   lobbyState: DerivedLobbyState;
   generatedDisplayNames: string[];
   discordDisplayName?: string;
+  isJoinControlsHidden?: boolean;
   onJoinSession: () => void;
   onRollDisplayName: () => void;
   onSelectDisplayName: (displayName: string) => void;
@@ -75,12 +76,15 @@ export function LobbyPanel({
   lobbyState,
   generatedDisplayNames,
   discordDisplayName,
+  isJoinControlsHidden = false,
   onJoinSession,
   onRollDisplayName,
   onSelectDisplayName,
   onUseDiscordDisplayName,
 }: LobbyPanelProps) {
   const [isNamePickerOpen, setIsNamePickerOpen] = useState(false);
+  const [isLobbyRulesOpen, setIsLobbyRulesOpen] = useState(true);
+  const [isLobbyRulesCollapsed, setIsLobbyRulesCollapsed] = useState(false);
   const [namePickerPosition, setNamePickerPosition] = useState<NamePickerPosition>({ left: 0, top: 0 });
   const localDisplayName = lobbyState.localUser?.displayName ?? "";
   const availableDisplayNames = useMemo(() => {
@@ -185,10 +189,26 @@ export function LobbyPanel({
           <p className="eyebrow">Lobby</p>
           <h2>Session Deck</h2>
         </div>
-        <span className="capacity-pill">
-          <span className="capacity-dot" aria-hidden="true" />
-          {users.length}/{session.capacity.max} connected
-        </span>
+        <div className="lobby-heading-actions">
+          {!isLobbyRulesOpen ? (
+            <button
+              type="button"
+              className="lobby-rules-restore"
+              onClick={() => {
+                setIsLobbyRulesOpen(true);
+                setIsLobbyRulesCollapsed(false);
+              }}
+              aria-label="Expand lobby rules"
+              title="Expand lobby rules"
+            >
+              R
+            </button>
+          ) : null}
+          <span className="capacity-pill">
+            <span className="capacity-dot" aria-hidden="true" />
+            {users.length}/{session.capacity.max} connected
+          </span>
+        </div>
       </div>
 
       <div className="metrics-grid">
@@ -221,34 +241,36 @@ export function LobbyPanel({
         </article>
       </div>
 
-      <div className="join-row">
-        <button
-          type="button"
-          className="primary-button join-button"
-          disabled={!lobbyState.canJoinSession}
-          onClick={onJoinSession}
-        >
-          <span className="join-button-icon" aria-hidden="true">
-            +
-          </span>
-          <span>{lobbyState.isJoined ? "Joined" : "Join Session"}</span>
-        </button>
-        <div className="join-copy">
-          <span className="join-copy-icon" aria-hidden="true">
-            <span className="join-copy-icon-ring" />
-            <span className="join-copy-icon-core" />
-          </span>
-          <div className="join-copy-body">
-            <p className="meta-label">Join behavior</p>
-            <p>
-              {session.phase === "precount" || session.phase === "countdown"
-                ? "Late joins become spectators until the next round."
-                : "Join now to enter the active lobby."}
-            </p>
-            <p className="join-copy-subtle">Once the round is armed, you're in.</p>
+      {!isJoinControlsHidden ? (
+        <div className="join-row">
+          <button
+            type="button"
+            className="primary-button join-button"
+            disabled={!lobbyState.canJoinSession}
+            onClick={onJoinSession}
+          >
+            <span className="join-button-icon" aria-hidden="true">
+              +
+            </span>
+            <span>{lobbyState.isJoined ? "Joined" : "Join Session"}</span>
+          </button>
+          <div className="join-copy">
+            <span className="join-copy-icon" aria-hidden="true">
+              <span className="join-copy-icon-ring" />
+              <span className="join-copy-icon-core" />
+            </span>
+            <div className="join-copy-body">
+              <p className="meta-label">Join behavior</p>
+              <p>
+                {session.phase === "precount" || session.phase === "countdown"
+                  ? "Late joins become spectators until the next round."
+                  : "Join now to enter the active lobby."}
+              </p>
+              <p className="join-copy-subtle">Once the round is armed, you're in.</p>
+            </div>
           </div>
         </div>
-      </div>
+      ) : null}
 
       <div className="user-list">
         {users.length === 0 ? (
@@ -312,14 +334,39 @@ export function LobbyPanel({
         )}
       </div>
 
-      <div className={`panel inset-panel lobby-rules ${lobbyState.isArmed ? "lobby-rules-armed" : ""}`}>
-        <p className="meta-label">Lobby rules</p>
-        <ul className="instruction-list">
-          {lobbyState.instructions.map((instruction) => (
-            <li key={instruction}>{instruction}</li>
-          ))}
-        </ul>
-      </div>
+      {isLobbyRulesOpen ? (
+        <div className={`panel inset-panel lobby-rules ${lobbyState.isArmed ? "lobby-rules-armed" : ""}`} data-collapsed={isLobbyRulesCollapsed ? "true" : undefined}>
+          <div className="lobby-rules-header">
+            <button
+              type="button"
+              className="lobby-rules-toggle meta-label"
+              onClick={() => setIsLobbyRulesCollapsed((current) => !current)}
+              aria-expanded={!isLobbyRulesCollapsed}
+            >
+              <span className="lobby-rules-marker" aria-hidden="true">
+                ▸
+              </span>
+              <span>Lobby rules</span>
+            </button>
+            <button
+              type="button"
+              className="lobby-rules-close"
+              onClick={() => setIsLobbyRulesOpen(false)}
+              aria-label="Collapse lobby rules"
+              title="Collapse lobby rules"
+            >
+              x
+            </button>
+          </div>
+          {!isLobbyRulesCollapsed ? (
+            <ul className="instruction-list">
+              {lobbyState.instructions.map((instruction) => (
+                <li key={instruction}>{instruction}</li>
+              ))}
+            </ul>
+          ) : null}
+        </div>
+      ) : null}
       {namePickerMenu}
     </section>
   );

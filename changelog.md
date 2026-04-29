@@ -8,6 +8,107 @@ Entries must be in reverse chronological order. New entries go at the top, above
 
 Use a level-two heading for every entry so the editor can fold each change.
 
+## [2478] - 2026-04-29 18:43 - `codex/merge-ui-and-3d-world / Join Panel Console Toggle`
+
+- Added local debug console commands `hidejoin` and `showjoin` for aesthetic toggling of the lobby join/join-behavior controls.
+- Added a `LobbyPanel` prop so the dashboard can hide those controls without changing session join behavior.
+- Touched `src/screens/MainScreen.tsx`, `src/components/LobbyPanel.tsx`, and `changelog.md`.
+- Build/test: `npm.cmd run build` passed with the existing Vite large-chunk warning.
+
+## [2477] - 2026-04-29 18:39 - `codex/merge-ui-and-3d-world / Lobby Rules Restore Button Box`
+
+- Centered the collapsed lobby rules `R` restore button with inline-flex and removed default line-height inflation so its border height matches the capacity pill more closely.
+- Touched `src/styles/global.css` and `changelog.md`.
+- Build/test: `npm.cmd run build` pending.
+
+## [2476] - 2026-04-29 18:38 - `codex/merge-ui-and-3d-world / Lobby Rules Icon Height`
+
+- Switched the collapsed lobby rules `R` restore button to the same padding-driven height model as the connected-capacity pill.
+- Touched `src/styles/global.css` and `changelog.md`.
+- Build/test: `npm.cmd run build` passed with the existing Vite large-chunk warning.
+
+## [2475] - 2026-04-29 18:37 - `codex/merge-ui-and-3d-world / Lobby Rules Icon Alignment`
+
+- Matched the collapsed lobby rules `R` restore button height/radius to the connected-capacity pill.
+- Touched `src/styles/global.css` and `changelog.md`.
+- Build/test: `npm.cmd run build` pending.
+
+## [2474] - 2026-04-29 18:36 - `codex/merge-ui-and-3d-world / Lobby Rules Dual Collapse`
+
+- Split lobby rules controls so the triangle collapses only the rules text while keeping the panel visible.
+- Kept the `x` button as the separate minimize action that sends the rules panel to the header `R` icon.
+- Restoring from the `R` icon reopens the full rules panel.
+- Touched `src/components/LobbyPanel.tsx`, `src/styles/global.css`, and `changelog.md`.
+- Build/test: `npm.cmd run build` passed with the existing Vite large-chunk warning.
+
+## [2473] - 2026-04-29 18:35 - `codex/merge-ui-and-3d-world / Lobby Rules Restore Icon`
+
+- Replaced the lobby rules triangle collapse with an `x` button inside the rules panel.
+- Added a compact `R` restore icon beside the connected-capacity pill while rules are collapsed.
+- Added lightweight scale/fade animations for the rules panel and restore icon.
+- Touched `src/components/LobbyPanel.tsx`, `src/styles/global.css`, and `changelog.md`.
+- Build/test: `npm.cmd run build` passed with the existing Vite large-chunk warning.
+
+## [2472] - 2026-04-29 18:31 - `codex/merge-ui-and-3d-world / Collapsible Lobby Rules`
+
+- Added a triangle toggle before the `Lobby rules` label so the lobby instructions can collapse and expand.
+- Added focused lobby rules toggle styling with collapsed padding and triangle rotation.
+- Touched `src/components/LobbyPanel.tsx`, `src/styles/global.css`, and `changelog.md`.
+- Build/test: `npm.cmd run build` passed with the existing Vite large-chunk warning.
+
+## [2471] - 2026-04-29 18:27 - `codex/merge-ui-and-3d-world / Admin Set Round Command`
+
+- Added host-only `setround = N` and `set round = N` debug console command parsing for manual round-number control.
+- Added a new `admin_set_round_number` session event with defensive `0-999` clamping.
+- Added reducer coverage for setting round `0`, clamping high values, and ignoring non-host attempts.
+- Touched `src/types/session.ts`, `src/lib/lobby/sessionState.ts`, `src/hooks/useDabSyncSession.ts`, `src/screens/MainScreen.tsx`, `tests/sessionState.test.ts`, and `changelog.md`.
+- Build/test: `npx.cmd tsx --test tests/sessionState.test.ts` passed; `npm.cmd run build` passed with the existing Vite large-chunk warning.
+
+## [2470] - 2026-04-29 18:24 - `codex/merge-ui-and-3d-world / Admin Force Stop Command`
+
+- Added host-only `force stop` and `forcestop` debug console commands.
+- Added a new `admin_force_stop_round` session event that cancels active precount/countdown state back to the lobby without incrementing `roundNumber`.
+- Added a reducer test covering force stop behavior during an active countdown and aligned an existing active-round assertion with normalized reducer output.
+- Touched `src/types/session.ts`, `src/lib/lobby/sessionState.ts`, `src/hooks/useDabSyncSession.ts`, `src/screens/MainScreen.tsx`, `tests/sessionState.test.ts`, and `changelog.md`.
+- Build/test: `npx.cmd tsx --test tests/sessionState.test.ts` passed; `npm.cmd run build` passed with the existing Vite large-chunk warning.
+
+## [2469] - 2026-04-29 18:21 - `codex/merge-ui-and-3d-world / Admin Force Start Command`
+
+- Added admin-only `force start` and `forcestart` debug console commands that reuse the existing host force-start session action.
+- Updated console help text to list the new command and return a warning for non-admin users.
+- Touched `src/screens/MainScreen.tsx` and `changelog.md`.
+- Build/test: `npm.cmd run build` passed with the existing Vite large-chunk warning.
+
+## [2468] - 2026-04-29 18:18 - `codex/merge-ui-and-3d-world / Console2 Latest Peek Scroll`
+
+- Made the console2 log pane stick to the latest entry by default so curtain peeks show the newest log above the input row.
+- Added manual scrolling for console2 output and kept auto-stick behavior only while the pane remains near the bottom.
+- Added green terminal scrollbar styling for the console2 output pane.
+- Touched `src/components/DebugConsoleFullscreen2.tsx`, `src/styles/global.css`, and `changelog.md`.
+- Build/test: `npm.cmd run build` passed with the existing Vite large-chunk warning.
+
+## [2467] - 2026-04-29 18:14 - `codex/merge-ui-and-3d-world / Console2 Number Shortcuts`
+
+- Made console2 mode shortcuts detect physical digit and numpad keys for `1`, `2`, and `3`, while preserving the empty-input-only shortcut behavior.
+- Reused one shortcut resolver so input, compact, and full mode switching follow the same path.
+- Touched `src/components/DebugConsoleFullscreen2.tsx` and `changelog.md`.
+- Build/test: `npm.cmd run build` passed with the existing Vite large-chunk warning.
+
+## [2466] - 2026-04-29 18:09 - `codex/merge-ui-and-3d-world / Console2 Input Opacity`
+
+- Made the backtick-opened console2 input mode preload full background and text opacity so dragged-up console content is readable immediately.
+- Kept the input row command background at its existing full opacity behavior.
+- Touched `src/screens/MainScreen.tsx` and `changelog.md`.
+- Build/test: `npm.cmd run build` passed with the existing Vite large-chunk warning.
+
+## [2465] - 2026-04-29 18:00 - `codex/merge-ui-and-3d-world / Theme Profile Contract`
+
+- Added the pure theme profile contract and resolver for `default`, `green`, and `blue` theme selections.
+- Added focused tests for default green-console/blue-dashboard mapping and matching named green/blue mappings.
+- Marked Theme Profile Plan TP-1 complete.
+- Touched `src/lib/theme/themeProfiles.ts`, `tests/themeProfiles.test.ts`, `docs/theme-profile-plan.md`, and `changelog.md`.
+- Build/test: `npx.cmd tsx --test tests/themeProfiles.test.ts` passed; `npm.cmd run build` passed with the existing Vite large-chunk warning.
+
 ## [2464] - 2026-04-29 17:46 - `codex/merge-ui-and-3d-world / Minimized Background Console`
 
 - Kept the full-screen startup background console visible when the Room Link Protocol window is minimized into its widget.

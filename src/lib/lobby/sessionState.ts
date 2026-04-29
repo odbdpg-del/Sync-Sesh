@@ -46,6 +46,7 @@ const MAX_SHARED_CLIP_CONTROL_EVENTS = 64;
 const MAX_SHARED_CLIP_JSON_CHARS = 16000;
 const SHARED_DAW_SCENE_COUNT = 4;
 const MAX_DAW_LIVE_SOUND_LABEL_LENGTH = 16;
+const MAX_SESSION_ROUND_NUMBER = 999;
 const MIN_FM_FREQUENCY = 55;
 const MAX_FM_FREQUENCY = 1760;
 const MIN_FM_RATIO = 0.25;
@@ -1275,6 +1276,27 @@ export function reduceSessionEvent(snapshot: SessionSnapshot, event: SessionEven
         nowMs,
       );
     }
+    case "admin_force_stop_round": {
+      if (!isActorHost(snapshot, actor)) {
+        return snapshot;
+      }
+
+      if (snapshot.session.phase !== "precount" && snapshot.session.phase !== "countdown") {
+        return snapshot;
+      }
+
+      const nextUsers = moveUsersToLobby(snapshot.users);
+
+      return {
+        ...snapshot,
+        users: nextUsers,
+        countdown: createEmptyCountdown(),
+        session: {
+          ...snapshot.session,
+          phase: getBaseLobbyPhase(nextUsers),
+        },
+      };
+    }
     case "admin_force_complete_round": {
       if (!isActorHost(snapshot, actor)) {
         return snapshot;
@@ -1291,6 +1313,19 @@ export function reduceSessionEvent(snapshot: SessionSnapshot, event: SessionEven
           countdownEndAt: snapshot.countdown.countdownEndAt ?? new Date(nowMs).toISOString(),
           completedAt: new Date(nowMs).toISOString(),
           triggeredByUserId: snapshot.countdown.triggeredByUserId ?? actor.id,
+        },
+      };
+    }
+    case "admin_set_round_number": {
+      if (!isActorHost(snapshot, actor)) {
+        return snapshot;
+      }
+
+      return {
+        ...snapshot,
+        session: {
+          ...snapshot.session,
+          roundNumber: clampInteger(event.roundNumber, 0, MAX_SESSION_ROUND_NUMBER),
         },
       };
     }

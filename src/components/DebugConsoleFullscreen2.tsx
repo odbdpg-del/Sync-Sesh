@@ -4,6 +4,7 @@ import {
   useRef,
   useState,
   type CSSProperties,
+  type UIEvent,
   type FormEvent,
   type KeyboardEvent,
   type PointerEvent,
@@ -131,6 +132,22 @@ function getFullscreen2ModeGlyph(mode: Fullscreen2ConsoleMode) {
   }
 }
 
+function getFullscreen2ShortcutMode(event: KeyboardEvent<HTMLInputElement>): Fullscreen2ConsoleMode | null {
+  if (event.code === "Digit1" || event.code === "Numpad1" || event.key === "1") {
+    return "input";
+  }
+
+  if (event.code === "Digit2" || event.code === "Numpad2" || event.key === "2") {
+    return "compact";
+  }
+
+  if (event.code === "Digit3" || event.code === "Numpad3" || event.key === "3") {
+    return "full";
+  }
+
+  return null;
+}
+
 export function DebugConsoleFullscreen2({
   isOpen,
   openRequestId,
@@ -151,8 +168,10 @@ export function DebugConsoleFullscreen2({
   const [curtainOffset, setCurtainOffset] = useState(() => (typeof window === "undefined" ? 0 : getFullscreen2ModeOffset(startMode)));
   const [isDraggingCurtain, setIsDraggingCurtain] = useState(false);
   const commandInputRef = useRef<HTMLInputElement | null>(null);
+  const linesRef = useRef<HTMLDivElement | null>(null);
   const curtainOffsetRef = useRef(0);
   const curtainDragRef = useRef<CurtainDragState | null>(null);
+  const shouldStickToLatestRef = useRef(true);
   const openingFrameRef = useRef<number | null>(null);
   const closingTimeoutRef = useRef<number | null>(null);
   const onCloseAnimationEndRef = useRef(onCloseAnimationEnd);
@@ -201,6 +220,7 @@ export function DebugConsoleFullscreen2({
     setCommandValue("");
     setConsoleMode(startMode);
     setIsDraggingCurtain(false);
+    shouldStickToLatestRef.current = true;
     curtainDragRef.current = null;
 
     if (startMode === "input") {
@@ -219,6 +239,12 @@ export function DebugConsoleFullscreen2({
     }
 
     window.setTimeout(() => commandInputRef.current?.focus(), 0);
+    window.setTimeout(() => {
+      const linesElement = linesRef.current;
+      if (linesElement) {
+        linesElement.scrollTop = linesElement.scrollHeight;
+      }
+    }, 0);
 
     return () => {
       if (openingFrameRef.current !== null) {
@@ -227,6 +253,19 @@ export function DebugConsoleFullscreen2({
       }
     };
   }, [isOpen, openRequestId, startMode]);
+
+  useLayoutEffect(() => {
+    if (!isOpen || !shouldStickToLatestRef.current) {
+      return;
+    }
+
+    const linesElement = linesRef.current;
+    if (!linesElement) {
+      return;
+    }
+
+    linesElement.scrollTop = linesElement.scrollHeight;
+  }, [curtainOffset, isOpen, visibleLines]);
 
   useLayoutEffect(() => {
     if (!isOpen || closeRequestId === 0) {
@@ -267,6 +306,12 @@ export function DebugConsoleFullscreen2({
     const nextOffset = Math.max(0, Math.min(viewportHeight - FULLSCREEN2_INPUT_HEIGHT, value));
     curtainOffsetRef.current = nextOffset;
     setCurtainOffset(nextOffset);
+  };
+
+  const handleLinesScroll = (event: UIEvent<HTMLDivElement>) => {
+    const linesElement = event.currentTarget;
+    const distanceFromBottom = linesElement.scrollHeight - (linesElement.scrollTop + linesElement.clientHeight);
+    shouldStickToLatestRef.current = distanceFromBottom <= 32;
   };
 
   const setModeOffset = (mode: Fullscreen2ConsoleMode) => {
@@ -339,24 +384,11 @@ export function DebugConsoleFullscreen2({
       return;
     }
 
-    if (commandValue.length === 0 && event.key === "1") {
+    const shortcutMode = commandValue.length === 0 ? getFullscreen2ShortcutMode(event) : null;
+    if (shortcutMode) {
       event.preventDefault();
-      onApplyModePreset("input");
-      setModeOffset("input");
-      return;
-    }
-
-    if (commandValue.length === 0 && event.key === "2") {
-      event.preventDefault();
-      onApplyModePreset("compact");
-      setModeOffset("compact");
-      return;
-    }
-
-    if (commandValue.length === 0 && event.key === "3") {
-      event.preventDefault();
-      onApplyModePreset("full");
-      setModeOffset("full");
+      onApplyModePreset(shortcutMode);
+      setModeOffset(shortcutMode);
       return;
     }
 
@@ -384,7 +416,7 @@ export function DebugConsoleFullscreen2({
           onPointerUp={finishCurtainDrag}
           onPointerCancel={finishCurtainDrag}
         />
-        <div className="debug-console-fullscreen2-lines" aria-label="Debug console output">
+        <div ref={linesRef} className="debug-console-fullscreen2-lines" aria-label="Debug console output" onScroll={handleLinesScroll}>
           {visibleLines.map((line, index) => (
             <span className="debug-console-fullscreen2-line" key={`${line}-${index}`}>
               {line} // TRACE_{index.toString().padStart(2, "0")}

@@ -45,7 +45,8 @@ type DebugConsoleDisplayMode = "fullscreen" | "fullscreen2" | "float";
 const DEBUG_CONSOLE_COMMAND_HISTORY_LIMIT = 50;
 
 const DEBUG_CONSOLE_COMMAND_HELP =
-  "Available commands: hide, clear, help, admin, copy, snapshot, retry, radio, float, console1, console2, fullscreen, background, background 0-100, trans-text 0-100, compact, filter all, filter auth, filter sdk, filter profile, filter sync, filter network, filter ui, filter command.";
+  "Available commands: hide, clear, help, admin, hidejoin, showjoin, force start, force stop, setround = 5, copy, snapshot, retry, radio, float, console1, console2, fullscreen, background, background 0-100, trans-text 0-100, compact, filter all, filter auth, filter sdk, filter profile, filter sync, filter network, filter ui, filter command.";
+const DEBUG_CONSOLE_SET_ROUND_COMMAND_PATTERN = /^set\s*round\s*=\s*(-?\d+)$/;
 const CONSOLE2_INPUT_COMMAND_BACKGROUND_OPACITY_PERCENT = 100;
 const CONSOLE2_COMPACT_BACKGROUND_OPACITY_PERCENT = 20;
 const CONSOLE2_COMPACT_TEXT_OPACITY_PERCENT = 75;
@@ -263,6 +264,7 @@ export function MainScreen() {
   const [shouldStartDebugConsoleCompact, setShouldStartDebugConsoleCompact] = useState(true);
   const [debugCommandHistory, setDebugCommandHistory] = useState<string[]>([]);
   const [isAdminOpen, setIsAdminOpen] = useState(false);
+  const [isJoinControlsHidden, setIsJoinControlsHidden] = useState(false);
   const debugEventHandlerRef = useRef<((event: DebugConsoleEventInput) => void) | undefined>();
   const [isRenderingSpikeOpen, setIsRenderingSpikeOpen] = useState(hasRenderingSpikeParam);
   const [isThreeDModeOpen, setIsThreeDModeOpen] = useState(false);
@@ -308,7 +310,9 @@ export function MainScreen() {
     setTimerDuration,
     setPrecountDuration,
     forceStartRound,
+    forceStopRound,
     forceCompleteRound,
+    setRoundNumber,
     adminResetSession,
     addTestParticipant,
     toggleTestParticipantsReady,
@@ -333,7 +337,9 @@ export function MainScreen() {
   });
   const applyConsole2ModePreset = useCallback((mode: Fullscreen2ConsoleMode) => {
     if (mode === "input") {
+      setBackgroundConsoleOpacityPercent(CONSOLE2_FULL_BACKGROUND_OPACITY_PERCENT);
       setBackgroundConsoleCommandOpacityPercent(CONSOLE2_INPUT_COMMAND_BACKGROUND_OPACITY_PERCENT);
+      setBackgroundConsoleTextOpacityPercent(CONSOLE2_FULL_TEXT_OPACITY_PERCENT);
       return;
     }
 
@@ -534,6 +540,94 @@ export function MainScreen() {
       return;
     }
 
+    if (normalizedCommand === "hidejoin") {
+      setIsJoinControlsHidden(true);
+      debugConsoleState.appendCommandOutput({
+        level: "info",
+        label: "command:hidejoin",
+        detail: "Lobby join controls hidden for this dashboard view.",
+      });
+      return;
+    }
+
+    if (normalizedCommand === "showjoin") {
+      setIsJoinControlsHidden(false);
+      debugConsoleState.appendCommandOutput({
+        level: "info",
+        label: "command:showjoin",
+        detail: "Lobby join controls restored for this dashboard view.",
+      });
+      return;
+    }
+
+    if (normalizedCommand === "force start" || normalizedCommand === "forcestart") {
+      if (!lobbyState.canUseAdminTools) {
+        debugConsoleState.appendCommandOutput({
+          level: "warn",
+          label: "command:force-start",
+          detail: "Force start is admin-only for the current session host.",
+        });
+        return;
+      }
+
+      forceStartRound();
+      debugConsoleState.appendCommandOutput({
+        level: "info",
+        label: "command:force-start",
+        detail: "Admin force start requested.",
+      });
+      return;
+    }
+
+    if (normalizedCommand === "force stop" || normalizedCommand === "forcestop") {
+      if (!lobbyState.canUseAdminTools) {
+        debugConsoleState.appendCommandOutput({
+          level: "warn",
+          label: "command:force-stop",
+          detail: "Force stop is admin-only for the current session host.",
+        });
+        return;
+      }
+
+      forceStopRound();
+      debugConsoleState.appendCommandOutput({
+        level: "info",
+        label: "command:force-stop",
+        detail: "Admin force stop requested without incrementing the round number.",
+      });
+      return;
+    }
+
+    const setRoundMatch = normalizedCommand.match(DEBUG_CONSOLE_SET_ROUND_COMMAND_PATTERN);
+    if (setRoundMatch) {
+      if (!lobbyState.canUseAdminTools) {
+        debugConsoleState.appendCommandOutput({
+          level: "warn",
+          label: "command:set-round",
+          detail: "Set round is admin-only for the current session host.",
+        });
+        return;
+      }
+
+      const nextRoundNumber = Number(setRoundMatch[1]);
+      if (!Number.isInteger(nextRoundNumber) || nextRoundNumber < 0 || nextRoundNumber > 999) {
+        debugConsoleState.appendCommandOutput({
+          level: "warn",
+          label: "command:set-round",
+          detail: "Use setround = 0-999 to set the round number.",
+        });
+        return;
+      }
+
+      setRoundNumber(nextRoundNumber);
+      debugConsoleState.appendCommandOutput({
+        level: "info",
+        label: "command:set-round",
+        detail: `Admin round number set to ${nextRoundNumber}.`,
+      });
+      return;
+    }
+
     if (normalizedCommand === "float") {
       setDebugConsoleDisplayMode("float");
       debugConsoleState.appendCommandOutput({
@@ -721,7 +815,7 @@ export function MainScreen() {
       label: "command:unknown",
       detail: `Unknown command: ${rawCommand}. ${DEBUG_CONSOLE_COMMAND_HELP}`,
     });
-  }, [debugConsoleState, lobbyState.canUseAdminTools, openDebugConsole, retryDiscordProfile]);
+  }, [debugConsoleState, forceStartRound, forceStopRound, lobbyState.canUseAdminTools, openDebugConsole, retryDiscordProfile, setRoundNumber]);
   const countdownDisplay = useCountdownDisplay(state);
   const { playCue, playSecretCodeStep } = useSoundEffects(state, lobbyState, countdownDisplay);
   const frontEndSoundCloudPlayer = useSoundCloudPlayer({
@@ -1455,6 +1549,7 @@ export function MainScreen() {
             lobbyState={lobbyState}
             generatedDisplayNames={generatedDisplayNames}
             discordDisplayName={discordDisplayName}
+            isJoinControlsHidden={isJoinControlsHidden}
             onJoinSession={handleJoinSession}
             onRollDisplayName={rollDisplayName}
             onSelectDisplayName={selectDisplayName}

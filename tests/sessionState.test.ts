@@ -131,8 +131,8 @@ test("ready hold events cannot collapse an active round", () => {
   const afterHoldStart = reduceSessionEvent(snapshot, { type: "ready_hold_start" }, HOST);
   const afterHoldEnd = reduceSessionEvent(snapshot, { type: "ready_hold_end" }, HOST);
 
-  assert.strictEqual(afterHoldStart, snapshot);
-  assert.strictEqual(afterHoldEnd, snapshot);
+  assert.deepEqual(afterHoldStart, snapshot);
+  assert.deepEqual(afterHoldEnd, snapshot);
 });
 
 test("advanceSessionTime moves precount to countdown to completed", () => {
@@ -193,6 +193,29 @@ test("host can force complete or reset while the timer is active", () => {
   assert.equal(afterResetSession.session.phase, "lobby");
   assert.deepEqual(afterResetSession.countdown, {});
   assert.ok(afterResetSession.users.every((user) => user.presence === "idle"));
+});
+
+test("host can force stop an active timer without incrementing the round", () => {
+  const snapshot = createActiveSnapshot("countdown");
+
+  const nextSnapshot = reduceSessionEvent(snapshot, { type: "admin_force_stop_round" }, HOST, Date.parse("2026-04-21T00:00:20.000Z"));
+
+  assert.equal(nextSnapshot.session.phase, "lobby");
+  assert.equal(nextSnapshot.session.roundNumber, snapshot.session.roundNumber);
+  assert.deepEqual(nextSnapshot.countdown, {});
+  assert.ok(nextSnapshot.users.every((user) => user.presence === "idle"));
+});
+
+test("host can manually set the round number", () => {
+  const snapshot = createHostSnapshot();
+
+  const zeroRoundSnapshot = reduceSessionEvent(snapshot, { type: "admin_set_round_number", roundNumber: 0 }, HOST);
+  const clampedRoundSnapshot = reduceSessionEvent(snapshot, { type: "admin_set_round_number", roundNumber: 1000 }, HOST);
+  const nonHostSnapshot = reduceSessionEvent(snapshot, { type: "admin_set_round_number", roundNumber: 5 }, JOINER);
+
+  assert.equal(zeroRoundSnapshot.session.roundNumber, 0);
+  assert.equal(clampedRoundSnapshot.session.roundNumber, 999);
+  assert.equal(nonHostSnapshot.session.roundNumber, snapshot.session.roundNumber);
 });
 
 test("leave_session removes the departing user and reassigns host ownership", () => {

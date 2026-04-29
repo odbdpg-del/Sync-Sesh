@@ -688,8 +688,16 @@ export function useDabSyncSession(options: UseDabSyncSessionOptions = {}) {
     syncClient.send({ type: "admin_force_start_round" });
   }, [syncClient]);
 
+  const forceStopRound = useCallback(() => {
+    syncClient.send({ type: "admin_force_stop_round" });
+  }, [syncClient]);
+
   const forceCompleteRound = useCallback(() => {
     syncClient.send({ type: "admin_force_complete_round" });
+  }, [syncClient]);
+
+  const setRoundNumber = useCallback((roundNumber: number) => {
+    syncClient.send({ type: "admin_set_round_number", roundNumber });
   }, [syncClient]);
 
   const adminResetSession = useCallback(() => {
@@ -806,7 +814,9 @@ export function useDabSyncSession(options: UseDabSyncSessionOptions = {}) {
     setPrecountDuration,
     resetRound,
     forceStartRound,
+    forceStopRound,
     forceCompleteRound,
+    setRoundNumber,
     adminResetSession,
     addTestParticipant,
     toggleTestParticipantsReady,
