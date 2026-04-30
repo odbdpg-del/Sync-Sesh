@@ -8,6 +8,219 @@ Entries must be in reverse chronological order. New entries go at the top, above
 
 Use a level-two heading for every entry so the editor can fold each change.
 
+## [2507] - 2026-04-29 20:34 - `codex/merge-ui-and-3d-world / Globe Land Fill Layer`
+
+- Removed the experimental procedural Globe `Topo` layer and its viewport toolbar detail slider.
+- Added a toggleable `Land Fill` layer that draws subtle continent fill meshes underneath the coastline strokes.
+- Kept the fill lightweight by reusing local continent outline data instead of adding another dense imported layer.
+- Touched `src/components/GlobePanel.tsx` and `changelog.md`.
+- Build/test: `npm.cmd run build` passed with the existing Vite large-chunk warning; `npx.cmd tsx --test tests\globePoints.test.ts tests\globeContinentOutlines.test.ts tests\earthTopoLines.test.ts` passed.
+
+## [2506] - 2026-04-29 20:29 - `codex/merge-ui-and-3d-world / Globe Procedural Topo Layer`
+
+- Added a toggleable Globe `Topo` layer to the viewport toolbar.
+- Added a 1-10 `Topo Detail` slider that controls procedural contour density.
+- Rendered the topo contours as one merged line-segment buffer so the new layer follows the optimized Globe geometry path.
+- Kept the topo layer off by default to avoid adding extra render work until the user enables it.
+- Touched `src/components/GlobePanel.tsx` and `changelog.md`.
+- Build/test: `npm.cmd run build` passed with the existing Vite large-chunk warning; `npx.cmd tsx --test tests\globePoints.test.ts tests\globeContinentOutlines.test.ts tests\earthTopoLines.test.ts` passed.
+
+## [2505] - 2026-04-29 20:26 - `codex/merge-ui-and-3d-world / Globe Merged Coastline Geometry`
+
+- Replaced thousands of per-strip topo `<line>` objects with one merged `<lineSegments>` geometry per imported topo line set.
+- Kept the coastline detail slider, layer toggles, colors, and opacity behavior while reducing Three object and draw-call overhead.
+- Built merged line segment buffers from simplified coastline points so low-detail settings now reduce vertices without leaving thousands of live line objects.
+- Touched `src/components/GlobePanel.tsx` and `changelog.md`.
+- Build/test: `npm.cmd run build` passed with the existing Vite large-chunk warning; `npx.cmd tsx --test tests\globePoints.test.ts tests\globeContinentOutlines.test.ts tests\earthTopoLines.test.ts` passed.
+
+## [2504] - 2026-04-29 20:23 - `codex/merge-ui-and-3d-world / Globe Coastline Detail Slider`
+
+- Added a 1-10 `Coastline Detail` slider to the Globe viewport toolbar.
+- Simplified only coastline/topo coastline geometry at render time by down-sampling points before building line positions, leaving rivers, lakes, and grid detail unchanged.
+- Set the default coastline detail to a balanced middle value to reduce initial fullscreen Globe load while keeping the map readable.
+- Touched `src/components/GlobePanel.tsx`, `src/styles/global.css`, and `changelog.md`.
+- Build/test: `npm.cmd run build` passed with the existing Vite large-chunk warning; `npx.cmd tsx --test tests\globePoints.test.ts tests\globeContinentOutlines.test.ts tests\earthTopoLines.test.ts` passed.
+
+## [2503] - 2026-04-29 20:18 - `codex/merge-ui-and-3d-world / Globe Fullscreen Video Pause`
+
+- Added a Globe fullscreen state bridge back to the main screen.
+- Unmounted the looping background video while the Globe panel is fullscreen so the browser can stop decoding it behind the 3D canvas.
+- Reset the fullscreen video pause state when the Globe panel is hidden or closed.
+- Touched `src/components/GlobePanel.tsx`, `src/screens/MainScreen.tsx`, and `changelog.md`.
+- Build/test: `npm.cmd run build` passed with the existing Vite large-chunk warning; `npx.cmd tsx --test tests\globePoints.test.ts tests\globeContinentOutlines.test.ts tests\earthTopoLines.test.ts` passed.
+
+## [2502] - 2026-04-29 20:14 - `codex/merge-ui-and-3d-world / Globe Portal Fullscreen`
+
+- Rendered the Globe panel through a `document.body` portal while fullscreen so it escapes dashboard layout transforms and fills the browser viewport.
+- Raised the fullscreen layer above the debug console and locked the fullscreen box sizing to `100vw` by `100vh`.
+- Touched `src/components/GlobePanel.tsx`, `src/styles/global.css`, and `changelog.md`.
+- Build/test: `npm.cmd run build` passed with the existing Vite large-chunk warning; `npx.cmd tsx --test tests\globePoints.test.ts tests\globeContinentOutlines.test.ts tests\earthTopoLines.test.ts` passed.
+
+## [2501] - 2026-04-29 20:10 - `codex/merge-ui-and-3d-world / Globe Browser-Fit Fullscreen`
+
+- Changed Globe fullscreen mode from an inset page overlay to a true browser-window overlay that fills `100vw` by `100vh`.
+- Locked fullscreen panel overflow and made the layout/summary scroll internally so the page itself does not need to scroll.
+- Added fullscreen-specific responsive overrides so mobile/tablet globe height rules do not shrink the viewport.
+- Touched `src/styles/global.css` and `changelog.md`.
+- Build/test: `npm.cmd run build` passed with the existing Vite large-chunk warning; `npx.cmd tsx --test tests\globePoints.test.ts tests\globeContinentOutlines.test.ts tests\earthTopoLines.test.ts` passed.
+
+## [2500] - 2026-04-29 20:07 - `codex/merge-ui-and-3d-world / Globe Fullscreen And Close Controls`
+
+- Added Globe panel top-right window controls: a maximize button that toggles into minimize, and a separate `X` close button.
+- Added fullscreen Globe styling as a fixed overlay with an expanded viewport and retained summary/sidebar controls.
+- Wired the close button to hide the Globe panel through the same visibility state used by `hideglobe`.
+- Touched `src/components/GlobePanel.tsx`, `src/screens/MainScreen.tsx`, `src/styles/global.css`, and `changelog.md`.
+- Build/test: `npm.cmd run build` passed with the existing Vite large-chunk warning; `npx.cmd tsx --test tests\globePoints.test.ts tests\globeContinentOutlines.test.ts tests\earthTopoLines.test.ts` passed.
+
+## [2499] - 2026-04-29 20:04 - `codex/merge-ui-and-3d-world / Globe Closer Zoom`
+
+- Loosened Globe viewport zoom clamps so users can zoom much closer in both full-globe view and satellite-focused view.
+- Kept small minimum camera distances to avoid clipping through the globe or selected satellite.
+- Touched `src/components/GlobePanel.tsx` and `changelog.md`.
+- Build/test: `npm.cmd run build` passed with the existing Vite large-chunk warning; `npx.cmd tsx --test tests\globePoints.test.ts tests\globeContinentOutlines.test.ts tests\earthTopoLines.test.ts` passed.
+
+## [2498] - 2026-04-29 19:59 - `codex/merge-ui-and-3d-world / Globe Viewport Toolbar`
+
+- Added a bottom-right Globe viewport toolbar behind a compact `i` button with toggles for grid, coastlines, rivers, lakes, and viewport FPS.
+- Added viewport zoom controls for zoom in, zoom out, and zoom reset, using the existing globe/focused camera distance clamps.
+- Added a throttled canvas FPS probe and styled the toolbar, FPS readout, and zoom controls as viewport-local overlays.
+- Touched `src/components/GlobePanel.tsx`, `src/styles/global.css`, and `changelog.md`.
+- Build/test: `npm.cmd run build` passed with the existing Vite large-chunk warning; `npx.cmd tsx --test tests\globePoints.test.ts tests\globeContinentOutlines.test.ts tests\earthTopoLines.test.ts` passed.
+
+## [2497] - 2026-04-29 19:55 - `codex/merge-ui-and-3d-world / Globe Natural Earth Topo Lines`
+
+- Replaced the hand-drawn continent renderer with a generated Natural Earth 1:10m physical-vector subset for medium global coastlines, high-detail North America coastline, major rivers, and major lake outlines.
+- Rendered the real geography as sphere-surface line strips so Florida, Long Island, rivers, and lakes can read at closer zoom levels.
+- Added tests for the generated topo source, layer presence, regional detail point counts, and Florida/Long Island coordinate coverage.
+- Touched `src/components/GlobePanel.tsx`, `src/lib/globe/earthTopoLines.ts`, `tests/earthTopoLines.test.ts`, and `changelog.md`.
+- Build/test: `npm.cmd run build` passed with the existing Vite large-chunk warning; `npx.cmd tsx --test tests\globePoints.test.ts tests\globeContinentOutlines.test.ts tests\earthTopoLines.test.ts` passed.
+
+## [2496] - 2026-04-29 19:49 - `codex/merge-ui-and-3d-world / Globe Wheel Zoom`
+
+- Added mouse-wheel zoom scoped to the Globe viewport so users can zoom in/out only while hovering over the globe canvas area.
+- Kept separate clamped camera distances for globe view and satellite-focused view.
+- Touched `src/components/GlobePanel.tsx` and `changelog.md`.
+- Build/test: `npm.cmd run build` passed with the existing Vite large-chunk warning; `npx.cmd tsx --test tests\globePoints.test.ts tests\globeContinentOutlines.test.ts` passed.
+
+## [2495] - 2026-04-29 19:47 - `codex/merge-ui-and-3d-world / Globe North America Detail`
+
+- Replaced the rough North America continent loop with a denser coastline-style outline covering Alaska, Canada, the US coasts, Mexico, Central America, and the Atlantic edge.
+- Added a test guard to keep the North America outline from regressing to a low-detail polygon.
+- Touched `src/lib/globe/continentOutlines.ts`, `tests/globeContinentOutlines.test.ts`, and `changelog.md`.
+- Build/test: `npm.cmd run build` passed with the existing Vite large-chunk warning; `npx.cmd tsx --test tests\globePoints.test.ts tests\globeContinentOutlines.test.ts` passed.
+
+## [2494] - 2026-04-29 19:46 - `codex/merge-ui-and-3d-world / Globe Continent Line Tuning`
+
+- Smoothed continent wireframes by subdividing outline segments along the globe surface instead of drawing long straight chords.
+- Brightened continent outlines and dimmed the latitude/longitude grid and sphere wireframe so the land shape reads first.
+- Touched `src/components/GlobePanel.tsx` and `changelog.md`.
+- Build/test: `npm.cmd run build` passed with the existing Vite large-chunk warning; `npx.cmd tsx --test tests\globePoints.test.ts tests\globeContinentOutlines.test.ts` passed.
+
+## [2493] - 2026-04-29 19:44 - `codex/merge-ui-and-3d-world / Globe Continent Wireframes`
+
+- Added a local continent outline dataset and rendered major Earth continent wire lines onto the Globe surface.
+- Added validation tests for closed outline loops and valid latitude/longitude ranges.
+- Touched `src/components/GlobePanel.tsx`, `src/lib/globe/continentOutlines.ts`, `tests/globeContinentOutlines.test.ts`, and `changelog.md`.
+- Build/test: `npm.cmd run build` passed with the existing Vite large-chunk warning; `npx.cmd tsx --test tests\globePoints.test.ts tests\globeContinentOutlines.test.ts` passed.
+
+## [2492] - 2026-04-29 19:42 - `codex/merge-ui-and-3d-world / Globe Focus Back Button`
+
+- Added a top-right Globe viewport back button that appears while a satellite is focused and returns the camera to globe focus.
+- Styled the control as a compact blue glass arrow button and stopped its pointer events from starting viewport drag.
+- Touched `src/components/GlobePanel.tsx`, `src/styles/global.css`, and `changelog.md`.
+- Build/test: `npm.cmd run build` passed with the existing Vite large-chunk warning; `npx.cmd tsx --test tests\globePoints.test.ts` passed.
+
+## [2491] - 2026-04-29 19:40 - `codex/merge-ui-and-3d-world / Globe Focus Orbit Stabilization`
+
+- Split Globe controls so normal mode drags the globe while satellite-focused mode drags the camera orbit around the selected satellite center.
+- Stabilized satellite focus by directly recentering the scene on the selected satellite and stopping globe momentum when focus starts.
+- Touched `src/components/GlobePanel.tsx` and `changelog.md`.
+- Build/test: `npm.cmd run build` passed with the existing Vite large-chunk warning; `npx.cmd tsx --test tests\globePoints.test.ts` passed.
+
+## [2490] - 2026-04-29 19:38 - `codex/merge-ui-and-3d-world / Globe Satellite Center Focus`
+
+- Changed Globe focused mode so the selected satellite becomes the actual scene center instead of only being tracked by camera look-at.
+- Recentered the globe scene around the selected satellite and made the camera orbit the new satellite-centered origin.
+- Touched `src/components/GlobePanel.tsx` and `changelog.md`.
+- Build/test: `npm.cmd run build` passed with the existing Vite large-chunk warning; `npx.cmd tsx --test tests\globePoints.test.ts` passed.
+
+## [2489] - 2026-04-29 19:37 - `codex/merge-ui-and-3d-world / Globe Satellite Click Selection Fix`
+
+- Moved Globe satellite selection onto pointer-down and stopped satellite pointer propagation so viewport dragging no longer steals the focus click.
+- Kept click and pointer-up guarded on satellite nodes so the selected camera target stays active after hover clears.
+- Touched `src/components/GlobePanel.tsx` and `changelog.md`.
+- Build/test: `npm.cmd run build` passed with the existing Vite large-chunk warning; `npx.cmd tsx --test tests\globePoints.test.ts` passed.
+
+## [2488] - 2026-04-29 19:34 - `codex/merge-ui-and-3d-world / Globe Satellite Focus Camera`
+
+- Added click-to-focus behavior for Globe satellites so the camera zooms in and orbits the selected user satellite while the globe and satellite orbits continue.
+- Added selected-satellite camera target state, focus highlighting, and empty-space click release back to the default globe camera.
+- Touched `src/components/GlobePanel.tsx` and `changelog.md`.
+- Build/test: `npm.cmd run build` passed with the existing Vite large-chunk warning; `npx.cmd tsx --test tests\globePoints.test.ts` passed.
+
+## [2487] - 2026-04-29 19:31 - `codex/merge-ui-and-3d-world / Globe Satellite Hover Labels`
+
+- Added hover handling for Globe satellites so the represented user name appears in a compact HUD/readout.
+- Highlighted the hovered satellite with a slightly larger point and glow.
+- Touched `src/components/GlobePanel.tsx`, `src/styles/global.css`, and `changelog.md`.
+- Build/test: `npm.cmd run build` passed with the existing Vite large-chunk warning; `npx.cmd tsx --test tests\globePoints.test.ts` passed.
+
+## [2486] - 2026-04-29 19:28 - `codex/merge-ui-and-3d-world / Globe Raised Route Arcs`
+
+- Changed Globe connection routes from straight tubes into lifted multi-segment arcs so server, satellite, and VPN routes bow away from the globe.
+- Added route arc radius guards so the middle of each path stays above the globe surface instead of cutting through it.
+- Touched `src/components/GlobePanel.tsx` and `changelog.md`.
+- Build/test: `npm.cmd run build` passed with the existing Vite large-chunk warning; `npx.cmd tsx --test tests\globePoints.test.ts` passed.
+
+## [2485] - 2026-04-29 19:26 - `codex/merge-ui-and-3d-world / Globe Continuous Routes`
+
+- Replaced dotted Globe connection samples with continuous thin route tubes between the server, satellites, and VPN fake route points.
+- Kept live endpoint updates so routes continue following orbiting satellites.
+- Touched `src/components/GlobePanel.tsx` and `changelog.md`.
+- Build/test: `npm.cmd run build` passed with the existing Vite large-chunk warning; `npx.cmd tsx --test tests\globePoints.test.ts` passed.
+
+## [2484] - 2026-04-29 19:23 - `codex/merge-ui-and-3d-world / Globe Free Orbit Mode`
+
+- Added a Globe orbit mode toggle that switches between the existing decaying `MOMENTUM` behavior and a new persistent `FREE` spin mode.
+- Added an orbit mode readout and responsive header action layout beside the existing `VPN VISUAL` control.
+- Touched `src/components/GlobePanel.tsx`, `src/styles/global.css`, and `changelog.md`.
+- Build/test: `npm.cmd run build` passed with the existing Vite large-chunk warning; `npx.cmd tsx --test tests\globePoints.test.ts` passed.
+
+## [2483] - 2026-04-29 19:20 - `codex/merge-ui-and-3d-world / Globe Orbit Momentum`
+
+- Added inertial momentum to Globe drag-orbit controls so the globe continues spinning briefly after release.
+- Added velocity clamping and decay so the movement settles smoothly after user input.
+- Touched `src/components/GlobePanel.tsx` and `changelog.md`.
+- Build/test: `npm.cmd run build` passed with the existing Vite large-chunk warning; `npx.cmd tsx --test tests\globePoints.test.ts` passed.
+
+## [2482] - 2026-04-29 19:19 - `codex/merge-ui-and-3d-world / Globe Drag Orbit`
+
+- Added pointer drag orbit controls to the dashboard Globe viewport so users can rotate and tilt the globe directly.
+- Added grab/grabbing cursor styling and touch-action handling for the interactive globe viewport.
+- Touched `src/components/GlobePanel.tsx`, `src/styles/global.css`, and `changelog.md`.
+- Build/test: `npm.cmd run build` passed with the existing Vite large-chunk warning; `npx.cmd tsx --test tests\globePoints.test.ts` passed.
+
+## [2481] - 2026-04-29 19:17 - `codex/merge-ui-and-3d-world / Globe Console Visibility`
+
+- Made the dashboard Globe panel hidden by default so it only appears when requested.
+- Added debug console commands `showglobe` and `hideglobe`, plus help text entries for both commands.
+- Touched `src/screens/MainScreen.tsx` and `changelog.md`.
+- Build/test: `npm.cmd run build` passed with the existing Vite large-chunk warning.
+
+## [2480] - 2026-04-29 19:01 - `codex/merge-ui-and-3d-world / GP-3 Static Globe Renderer`
+
+- Added the dashboard Globe panel with a blue wireframe React Three Fiber globe, fixed server point, orbiting user satellites, dotted connection routes, and reduced-motion behavior.
+- Added the local-only `VPN VISUAL` toggle that renders a fake surface route without changing sync, reducer, session event, network, Discord, or location behavior.
+- Touched `src/components/GlobePanel.tsx`, `src/screens/MainScreen.tsx`, `src/styles/global.css`, `docs/globe-panel-plan.md`, and `changelog.md`.
+- Build/test: `npm.cmd run build` passed with the existing Vite large-chunk warning; `npx.cmd tsx --test tests\globePoints.test.ts` passed.
+
+## [2479] - 2026-04-29 18:57 - `codex/merge-ui-and-3d-world / Globe Route Model`
+
+- Added pure globe route helpers for the dashboard globe panel, including a fixed server node, orbiting user satellites, server-satellite connections, and local-only fake VPN route data.
+- Added focused tests for stable satellite placement, route connection counts, and VPN fake surface behavior.
+- Touched `src/lib/globe/globePoints.ts`, `tests/globePoints.test.ts`, `docs/globe-panel-plan.md`, and `changelog.md`.
+- Build/test: `npx.cmd tsx --test tests\globePoints.test.ts` passed; `npm.cmd run build` passed with the existing Vite large-chunk warning.
+
 ## [2478] - 2026-04-29 18:43 - `codex/merge-ui-and-3d-world / Join Panel Console Toggle`
 
 - Added local debug console commands `hidejoin` and `showjoin` for aesthetic toggling of the lobby join/join-behavior controls.

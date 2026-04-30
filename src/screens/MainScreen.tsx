@@ -5,6 +5,7 @@ import { DebugConsoleFullscreen } from "../components/DebugConsoleFullscreen";
 import { DebugConsoleFullscreen2, type Fullscreen2ConsoleMode } from "../components/DebugConsoleFullscreen2";
 import { DebugConsoleWindow } from "../components/DebugConsoleWindow";
 import { getStartupConsoleEvents, LoadingScreen, type LoadingScreenDiagnosticEvent, type StartupConsoleEvent } from "../components/LoadingScreen";
+import { GlobePanel } from "../components/GlobePanel";
 import { LobbyPanel } from "../components/LobbyPanel";
 import { SoundCloudDeckPanel } from "../components/SoundCloudDeckPanel";
 import { type SoundCloudPanelMode } from "../components/SoundCloudModeToggle";
@@ -45,7 +46,7 @@ type DebugConsoleDisplayMode = "fullscreen" | "fullscreen2" | "float";
 const DEBUG_CONSOLE_COMMAND_HISTORY_LIMIT = 50;
 
 const DEBUG_CONSOLE_COMMAND_HELP =
-  "Available commands: hide, clear, help, admin, hidejoin, showjoin, force start, force stop, setround = 5, copy, snapshot, retry, radio, float, console1, console2, fullscreen, background, background 0-100, trans-text 0-100, compact, filter all, filter auth, filter sdk, filter profile, filter sync, filter network, filter ui, filter command.";
+  "Available commands: hide, clear, help, admin, hidejoin, showjoin, showglobe, hideglobe, force start, force stop, setround = 5, copy, snapshot, retry, radio, float, console1, console2, fullscreen, background, background 0-100, trans-text 0-100, compact, filter all, filter auth, filter sdk, filter profile, filter sync, filter network, filter ui, filter command.";
 const DEBUG_CONSOLE_SET_ROUND_COMMAND_PATTERN = /^set\s*round\s*=\s*(-?\d+)$/;
 const CONSOLE2_INPUT_COMMAND_BACKGROUND_OPACITY_PERCENT = 100;
 const CONSOLE2_COMPACT_BACKGROUND_OPACITY_PERCENT = 20;
@@ -265,9 +266,12 @@ export function MainScreen() {
   const [debugCommandHistory, setDebugCommandHistory] = useState<string[]>([]);
   const [isAdminOpen, setIsAdminOpen] = useState(false);
   const [isJoinControlsHidden, setIsJoinControlsHidden] = useState(false);
+  const [isGlobePanelVisible, setIsGlobePanelVisible] = useState(false);
+  const [isGlobePanelFullscreen, setIsGlobePanelFullscreen] = useState(false);
   const debugEventHandlerRef = useRef<((event: DebugConsoleEventInput) => void) | undefined>();
   const [isRenderingSpikeOpen, setIsRenderingSpikeOpen] = useState(hasRenderingSpikeParam);
   const [isThreeDModeOpen, setIsThreeDModeOpen] = useState(false);
+  const [isGlobeVpnVisualEnabled, setIsGlobeVpnVisualEnabled] = useState(false);
   const [isSoundCloudPanelEnabled, setIsSoundCloudPanelEnabled] = useState(false);
   const [soundCloudPanelMode, setSoundCloudPanelMode] = useState<SoundCloudPanelMode>("radio");
   const [soundCloudWaveformBarCount, setSoundCloudWaveformBarCount] = useState(60);
@@ -556,6 +560,27 @@ export function MainScreen() {
         level: "info",
         label: "command:showjoin",
         detail: "Lobby join controls restored for this dashboard view.",
+      });
+      return;
+    }
+
+    if (normalizedCommand === "showglobe") {
+      setIsGlobePanelVisible(true);
+      debugConsoleState.appendCommandOutput({
+        level: "info",
+        label: "command:showglobe",
+        detail: "Dashboard globe panel enabled.",
+      });
+      return;
+    }
+
+    if (normalizedCommand === "hideglobe") {
+      setIsGlobePanelVisible(false);
+      setIsGlobePanelFullscreen(false);
+      debugConsoleState.appendCommandOutput({
+        level: "info",
+        label: "command:hideglobe",
+        detail: "Dashboard globe panel hidden.",
       });
       return;
     }
@@ -1285,6 +1310,11 @@ export function MainScreen() {
     joinSession();
   };
 
+  const handleGlobePanelClose = useCallback(() => {
+    setIsGlobePanelVisible(false);
+    setIsGlobePanelFullscreen(false);
+  }, []);
+
   const handleStartReadyHold = () => {
     if (isThreeDModeOpen) {
       return;
@@ -1476,9 +1506,11 @@ export function MainScreen() {
   return (
     <div className="app-stage">
       <div className="app-background-media" aria-hidden="true">
-        <video className="app-background-video" autoPlay muted loop playsInline preload="auto">
-          <source src={backgroundVideo} type="video/mp4" />
-        </video>
+        {!isGlobePanelFullscreen ? (
+          <video className="app-background-video" autoPlay muted loop playsInline preload="auto">
+            <source src={backgroundVideo} type="video/mp4" />
+          </video>
+        ) : null}
         <div className="app-background-stage-tint" />
         <div className="app-background-stage-focus" />
         <div className="app-background-stage-grid" />
@@ -1566,6 +1598,18 @@ export function MainScreen() {
             onSetPrecountDuration={setPrecountDuration}
           />
         </div>
+
+        {isGlobePanelVisible ? (
+          <GlobePanel
+            session={state.session}
+            users={state.users}
+            localUserId={lobbyState.localUser?.id}
+            vpnVisualEnabled={isGlobeVpnVisualEnabled}
+            onToggleVpnVisual={() => setIsGlobeVpnVisualEnabled((current) => !current)}
+            onFullscreenChange={setIsGlobePanelFullscreen}
+            onClose={handleGlobePanelClose}
+          />
+        ) : null}
 
         {isSoundCloudPanelEnabled && soundCloudPanelMode === "radio" ? (
           <SoundCloudPanel player={frontEndSoundCloudPlayer} mode={soundCloudPanelMode} onChangeMode={setSoundCloudPanelMode} />
