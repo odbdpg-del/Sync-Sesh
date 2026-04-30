@@ -8,6 +8,453 @@ Entries must be in reverse chronological order. New entries go at the top, above
 
 Use a level-two heading for every entry so the editor can fold each change.
 
+## [2563] - 2026-04-30 00:56 - `codex/merge-ui-and-3d-world / Small Mode Timer Centering`
+
+- Centered the Small Mode timer content within its header pill for both seven-segment and text fallback states.
+- Kept the centering scoped to the Small Mode timer pill without changing normal header status pill alignment.
+- Touched `src/styles/global.css` and `changelog.md`.
+- Build/test: `npm.cmd run build` passed with the existing Vite large-chunk warning.
+
+## [2562] - 2026-04-30 00:55 - `codex/merge-ui-and-3d-world / Small Mode Timer Size Boost`
+
+- Increased the Small Mode header timer display sizing by roughly 3x.
+- Expanded the timer pill width to fit the larger seven-segment digits while keeping the change scoped to the Small Mode header timer.
+- Touched `src/styles/global.css` and `changelog.md`.
+- Build/test: `npm.cmd run build` passed with the existing Vite large-chunk warning.
+
+## [2561] - 2026-04-30 00:54 - `codex/merge-ui-and-3d-world / Small Mode Header Status Hide`
+
+- Hid the `Session`, `Round`, `Phase`, `Sync`, `Zoom`, and `Windows` header status pills while Small Mode is active.
+- Kept the compact Small Mode timer visible and left normal mode header controls unchanged.
+- Updated the Small Mode plan Phase 11 notes to match the header-only timer direction.
+- Touched `src/components/AppHeader.tsx`, `docs/2d/small-mode-plan.md`, and `changelog.md`.
+- Build/test: `npm.cmd run build` passed with the existing Vite large-chunk warning.
+
+## [2560] - 2026-04-30 00:52 - `codex/merge-ui-and-3d-world / Small Mode Floating Panel Hide`
+
+- Hid floating Globe, Admin, SoundCloud, and debug console surfaces while Small Mode is active.
+- Kept floating panel state, display modes, rects, dock state, and layout storage untouched so surfaces restore when Small Mode exits.
+- Left the 3D SoundCloud standby outside this dashboard-floating gate as planned.
+- Touched `src/screens/MainScreen.tsx` and `changelog.md`.
+- Build/test: `npm.cmd run build` passed with the existing Vite large-chunk warning.
+
+## [2559] - 2026-04-30 00:50 - `codex/merge-ui-and-3d-world / Small Mode Chrome Hide`
+
+- Hid sync and Discord dashboard banners while Small Mode is active.
+- Hid `StatusFooter` while Small Mode is active, leaving the compact header and timer as the primary visible dashboard chrome.
+- Kept floating windows visible for the next Small Mode phase and left sync/SDK state behavior unchanged.
+- Touched `src/screens/MainScreen.tsx` and `changelog.md`.
+- Build/test: `npm.cmd run build` passed with the existing Vite large-chunk warning.
+
+## [2558] - 2026-04-30 00:47 - `codex/merge-ui-and-3d-world / Small Mode Workspace Hide`
+
+- Hid the main dock `PanelWorkspace` while Small Mode is active.
+- Kept the change render-only so panel layout state, empty cells, dock ratios, floating rects, and layout storage remain untouched.
+- Left sync/Discord banners, `StatusFooter`, debug console, and floating workspace-managed panels visible for later Small Mode phases.
+- Touched `src/screens/MainScreen.tsx` and `changelog.md`.
+- Build/test: `npm.cmd run build` passed with the existing Vite large-chunk warning.
+
+## [2557] - 2026-04-30 00:44 - `codex/merge-ui-and-3d-world / Small Mode Timer Specificity Fix`
+
+- Increased the Small Mode header timer selector specificity so its compact seven-segment variables override the generic display sizing.
+- Reduced the header timer segment gap and kept the compact drop shadow scoped to the header timer display.
+- Updated the Small Mode plan to note the selector-specificity requirement for Phase 7.
+- Touched `src/styles/global.css`, `docs/2d/small-mode-plan.md`, and `changelog.md`.
+- Build/test: `npm.cmd run build` passed with the existing Vite large-chunk warning.
+
+## [2556] - 2026-04-30 00:43 - `codex/merge-ui-and-3d-world / Small Mode Compact Header Timer`
+
+- Reduced the Small Mode header timer from title-sized display scale to compact status-pill scale.
+- Tightened header-specific seven-segment sizing and fallback text sizing so the timer stays inside its own pill.
+- Updated the Small Mode plan to reflect the compact timer direction for Phase 7.
+- Touched `src/styles/global.css`, `docs/2d/small-mode-plan.md`, and `changelog.md`.
+- Build/test: `npm.cmd run build` passed with the existing Vite large-chunk warning.
+
+## [2555] - 2026-04-30 00:40 - `codex/merge-ui-and-3d-world / Small Mode Header Timer Scale`
+
+- Scaled the Small Mode header timer pill so its timer text matches the visual size of the main `SYNC SESH` title.
+- Added header-specific seven-segment sizing and large fallback text styling without changing the main Countdown Engine timer scale.
+- Touched `src/styles/global.css` and `changelog.md`.
+- Build/test: `npm.cmd run build` passed with the existing Vite large-chunk warning.
+
+## [2554] - 2026-04-30 00:39 - `codex/merge-ui-and-3d-world / Small Mode Header Timer Pill`
+
+- Added a `Timer` status pill to the header that renders only while Small Mode is active.
+- Reused `SevenSegmentDisplay` for numeric countdown headlines and added a text fallback for phase labels like `ARMED`.
+- Kept all existing header pills, dashboard panels, footer, banners, and floating panels visible for this phase.
+- Touched `src/components/AppHeader.tsx` and `changelog.md`.
+- Build/test: `npm.cmd run build` passed with the existing Vite large-chunk warning.
+
+## [2553] - 2026-04-30 00:37 - `codex/merge-ui-and-3d-world / Small Mode Logo Toggle`
+
+- Changed the Sync Sesh header logo frame into an accessible Small Mode toggle button when the toggle handler is provided.
+- Preserved the existing logo frame structure and styling while adding pressed state, mode-specific labels, pointer affordance, and focus-visible styling.
+- Kept this phase limited to the logo toggle; no dashboard panels, footer, banners, or floating panels are hidden yet.
+- Touched `src/components/AppHeader.tsx`, `src/styles/global.css`, and `changelog.md`.
+- Build/test: `npm.cmd run build` passed with the existing Vite large-chunk warning.
+
+## [2552] - 2026-04-30 00:36 - `codex/merge-ui-and-3d-world / Small Mode Header Prop Plumbing`
+
+- Added optional Small Mode props to `AppHeader` for the compact-mode flag, countdown display state, and future logo toggle handler.
+- Passed `isSmallMode`, `countdownDisplay`, and a toggle callback from `MainScreen` without changing header rendering yet.
+- Kept this phase visually inert so the dashboard, footer, and header controls remain unchanged.
+- Touched `src/components/AppHeader.tsx`, `src/screens/MainScreen.tsx`, and `changelog.md`.
+- Build/test: `npm.cmd run build` passed with the existing Vite large-chunk warning.
+
+## [2551] - 2026-04-30 00:32 - `codex/merge-ui-and-3d-world / Small Mode Reset Layout Exit`
+
+- Made the `resetlayout` debug command clear MainScreen Small Mode state while preserving the existing layout reset behavior.
+- Kept this phase limited to the reset command path, without hiding panels or changing header UI.
+- Touched `src/screens/MainScreen.tsx` and `changelog.md`.
+- Build/test: `npm.cmd run build` passed with the existing Vite large-chunk warning.
+
+## [2550] - 2026-04-30 00:29 - `codex/merge-ui-and-3d-world / Small Mode Debug Commands`
+
+- Added `small` and `normal` debug console commands to enable and disable the MainScreen Small Mode flag.
+- Updated debug help text to list the new Small Mode commands.
+- Kept this phase limited to command control only, without hiding panels or changing header UI.
+- Touched `src/screens/MainScreen.tsx` and `changelog.md`.
+- Build/test: `npm.cmd run build` passed with the existing Vite large-chunk warning.
+
+## [2549] - 2026-04-30 00:28 - `codex/merge-ui-and-3d-world / Small Mode State Flag`
+
+- Added the initial MainScreen-owned Small Mode state flag for the upcoming compact dashboard mode.
+- Exposed the flag on the main app shell through a `data-small-mode` attribute without changing visible panel rendering yet.
+- Touched `src/screens/MainScreen.tsx` and `changelog.md`.
+- Build/test: `npm.cmd run build` passed with the existing Vite large-chunk warning.
+
+## [2548] - 2026-04-30 00:18 - `codex/merge-ui-and-3d-world / Countdown Text Container Scaling`
+
+- Made the Countdown Engine panel a CSS inline-size container so timer typography can react to docked panel width instead of viewport width.
+- Switched the timer headline and seven-segment dimensions from viewport-based scaling to container-based scaling for narrow dock widths.
+- Reduced timer face side rail columns, padding, and display gaps with container units so the countdown text has room to shrink cleanly.
+- Touched `src/styles/global.css` and `changelog.md`.
+- Build/test: `npm.cmd run build` passed with the existing Vite large-chunk warning.
+
+## [2547] - 2026-04-30 00:16 - `codex/merge-ui-and-3d-world / Empty Edge Fresh Split Flex Sizing`
+
+- Stopped fresh edge-created empty splits from persisting the source panel's old pixel width as measured split size.
+- Kept live empty-edge creation on flexible ratio tracks so a small pointer move creates a small empty cell instead of snapping the Countdown Engine and empty cell to stale fixed widths.
+- Updated reducer coverage to assert new and reused same-edge empty splits do not retain stale `availableSize` metadata.
+- Touched `src/lib/panels/panelLayout.ts`, `tests/panelLayout.test.ts`, and `changelog.md`.
+- Build/test: `npx.cmd tsx --test tests\panelLayout.test.ts` passed with 34 tests; `npm.cmd run build` passed with the existing Vite large-chunk warning.
+
+## [2546] - 2026-04-30 00:13 - `codex/merge-ui-and-3d-world / Empty Cell Reuse Ratio Tracking`
+
+- Fixed repeated same-edge empty-cell drags to update the existing panel/empty split ratio directly instead of compounding against the previous ratio.
+- Prevented small follow-up drags on a new empty cell from snapping the content panel smaller and the empty cell larger.
+- Added reducer coverage for right and left same-edge empty split reuse without ratio compounding.
+- Touched `src/lib/panels/panelLayout.ts`, `tests/panelLayout.test.ts`, and `changelog.md`.
+- Build/test: `npx.cmd tsx --test tests\panelLayout.test.ts` passed with 34 tests; `npm.cmd run build` passed with the existing Vite large-chunk warning.
+
+## [2545] - 2026-04-30 00:10 - `codex/merge-ui-and-3d-world / Empty Cell Creation Cancel Threshold`
+
+- Changed edge-created empty cell cancellation to use the same roughly `15px` near-closed threshold as resized empty-cell collapse.
+- Removed the older percentage-based empty-cell cancel threshold so large workspaces no longer cancel while an empty cell is still visibly wide.
+- Updated reducer coverage to verify roughly `14px` cancels while `16px` stays open.
+- Touched `src/lib/panels/panelLayout.ts`, `tests/panelLayout.test.ts`, and `changelog.md`.
+- Build/test: `npx.cmd tsx --test tests\panelLayout.test.ts` passed with 34 tests; `npm.cmd run build` passed with the existing Vite large-chunk warning.
+
+## [2544] - 2026-04-30 00:07 - `codex/merge-ui-and-3d-world / Empty Cell Edge Collapse`
+
+- Collapsed resized dock splits when an empty sibling is dragged down to roughly `15px`, letting rows like Lobby/Countdown/Empty return to Lobby/Countdown.
+- Kept the behavior in the panel layout reducer so live workspace edge drags and keyboard/pointer split resizing share the same cleanup path.
+- Added reducer coverage for right, left, and bottom empty-cell collapse plus a just-above-threshold case.
+- Touched `src/lib/panels/panelLayout.ts`, `tests/panelLayout.test.ts`, and `changelog.md`.
+- Build/test: `npx.cmd tsx --test tests\panelLayout.test.ts` passed with 34 tests; `npm.cmd run build` passed with the existing Vite large-chunk warning.
+
+## [2543] - 2026-04-30 00:02 - `codex/merge-ui-and-3d-world / Dock Panel Minimum Size Relaxation`
+
+- Reduced dock panel minimum sizes to `1x1` so content panels stop forcing medium-width clamps during live edge-created empty-cell resizing.
+- Updated panel registry sizing metadata to match the relaxed dock layout constraints.
+- Updated layout and registry tests to assert pointer-following low-ratio behavior instead of the old medium panel clamps.
+- Touched `src/lib/panels/panelLayout.ts`, `src/lib/panels/panelRegistry.ts`, `tests/panelLayout.test.ts`, `tests/panelRegistry.test.ts`, and `changelog.md`.
+- Build/test: `npx.cmd tsx --test tests\panelLayout.test.ts tests\panelRegistry.test.ts` passed with 37 tests; `npm.cmd run build` passed with the existing Vite large-chunk warning.
+
+## [2542] - 2026-04-29 23:59 - `codex/merge-ui-and-3d-world / Empty Cell Minimum Size Relaxation`
+
+- Reduced default dock empty-cell minimum size to `1x1` so newly created empty cells stop forcing panel jumps during live outside-edge drags.
+- Stopped preserved empty slots from inheriting the removed panel's minimum size while keeping their split ratio/space intact.
+- Removed the CSS-only `120px` minimum height from empty workspace cells.
+- Touched `src/lib/panels/panelLayout.ts`, `src/styles/global.css`, `tests/panelLayout.test.ts`, and `changelog.md`.
+- Build/test: `npx.cmd tsx --test tests\panelLayout.test.ts` passed with 32 tests; `npm.cmd run build` passed with the existing Vite large-chunk warning.
+
+## [2541] - 2026-04-29 23:53 - `codex/merge-ui-and-3d-world / Edge Empty Cell Cancel Threshold`
+
+- Made outside-edge empty-cell creation cancel when the dragged panel edge returns near its original full span.
+- Switched the empty-edge collapse check to a pixel-aware threshold so tiny would-be cells are removed instead of clamped into persistent placeholders.
+- Added reducer coverage for cancelling right and left edge-created empty cells near full size.
+- Touched `src/lib/panels/panelLayout.ts`, `tests/panelLayout.test.ts`, and `changelog.md`.
+- Build/test: `npx.cmd tsx --test tests\panelLayout.test.ts` passed with 32 tests; `npm.cmd run build` passed with the existing Vite large-chunk warning.
+
+## [2540] - 2026-04-29 23:46 - `codex/merge-ui-and-3d-world / Row Split Fill Track Anchoring`
+
+- Changed measured row split rendering so the first track follows the divider while the second track fills the remaining workspace width.
+- Prevented stale or smaller measured row widths from leaving blank space to the right of the Countdown Engine after shared-edge resizing.
+- Touched `src/components/PanelWorkspace.tsx` and `changelog.md`.
+- Build/test: `npx.cmd tsx --test tests\panelLayout.test.ts` passed with 31 tests; `npx.cmd tsx --test tests\panelRegistry.test.ts` passed with 5 tests; `npm.cmd run build` passed with the existing Vite large-chunk warning.
+
+## [2539] - 2026-04-29 23:44 - `codex/merge-ui-and-3d-world / Wider Dock Resize Range`
+
+- Lowered dock panel minimum sizes so panels can shrink and stretch more freely during edge resizing.
+- Reduced default empty-cell minimum size and stopped edge-created empty cells from inheriting the source panel's full minimum size.
+- Updated panel registry sizing metadata and focused tests to match the wider dock resize range.
+- Touched `src/lib/panels/panelLayout.ts`, `src/lib/panels/panelRegistry.ts`, `tests/panelLayout.test.ts`, `tests/panelRegistry.test.ts`, and `changelog.md`.
+- Build/test: `npx.cmd tsx --test tests\panelLayout.test.ts` passed with 31 tests; `npx.cmd tsx --test tests\panelRegistry.test.ts` passed with 5 tests; `npm.cmd run build` passed with the existing Vite large-chunk warning.
+
+## [2538] - 2026-04-29 23:41 - `codex/merge-ui-and-3d-world / Shared Edge Pointer Tracking`
+
+- Routed panel edge drags on direct shared edges through the parent split resize path instead of converting panel-local ratios.
+- Added direct resize edge context in `PanelWorkspace` so Lobby right and Countdown left use the parent split bounds and stay attached to the pointer.
+- Kept exposed panel edges on the existing empty-cell create/reuse path.
+- Touched `src/components/PanelWorkspace.tsx` and `changelog.md`.
+- Build/test: `npx.cmd tsx --test tests\panelLayout.test.ts` passed with 31 tests; `npm.cmd run build` passed with the existing Vite large-chunk warning.
+
+## [2537] - 2026-04-29 23:39 - `codex/merge-ui-and-3d-world / Shared Row Resize Anchoring`
+
+- Updated row dock splits with measured sizes to render fixed pixel tracks, matching the column split behavior already used for vertical resizing.
+- Anchored the panel workspace and split width so Lobby/Countdown shared-edge resizing moves the middle divider without letting the outside right edge drift.
+- Touched `src/components/PanelWorkspace.tsx`, `src/styles/global.css`, and `changelog.md`.
+- Build/test: `npx.cmd tsx --test tests\panelLayout.test.ts` passed with 31 tests; `npm.cmd run build` passed with the existing Vite large-chunk warning.
+
+## [2536] - 2026-04-29 23:34 - `codex/merge-ui-and-3d-world / Live Panel Edge Resize Cleanup`
+
+- Updated docked panel edge drags to stream layout updates during pointer movement while saving the layout on pointer release.
+- Made edge drags resize an existing direct neighbor split when a panel already has a neighbor on that edge instead of creating a new empty cell.
+- Added direct empty-cell takeover behavior when a panel is expanded across its adjacent empty slot.
+- Added reducer tests for neighbor resizing, empty-slot collapse, and the adjusted live local-ratio behavior.
+- Touched `src/lib/panels/panelLayout.ts`, `src/components/PanelWorkspace.tsx`, `src/screens/MainScreen.tsx`, `tests/panelLayout.test.ts`, and `changelog.md`.
+- Build/test: `npx.cmd tsx --test tests\panelLayout.test.ts` passed with 31 tests; `npm.cmd run build` passed with the existing Vite large-chunk warning.
+
+## [2535] - 2026-04-29 23:27 - `codex/merge-ui-and-3d-world / Lobby Player List Viewport Cleanup`
+
+- Changed the Lobby panel to reserve fixed rows for the title/header, metrics, optional join controls, and rules while the player list owns the flexible height.
+- Rendered fixed-height open player slots up to session capacity so extra room appears inside the list instead of stretching player cards.
+- Fixed metric tiles and player cards to stable heights, with the player list becoming the scrollable viewport.
+- Touched `src/components/LobbyPanel.tsx`, `src/styles/global.css`, and `changelog.md`.
+- Build/test: `npx.cmd tsx --test tests\panelLayout.test.ts` passed with 29 tests; `npm.cmd run build` passed with the existing Vite large-chunk warning.
+
+## [2534] - 2026-04-29 23:22 - `codex/merge-ui-and-3d-world / Edge-Created Empty Cell Stretch Cleanup`
+
+- Updated dock workspace split rendering CSS so row split siblings stretch to the same height and empty cells fill their assigned pane.
+- Made split panes and panel leaves grid containers so docked panel shells and placeholder cells share cross-axis sizing consistently.
+- Touched `src/styles/global.css` and `changelog.md`.
+- Build/test: `npx.cmd tsx --test tests\panelLayout.test.ts` passed with 29 tests; `npm.cmd run build` passed with the existing Vite large-chunk warning.
+
+## [2533] - 2026-04-29 23:19 - `codex/merge-ui-and-3d-world / Phase 22 - Panel Edge Grips Create Empty Cells`
+
+- Added dock layout reducer support for creating empty cells from docked panel left, right, top, and bottom edge drags.
+- Reused direct same-edge empty splits on repeated edge drags so the layout updates instead of nesting duplicate empty cells.
+- Added invisible docked panel edge grips with pointer capture, accessible labels, resize cursors, and persisted layout commits.
+- Added focused reducer tests for edge-created empty cells, ratio clamping, repeated edges, and undocked no-ops.
+- Touched `src/lib/panels/panelLayout.ts`, `src/components/PanelWorkspace.tsx`, `src/screens/MainScreen.tsx`, `src/styles/global.css`, `tests/panelLayout.test.ts`, `docs/dockable-panel-shell-plan.md`, and `changelog.md`.
+- Build/test: `npx.cmd tsx --test tests\panelLayout.test.ts` passed with 29 tests; `npm.cmd run build` passed with the existing Vite large-chunk warning.
+
+## [2532] - 2026-04-29 23:10 - `codex/merge-ui-and-3d-world / Reset Layout Clears All Panels`
+
+- Updated the `resetlayout` debug console command to close/reset all optional layout panels, not only floating Debug Console.
+- Reset docked drag state, Debug Console mode/request state, Globe/Admin/SoundCloud visibility, SoundCloud mode, fullscreen state, and remembered floating rects.
+- Kept the persisted panel layout reset to the default Lobby/Timer workspace.
+- Touched `src/screens/MainScreen.tsx` and `changelog.md`.
+- Build/test: `npx.cmd tsx --test tests\panelLayout.test.ts` passed with 24 tests; `npm.cmd run build` passed with the existing Vite large-chunk warning.
+
+## [2531] - 2026-04-29 23:07 - `codex/merge-ui-and-3d-world / Phase 21 - Workspace-Managed Docked Header Drag`
+
+- Generalized docked panel drag/drop handling so workspace-managed panels can reuse the Debug Console rearrangement path.
+- Made docked Globe, Admin, and active SoundCloud headers draggable for rearranging, floating, and dropping into empty cells.
+- Kept Debug Console docked dragging on the shared path while preserving empty-origin behavior.
+- Added a small movement threshold so simple docked-header clicks do not trigger a drag.
+- Added workspace-managed header move/grabbing cursor styling and focus-visible coverage.
+- Touched `src/screens/MainScreen.tsx`, `src/styles/global.css`, `docs/dockable-panel-shell-plan.md`, and `changelog.md`.
+- Build/test: `npx.cmd tsx --test tests\panelLayout.test.ts` passed with 24 tests; `npm.cmd run build` passed with the existing Vite large-chunk warning.
+
+## [2530] - 2026-04-29 23:00 - `codex/merge-ui-and-3d-world / Phase 20 - Empty Cell Rendering And Drop Targets`
+
+- Added `dock-panel-in-empty-cell` layout reducer support for filling explicit empty cells while preserving surrounding split structure.
+- Rendered empty dock cells with stable ids, quiet resting styling, and a soft drag preview.
+- Updated Debug Console drag/drop hit testing so empty cells can be targeted before panel/root dock zones.
+- Wired floating and docked Debug Console drops to fill empty cells through the reducer.
+- Added focused reducer tests for bottom empty slots, nested empty slots, missing-cell no-ops, moving already docked panels, and floating/collapsed cleanup.
+- Touched `src/lib/panels/panelLayout.ts`, `tests/panelLayout.test.ts`, `src/components/PanelWorkspace.tsx`, `src/screens/MainScreen.tsx`, `src/styles/global.css`, `docs/dockable-panel-shell-plan.md`, and `changelog.md`.
+- Build/test: `npx.cmd tsx --test tests\panelLayout.test.ts` passed with 24 tests; `npm.cmd run build` passed with the existing Vite large-chunk warning.
+
+## [2529] - 2026-04-29 22:54 - `codex/merge-ui-and-3d-world / Phase 19 - Docked Panel Drag Leaves Empty Cell`
+
+- Added a reducer action that floats a docked panel while preserving its old dock leaf as an empty cell.
+- Preserved surrounding split ratios and sizes when replacing a moved docked panel with an empty cell.
+- Wired the existing docked Debug Console header drag to leave an empty origin cell when moved or floated.
+- Added focused reducer tests for bottom-docked Globe, nested panel movement, no-op behavior, and the existing collapsing undock path.
+- Touched `src/lib/panels/panelLayout.ts`, `tests/panelLayout.test.ts`, `src/screens/MainScreen.tsx`, `docs/dockable-panel-shell-plan.md`, and `changelog.md`.
+- Build/test: `npx.cmd tsx --test tests\panelLayout.test.ts` passed with 20 tests; `npm.cmd run build` passed with the existing Vite large-chunk warning.
+
+## [2528] - 2026-04-29 22:46 - `codex/merge-ui-and-3d-world / Phase 18 - Empty Dock Cell Layout Model`
+
+- Added a first-class empty dock cell node type, default empty-cell min sizing, and an exported empty-cell creation helper.
+- Updated layout validation, min-size clamping, docking traversal, and panel lookup paths to safely understand empty nodes.
+- Added reducer tests for valid empty cells, malformed empty rejection, min-size contribution, and serialization round-trip.
+- Added minimal type-compatibility handling in the current workspace renderer without introducing empty-cell UI/drop behavior.
+- Touched `src/lib/panels/panelLayout.ts`, `tests/panelLayout.test.ts`, `src/components/PanelWorkspace.tsx`, `src/screens/MainScreen.tsx`, `docs/dockable-panel-shell-plan.md`, and `changelog.md`.
+- Build/test: `npx.cmd tsx --test tests\panelLayout.test.ts` passed with 17 tests; `npm.cmd run build` passed with the existing Vite large-chunk warning.
+
+## [2527] - 2026-04-29 22:32 - `codex/merge-ui-and-3d-world / Docked Split Resize Tracking`
+
+- Added persisted measured split sizes so docked top/bottom splits can resize after the user drags their divider.
+- Updated `PanelWorkspace` to align invisible split grips with the actual pane boundary using resize observation.
+- Kept row split resizing for left/right docked panels and added reducer coverage for stored split size metadata.
+- Touched `src/components/PanelWorkspace.tsx`, `src/lib/panels/panelLayout.ts`, `src/styles/global.css`, `tests/panelLayout.test.ts`, and `changelog.md`.
+- Build/test: `npx.cmd tsx --test tests\panelLayout.test.ts` passed; `npm.cmd run build` passed with the existing Vite large-chunk warning.
+
+## [2526] - 2026-04-29 22:26 - `codex/merge-ui-and-3d-world / Globe Docked Layout Overlap Fix`
+
+- Made vertical dock splits size rows to panel content so bottom-docked panels do not overlap the Lobby/Countdown row.
+- Added spaced debug command aliases for `show globe` and `hide globe`, and updated help text to match the user-facing command form.
+- Touched `src/components/PanelWorkspace.tsx`, `src/screens/MainScreen.tsx`, and `changelog.md`.
+- Build/test: `npm.cmd run build` passed with the existing Vite large-chunk warning.
+
+## [2525] - 2026-04-29 22:21 - `codex/merge-ui-and-3d-world / Phase 17 - Workspace Edge Drag-To-Dock Targets`
+
+- Added workspace/root drag-to-dock targets alongside existing panel-leaf targets.
+- Rendered a quiet workspace-edge drop preview while preserving invisible dock affordances at rest.
+- Updated floating and docked Debug Console drag-end paths to dock at the workspace root without `targetPanelId`, while keeping panel-leaf rearrangement targeted.
+- Touched `src/components/PanelWorkspace.tsx`, `src/screens/MainScreen.tsx`, `src/styles/global.css`, `docs/dockable-panel-shell-plan.md`, and `changelog.md`.
+- Build/test: `npm.cmd run build` passed with the existing Vite large-chunk warning.
+
+## [2524] - 2026-04-29 22:16 - `codex/merge-ui-and-3d-world / Phase 16 - Default Dock Buttons And Commands Use Workspace Root`
+
+- Updated default panel restore/open docking to use workspace-root docking instead of targeting the Countdown Engine panel.
+- Updated Globe, Admin, SoundCloud, and Debug Console Dock buttons to dock against the workspace root.
+- Preserved drag-to-dock and docked rearrangement leaf-target behavior through existing `dropPreview.panelId` targets.
+- Touched `src/screens/MainScreen.tsx`, `docs/dockable-panel-shell-plan.md`, and `changelog.md`.
+- Build/test: `npm.cmd run build` passed with the existing Vite large-chunk warning.
+
+## [2523] - 2026-04-29 22:13 - `codex/merge-ui-and-3d-world / Phase 15 - Workspace Root Dock Target Model`
+
+- Formalized omitted `targetPanelId` on `dock-panel` as the workspace/root docking path.
+- Added reducer coverage for root bottom docking, root right docking, root docking into an empty workspace, and removal from floating state.
+- Preserved existing panel-leaf target docking for rearrangement behavior.
+- Touched `src/lib/panels/panelLayout.ts`, `tests/panelLayout.test.ts`, and `changelog.md`.
+- Build/test: `npx.cmd tsx --test tests\panelLayout.test.ts` passed; `npm.cmd run build` passed with the existing Vite large-chunk warning.
+
+## [2522] - 2026-04-29 22:06 - `codex/merge-ui-and-3d-world / Phase 14 - Accessibility And Touch Polish`
+
+- Added descriptive accessible labels for floating shell close/resize/move controls, Debug Console docked controls, and workspace-managed dock/float/reset/close actions.
+- Made workspace split handles keyboard-adjustable with arrow keys and larger Shift+arrow steps through the existing split resize reducer path.
+- Added keyboard movement and resize support for floating panel shells while preserving pointer/touch drag and resize behavior.
+- Kept invisible split and resize grips visually quiet at rest, with focus-visible treatment only while keyboard-focused.
+- Touched `src/components/PanelShell.tsx`, `src/components/PanelWorkspace.tsx`, `src/components/DebugConsoleWindow.tsx`, `src/screens/MainScreen.tsx`, `src/styles/global.css`, and `changelog.md`.
+- Build/test: `npm.cmd run build` passed with the existing Vite large-chunk warning.
+
+## [2521] - 2026-04-29 22:02 - `codex/merge-ui-and-3d-world / Phase 13 - Layout Reset And Debug Commands`
+
+- Added the `resetlayout` debug console command and listed it in debug help output.
+- Reset `corePanelLayout` to the default Lobby/Timer workspace, persisted the serialized default layout, and cleared layout-tied optional panel visibility for Globe, Admin, SoundCloud, and float/docked Debug Console placement.
+- Preserved non-layout preferences such as zoom, panel opacity, console display mode, and SoundCloud player/audio state.
+- Touched `src/screens/MainScreen.tsx` and `changelog.md`.
+- Build/test: `npm.cmd run build` passed with the existing Vite large-chunk warning.
+
+## [2520] - 2026-04-29 22:00 - `codex/merge-ui-and-3d-world / Phase 12 - SoundCloud Migration`
+
+- Migrated SoundCloud Radio, Widget, and Decks into workspace-managed docked and floating panel paths using panel registry metadata.
+- Preserved `MainScreen` ownership of SoundCloud player, deck, grid controller, mixer, admin player selection, and deck standby state.
+- Kept the `radio` command and mode switching behavior while removing stale SoundCloud layout state before restoring the active mode panel.
+- Added SoundCloud dock, float, reset, close, and floating focus handling for the active SoundCloud mode, while leaving waveform pop-outs as local child floating windows.
+- Removed the old one-off SoundCloud render branches and added scoped managed-container CSS for SoundCloud panels plus hidden deck standby mounting.
+- Touched `src/screens/MainScreen.tsx`, `src/styles/global.css`, and `changelog.md`.
+- Build/test: `npm.cmd run build` passed with the existing Vite large-chunk warning.
+
+## [2519] - 2026-04-29 21:52 - `codex/merge-ui-and-3d-world / Phase 11 - Globe And Admin Migration`
+
+- Migrated Globe and Admin rendering into workspace-managed docked and floating paths while keeping their existing component props and state ownership in `MainScreen`.
+- Used panel registry metadata for Globe/Admin titles, minimum sizes, default dock placement, and default floating rectangles.
+- Preserved Globe fullscreen state callbacks, Admin permission gating, and the `showglobe`, `hideglobe`, and `admin` debug command behavior.
+- Ensured Globe/Admin close paths clear both docked and floating layout state, and scoped Admin panel CSS so it fills managed docked/floating containers.
+- Removed the old one-off Globe and Admin render branches while leaving SoundCloud outside the migration.
+- Touched `src/screens/MainScreen.tsx`, `src/styles/global.css`, and `changelog.md`.
+- Build/test: `npm.cmd run build` passed with the existing Vite large-chunk warning.
+
+## [2518] - 2026-04-29 21:46 - `codex/merge-ui-and-3d-world / Phase 10 - Docked Debug Console Rearrangement`
+
+- Added pointer drag handling to the docked Debug Console header only, with header-action propagation guarded.
+- Reused the workspace drop preview/hit testing path to move the docked Debug Console around valid leaf target zones.
+- Added Escape cancellation for an active docked Debug Console drag without enabling rearrangement for other panels.
+- Touched `src/components/DebugConsoleWindow.tsx`, `src/screens/MainScreen.tsx`, `src/styles/global.css`, and `changelog.md`.
+- Build/test: `npm.cmd run build` passed with the existing Vite large-chunk warning. No reducer tests added because existing `dock-panel` behavior covers move/remove/collapse.
+
+## [2517] - 2026-04-29 21:44 - `codex/merge-ui-and-3d-world / Phase 9 - Debug Console Drag-To-Dock Targets`
+
+- Extended the floating shell drag callbacks so the Debug Console can report pointer movement and drag completion.
+- Added workspace leaf hit testing for left, right, top, and bottom drop zones with a subtle transient preview.
+- Docked the floating Debug Console on valid workspace drops while keeping outside drops floating and preserving the existing Dock button path.
+- Touched `src/components/PanelShell.tsx`, `src/components/FloatingWindow.tsx`, `src/components/DebugConsoleWindow.tsx`, `src/components/PanelWorkspace.tsx`, `src/screens/MainScreen.tsx`, `src/styles/global.css`, and `changelog.md`.
+- Build/test: `npm.cmd run build` passed with the existing Vite large-chunk warning.
+
+## [2516] - 2026-04-29 21:39 - `codex/merge-ui-and-3d-world / Phase 8 - Debug Console Dock Toggle Controls`
+
+- Added optional shell action controls and wired the floating Debug Console Dock and Reset buttons.
+- Extracted reusable Debug Console content and added a docked Debug Console frame with Float, Close, and Reset controls.
+- Connected Debug Console dock, float, reset, and docked close actions to the existing panel layout reducer and storage path.
+- Touched `src/components/PanelShell.tsx`, `src/components/FloatingWindow.tsx`, `src/components/DebugConsoleWindow.tsx`, `src/screens/MainScreen.tsx`, `src/styles/global.css`, and `changelog.md`.
+- Build/test: `npm.cmd run build` passed with the existing Vite large-chunk warning.
+
+## [2515] - 2026-04-29 21:34 - `codex/merge-ui-and-3d-world / Phase 7 - Debug Console Floating Persistence`
+
+- Added optional controlled floating rect and z-index props to `PanelShell` and the `FloatingWindow` compatibility wrapper.
+- Threaded the controlled floating state through `DebugConsoleWindow` while preserving uncontrolled behavior for existing SoundCloud pop-outs.
+- Persisted the debug console floating rect and focus z-index through the existing core panel layout reducer and storage helpers in `MainScreen`.
+- Touched `src/components/PanelShell.tsx`, `src/components/FloatingWindow.tsx`, `src/components/DebugConsoleWindow.tsx`, `src/screens/MainScreen.tsx`, and `changelog.md`.
+- Build/test: `npm.cmd run build` passed with the existing Vite large-chunk warning.
+
+## [2514] - 2026-04-29 21:29 - `codex/merge-ui-and-3d-world / Phase 6 - Dock Split Resizing`
+
+- Added invisible dock split handles to `PanelWorkspace` with pointer-captured row and column ratio updates.
+- Switched the core Lobby/Timer layout in `MainScreen` to reducer-owned state restored from saved panel layout data.
+- Persisted updated split ratios to panel layout storage after split resize completion.
+- Touched `src/components/PanelWorkspace.tsx`, `src/screens/MainScreen.tsx`, `src/styles/global.css`, and `changelog.md`.
+- Build/test: `npm.cmd run build` passed with the existing Vite large-chunk warning.
+
+## [2513] - 2026-04-29 21:26 - `codex/merge-ui-and-3d-world / Phase 5 - Dock Workspace Static Render`
+
+- Added the first static `PanelWorkspace` and recursive dock tree render path for the core Lobby and Timer panels.
+- Replaced only the existing Lobby/Timer `.content-grid` render in `MainScreen` with `PanelWorkspace` using the same props and handlers.
+- Added minimal workspace split/leaf CSS while leaving existing `.content-grid` styles in place.
+- Touched `src/components/PanelWorkspace.tsx`, `src/screens/MainScreen.tsx`, `src/styles/global.css`, and `changelog.md`.
+- Build/test: `npm.cmd run build` passed with the existing Vite large-chunk warning.
+
+## [2512] - 2026-04-29 21:24 - `codex/merge-ui-and-3d-world / Phase 4 - Panel Registry Skeleton`
+
+- Added the metadata-only panel registry with stable definitions for every future dockable panel id.
+- Added focused registry tests to prevent panel id drift, invalid sizing metadata, and core Lobby/Timer default regressions.
+- Touched `src/lib/panels/panelRegistry.ts`, `tests/panelRegistry.test.ts`, and `changelog.md`.
+- Build/test: `npx.cmd tsx --test tests\panelRegistry.test.ts` passed; `npm.cmd run build` passed with the existing Vite large-chunk warning.
+
+## [2511] - 2026-04-29 21:19 - `codex/merge-ui-and-3d-world / Phase 3 - Layout Types And Pure Reducer`
+
+- Added the pure panel layout model, reducer actions, split collapse, ratio clamping, validation, and serialization helpers.
+- Added focused tests for the default layout, floating updates, docking, undocking, split collapse, validation, and serialization.
+- Touched `src/lib/panels/panelLayout.ts`, `tests/panelLayout.test.ts`, and `changelog.md`.
+- Build/test: `npx.cmd tsx --test tests\panelLayout.test.ts` passed; `npm.cmd run build` passed with the existing Vite large-chunk warning.
+
+## [2510] - 2026-04-29 21:10 - `codex/merge-ui-and-3d-world / Phase 2 - Panel Shell Extraction`
+
+- Added `PanelShell` as the shared floating panel chrome and pointer/resize behavior owner.
+- Converted `FloatingWindow` into a compatibility wrapper around `PanelShell` for debug and SoundCloud pop-out windows.
+- Added neutral `panel-shell-*` CSS aliases while preserving existing `floating-window-*` classes and invisible resize grips.
+- Touched `src/components/PanelShell.tsx`, `src/components/FloatingWindow.tsx`, `src/styles/global.css`, and `changelog.md`.
+- Build/test: `npm.cmd run build` passed with the existing Vite large-chunk warning.
+
+## [2509] - 2026-04-29 20:54 - `codex/merge-ui-and-3d-world / Dashboard Minimum Zoom Clamp`
+
+- Lowered the main dashboard zoom-out clamp from 70% to 1%.
+- Touched `src/hooks/useAppViewportControls.ts` and `changelog.md`.
+- Build/test: Not run at user request.
+
+## [2508] - 2026-04-29 20:51 - `codex/merge-ui-and-3d-world / Hide Join Controls By Default`
+
+- Changed the dashboard join controls to start hidden by default.
+- Kept the existing debug console `showjoin` and `hidejoin` commands as the manual visibility controls.
+- Touched `src/screens/MainScreen.tsx` and `changelog.md`.
+- Build/test: `npm.cmd run build` passed with the existing Vite large-chunk warning.
+
 ## [2507] - 2026-04-29 20:34 - `codex/merge-ui-and-3d-world / Globe Land Fill Layer`
 
 - Removed the experimental procedural Globe `Topo` layer and its viewport toolbar detail slider.

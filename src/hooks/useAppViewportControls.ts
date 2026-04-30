@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 
 const APP_ZOOM_STORAGE_KEY = "syncsesh.app-zoom";
 const PANEL_OPACITY_STORAGE_KEY = "syncsesh.panel-opacity";
-const MIN_ZOOM_PERCENT = 70;
+const MIN_ZOOM_PERCENT = 1;
 const MAX_ZOOM_PERCENT = 150;
 const DEFAULT_ZOOM_PERCENT = 100;
 const ZOOM_STEP_PERCENT = 5;

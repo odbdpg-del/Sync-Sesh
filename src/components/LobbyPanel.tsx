@@ -97,6 +97,7 @@ export function LobbyPanel({
       !takenNames.has(name.trim().toLowerCase())
     ));
   }, [generatedDisplayNames, lobbyState.localUser?.id, localDisplayName, users]);
+  const emptyPlayerSlotCount = Math.max(session.capacity.max - users.length, 0);
 
   useEffect(() => {
     if (!isNamePickerOpen) {
@@ -183,7 +184,7 @@ export function LobbyPanel({
       )
     : null;
   return (
-    <section className={`panel stack lobby-panel lobby-phase-${session.phase}`}>
+    <section className={`panel stack lobby-panel lobby-phase-${session.phase}`} data-join-hidden={isJoinControlsHidden ? "true" : undefined}>
       <div className="section-heading">
         <div>
           <p className="eyebrow">Lobby</p>
@@ -272,66 +273,62 @@ export function LobbyPanel({
         </div>
       ) : null}
 
-      <div className="user-list">
-        {users.length === 0 ? (
-          <div className="panel inset-panel empty-state-card">
-            <p className="meta-label">Waiting for participants</p>
-            <p>The session is live, but no participants have joined yet.</p>
-          </div>
-        ) : (
-          users.map((user) => (
-            <article key={user.id} className={`user-card user-${user.presence} ${user.id === lobbyState.localUser?.id ? "user-local" : ""}`}>
-              <div className="avatar-badge">
-                {user.avatarUrl ? <img src={user.avatarUrl} alt="" className="avatar-image" referrerPolicy="no-referrer" /> : user.avatarSeed}
+      <div className="user-list" role="list" aria-label="Session players">
+        {users.map((user) => (
+          <article key={user.id} className={`user-card user-${user.presence} ${user.id === lobbyState.localUser?.id ? "user-local" : ""}`} role="listitem">
+            <div className="avatar-badge">
+              {user.avatarUrl ? <img src={user.avatarUrl} alt="" className="avatar-image" referrerPolicy="no-referrer" /> : user.avatarSeed}
+            </div>
+            <div className="user-copy">
+              <div className="user-title-row">
+                <strong>
+                  {user.displayName}
+                  {user.id === lobbyState.localUser?.id ? " (You)" : ""}
+                </strong>
+                <span className="meta-label">{getUserRoleLabel(user, session)}</span>
               </div>
-              <div className="user-copy">
-                <div className="user-title-row">
-                  <strong>
-                    {user.displayName}
-                    {user.id === lobbyState.localUser?.id ? " (You)" : ""}
-                  </strong>
-                  <span className="meta-label">{getUserRoleLabel(user, session)}</span>
-                </div>
-                <span className="user-subcopy">{getUserSubcopy(user)}</span>
-              </div>
-              <div className="user-status">
-                <span className={`presence-chip presence-${user.presence}`}>{getStateLabel(user.presence)}</span>
-                {user.id === lobbyState.localUser?.id ? (
-                  <div className="roll-name-wrapper">
-                    {discordDisplayName && user.displayName !== discordDisplayName ? (
-                      <button
-                        type="button"
-                        className="roll-name-button discord-name-button"
-                        onClick={onUseDiscordDisplayName}
-                        title={`Use ${discordDisplayName}`}
-                      >
-                        Discord
-                      </button>
-                    ) : null}
+              <span className="user-subcopy">{getUserSubcopy(user)}</span>
+            </div>
+            <div className="user-status">
+              <span className={`presence-chip presence-${user.presence}`}>{getStateLabel(user.presence)}</span>
+              {user.id === lobbyState.localUser?.id ? (
+                <div className="roll-name-wrapper">
+                  {discordDisplayName && user.displayName !== discordDisplayName ? (
                     <button
                       type="button"
-                      className="roll-name-button"
-                      onClick={() => {
-                        setIsNamePickerOpen(false);
-                        onRollDisplayName();
-                      }}
-                      onContextMenu={(event) => {
-                        openNamePicker(event);
-                      }}
+                      className="roll-name-button discord-name-button"
+                      onClick={onUseDiscordDisplayName}
+                      title={`Use ${discordDisplayName}`}
                     >
-                      Roll
+                      Discord
                     </button>
-                  </div>
-                ) : null}
-                {user.presence === "ready" ? (
-                  <span className="ready-bars" aria-hidden="true">
-                    III
-                  </span>
-                ) : null}
-              </div>
-            </article>
-          ))
-        )}
+                  ) : null}
+                  <button
+                    type="button"
+                    className="roll-name-button"
+                    onClick={() => {
+                      setIsNamePickerOpen(false);
+                      onRollDisplayName();
+                    }}
+                    onContextMenu={(event) => {
+                      openNamePicker(event);
+                    }}
+                  >
+                    Roll
+                  </button>
+                </div>
+              ) : null}
+              {user.presence === "ready" ? (
+                <span className="ready-bars" aria-hidden="true">
+                  III
+                </span>
+              ) : null}
+            </div>
+          </article>
+        ))}
+        {Array.from({ length: emptyPlayerSlotCount }, (_, index) => (
+          <div key={`empty-player-slot-${index}`} className="user-card user-card-empty-slot" role="listitem" aria-label="Open player slot" />
+        ))}
       </div>
 
       {isLobbyRulesOpen ? (

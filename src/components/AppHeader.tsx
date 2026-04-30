@@ -1,5 +1,6 @@
-import type { SessionInfo, SyncStatus } from "../types/session";
+import type { CountdownDisplayState, SessionInfo, SyncStatus } from "../types/session";
 import { getDisplayRoundNumber } from "../lib/lobby/sessionState";
+import { isSegmentDisplayValue, SevenSegmentDisplay } from "./SevenSegmentDisplay";
 import syncSeshLogo from "../../images/icon/ChatGPT Image Apr 19, 2026, 04_54_54 PM.png";
 
 interface AppHeaderProps {
@@ -12,6 +13,9 @@ interface AppHeaderProps {
   secretUnlockCount?: number;
   secretErrorProgress?: number;
   secretErrorCount?: number;
+  isSmallMode?: boolean;
+  countdownDisplay?: CountdownDisplayState;
+  onToggleSmallMode?: () => void;
 }
 
 const TITLE_LETTERS = ["S", "Y", "N", "C", " ", "S", "E", "S", "H"] as const;
@@ -26,11 +30,20 @@ export function AppHeader({
   secretUnlockCount = 0,
   secretErrorProgress = 0,
   secretErrorCount = 0,
+  isSmallMode = false,
+  countdownDisplay,
+  onToggleSmallMode,
 }: AppHeaderProps) {
   const sessionLabel = session.id.startsWith("discord-") ? "DISCORD" : session.code;
   const displayRoundNumber = getDisplayRoundNumber(session);
   const isSecretErrorActive = secretErrorProgress > 0;
   const highlightedLetterCount = isSecretErrorActive ? secretErrorProgress : secretEntryProgress;
+  const logoFrameContent = (
+    <>
+      <span className="brand-logo-frame-inner" aria-hidden="true" />
+      <img src={syncSeshLogo} alt="Sync Sesh logo" className="brand-logo" />
+    </>
+  );
   let matchedLetterCount = 0;
 
   return (
@@ -38,10 +51,19 @@ export function AppHeader({
       <span className="app-header-frame" aria-hidden="true" />
       <span className="app-header-accent" aria-hidden="true" />
       <div className="brand-lockup">
-        <div className="brand-logo-frame">
-          <span className="brand-logo-frame-inner" aria-hidden="true" />
-          <img src={syncSeshLogo} alt="Sync Sesh logo" className="brand-logo" />
-        </div>
+        {onToggleSmallMode ? (
+          <button
+            className="brand-logo-frame brand-logo-button"
+            type="button"
+            onClick={onToggleSmallMode}
+            aria-pressed={isSmallMode}
+            aria-label={isSmallMode ? "Exit small mode" : "Enter small mode"}
+          >
+            {logoFrameContent}
+          </button>
+        ) : (
+          <div className="brand-logo-frame">{logoFrameContent}</div>
+        )}
         <div className="brand-copy">
           <p className="eyebrow">Discord Activity</p>
           <div
@@ -83,43 +105,57 @@ export function AppHeader({
         </div>
       </div>
       <div className="header-meta">
-        <div className="header-pill">
-          <span className="meta-label">Session</span>
-          <strong>{sessionLabel}</strong>
-        </div>
-        <div className="header-pill">
-          <span className="meta-label">Round</span>
-          <strong>{displayRoundNumber}</strong>
-        </div>
-        <div className="header-pill">
-          <span className="meta-label">Phase</span>
-          <strong>{session.phase}</strong>
-        </div>
-        <div className="header-pill">
-          <span className="meta-label">Sync</span>
-          <strong className={`sync-pill sync-${syncStatus.connection}`}>{syncStatus.connection}</strong>
-        </div>
-        <div className="header-pill header-pill-zoom">
-          <span className="meta-label">Zoom</span>
-          <strong>{zoomPercent}%</strong>
-          <span className="zoom-meter" aria-hidden="true">
-            <span style={{ width: `${Math.max(0, Math.min(zoomPercent, 100))}%` }} />
-          </span>
-        </div>
-        <label className="header-pill header-pill-opacity">
-          <span className="meta-label">Windows</span>
-          <strong>{panelOpacityPercent}%</strong>
-          <input
-            className="header-opacity-slider"
-            type="range"
-            min="0"
-            max="100"
-            step="1"
-            value={panelOpacityPercent}
-            onChange={(event) => onPanelOpacityChange(Number(event.target.value))}
-            aria-label="Window opacity"
-          />
-        </label>
+        {isSmallMode && countdownDisplay ? (
+          <div className="header-pill header-pill-small-timer">
+            <span className="meta-label">Timer</span>
+            {isSegmentDisplayValue(countdownDisplay.headline) ? (
+              <SevenSegmentDisplay value={countdownDisplay.headline} className="header-small-timer-display" />
+            ) : (
+              <strong className="header-small-timer-text">{countdownDisplay.headline}</strong>
+            )}
+          </div>
+        ) : null}
+        {!isSmallMode ? (
+          <>
+            <div className="header-pill">
+              <span className="meta-label">Session</span>
+              <strong>{sessionLabel}</strong>
+            </div>
+            <div className="header-pill">
+              <span className="meta-label">Round</span>
+              <strong>{displayRoundNumber}</strong>
+            </div>
+            <div className="header-pill">
+              <span className="meta-label">Phase</span>
+              <strong>{session.phase}</strong>
+            </div>
+            <div className="header-pill">
+              <span className="meta-label">Sync</span>
+              <strong className={`sync-pill sync-${syncStatus.connection}`}>{syncStatus.connection}</strong>
+            </div>
+            <div className="header-pill header-pill-zoom">
+              <span className="meta-label">Zoom</span>
+              <strong>{zoomPercent}%</strong>
+              <span className="zoom-meter" aria-hidden="true">
+                <span style={{ width: `${Math.max(0, Math.min(zoomPercent, 100))}%` }} />
+              </span>
+            </div>
+            <label className="header-pill header-pill-opacity">
+              <span className="meta-label">Windows</span>
+              <strong>{panelOpacityPercent}%</strong>
+              <input
+                className="header-opacity-slider"
+                type="range"
+                min="0"
+                max="100"
+                step="1"
+                value={panelOpacityPercent}
+                onChange={(event) => onPanelOpacityChange(Number(event.target.value))}
+                aria-label="Window opacity"
+              />
+            </label>
+          </>
+        ) : null}
       </div>
     </header>
   );

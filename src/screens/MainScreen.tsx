@@ -1,18 +1,21 @@
-import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { AdminPanel } from "../components/AdminPanel";
 import { AppHeader } from "../components/AppHeader";
 import { DebugConsoleFullscreen } from "../components/DebugConsoleFullscreen";
 import { DebugConsoleFullscreen2, type Fullscreen2ConsoleMode } from "../components/DebugConsoleFullscreen2";
-import { DebugConsoleWindow } from "../components/DebugConsoleWindow";
+import { DEBUG_CONSOLE_INITIAL_RECT, DebugConsoleDockedPanel, DebugConsoleWindow, type DebugConsoleDockedDragInfo } from "../components/DebugConsoleWindow";
+import { FloatingWindow } from "../components/FloatingWindow";
 import { getStartupConsoleEvents, LoadingScreen, type LoadingScreenDiagnosticEvent, type StartupConsoleEvent } from "../components/LoadingScreen";
 import { GlobePanel } from "../components/GlobePanel";
 import { LobbyPanel } from "../components/LobbyPanel";
+import { PanelWorkspace, type PanelWorkspaceDropPreview } from "../components/PanelWorkspace";
 import { SoundCloudDeckPanel } from "../components/SoundCloudDeckPanel";
 import { type SoundCloudPanelMode } from "../components/SoundCloudModeToggle";
 import { SoundCloudPanel } from "../components/SoundCloudPanel";
 import { SoundCloudWidgetPanel } from "../components/SoundCloudWidgetPanel";
 import { StatusFooter } from "../components/StatusFooter";
 import { TimerPanel } from "../components/TimerPanel";
+import type { PanelShellDragInfo } from "../components/PanelShell";
 import type {
   SoundCloudBoothConsoleEvent,
   SoundCloudBoothConsoleEventInput,
@@ -30,6 +33,20 @@ import { useSoundCloudGridController } from "../hooks/useSoundCloudGridControlle
 import { useSoundCloudPlayer, type SoundCloudAcceptedBpmState } from "../hooks/useSoundCloudPlayer";
 import { useSoundEffects } from "../hooks/useSoundEffects";
 import type { DebugConsoleEventInput, DebugLogCategory } from "../lib/debug/debugConsole";
+import {
+  PANEL_LAYOUT_STORAGE_KEY,
+  createDefaultPanelLayout,
+  panelLayoutReducer,
+  parsePanelLayout,
+  serializePanelLayout,
+  type DockEdge,
+  type PanelLayoutState,
+  type PanelRect,
+  type DockNode,
+  type DockPlacement,
+  type PanelId,
+} from "../lib/panels/panelLayout";
+import { getPanelDefinition } from "../lib/panels/panelRegistry";
 import { enableOfflineMode } from "../lib/startup/offlineMode";
 import type { StartupProgress, StartupProgressStep } from "../lib/startup/startupProgress";
 import type { SyncConnectionState } from "../types/session";
@@ -46,13 +63,22 @@ type DebugConsoleDisplayMode = "fullscreen" | "fullscreen2" | "float";
 const DEBUG_CONSOLE_COMMAND_HISTORY_LIMIT = 50;
 
 const DEBUG_CONSOLE_COMMAND_HELP =
-  "Available commands: hide, clear, help, admin, hidejoin, showjoin, showglobe, hideglobe, force start, force stop, setround = 5, copy, snapshot, retry, radio, float, console1, console2, fullscreen, background, background 0-100, trans-text 0-100, compact, filter all, filter auth, filter sdk, filter profile, filter sync, filter network, filter ui, filter command.";
+  "Available commands: hide, clear, help, resetlayout, small, normal, admin, hidejoin, showjoin, show globe, hide globe, force start, force stop, setround = 5, copy, snapshot, retry, radio, float, console1, console2, fullscreen, background, background 0-100, trans-text 0-100, compact, filter all, filter auth, filter sdk, filter profile, filter sync, filter network, filter ui, filter command.";
 const DEBUG_CONSOLE_SET_ROUND_COMMAND_PATTERN = /^set\s*round\s*=\s*(-?\d+)$/;
 const CONSOLE2_INPUT_COMMAND_BACKGROUND_OPACITY_PERCENT = 100;
 const CONSOLE2_COMPACT_BACKGROUND_OPACITY_PERCENT = 20;
 const CONSOLE2_COMPACT_TEXT_OPACITY_PERCENT = 75;
 const CONSOLE2_FULL_BACKGROUND_OPACITY_PERCENT = 100;
 const CONSOLE2_FULL_TEXT_OPACITY_PERCENT = 100;
+const GLOBE_PANEL_DEFINITION = getPanelDefinition("globe");
+const ADMIN_PANEL_DEFINITION = getPanelDefinition("admin");
+const SOUNDCLOUD_PANEL_IDS = ["soundcloud-radio", "soundcloud-widget", "soundcloud-decks"] as const;
+
+type SoundCloudPanelId = (typeof SOUNDCLOUD_PANEL_IDS)[number];
+
+function isSoundCloudPanelId(panelId: PanelId): panelId is SoundCloudPanelId {
+  return SOUNDCLOUD_PANEL_IDS.includes(panelId as SoundCloudPanelId);
+}
 
 function getStartupDebugCategory(event: StartupConsoleEvent): DebugLogCategory {
   const key = event.key.toLowerCase();
@@ -251,7 +277,205 @@ function getDiscordIdentityBannerMessage(sdkState: ReturnType<typeof useDabSyncS
     : "The activity is running, but Discord name/avatar resolution fell back to a local profile.";
 }
 
+function dockTreeHasPanel(node: DockNode | null, panelId: string): boolean {
+  if (!node) {
+    return false;
+  }
+
+  if (node.type === "panel") {
+    return node.panelId === panelId;
+  }
+
+  if (node.type === "empty") {
+    return false;
+  }
+
+  return dockTreeHasPanel(node.first, panelId) || dockTreeHasPanel(node.second, panelId);
+}
+
+function layoutHasPanel(layout: PanelLayoutState, panelId: PanelId): boolean {
+  return dockTreeHasPanel(layout.dockRoot, panelId) || layout.floating.some((panel) => panel.panelId === panelId);
+}
+
+function getDefaultDockPlacement(panelId: PanelId): DockPlacement {
+  const defaultDock = getPanelDefinition(panelId).defaultDock;
+  return defaultDock === "left" || defaultDock === "right" || defaultDock === "bottom" ? defaultDock : "bottom";
+}
+
+function restorePanelInLayout(layout: PanelLayoutState, panelId: PanelId): PanelLayoutState {
+  if (layoutHasPanel(layout, panelId)) {
+    return layout;
+  }
+
+  const definition = getPanelDefinition(panelId);
+
+  if (definition.defaultDock === "float") {
+    return panelLayoutReducer(
+      panelLayoutReducer(layout, {
+        type: "update-floating-rect",
+        panelId,
+        rect: definition.defaultFloatingRect,
+      }),
+      {
+        type: "focus-floating-panel",
+        panelId,
+      },
+    );
+  }
+
+  return panelLayoutReducer(layout, {
+    type: "dock-panel",
+    panelId,
+    placement: getDefaultDockPlacement(panelId),
+  });
+}
+
+function removeDockedPanelFromLayout(layout: PanelLayoutState, panelId: PanelId): PanelLayoutState {
+  return dockTreeHasPanel(layout.dockRoot, panelId) ? panelLayoutReducer(layout, { type: "remove-docked-panel", panelId }) : layout;
+}
+
+function removePanelFromLayout(layout: PanelLayoutState, panelId: PanelId): PanelLayoutState {
+  const withoutDockedPanel = removeDockedPanelFromLayout(layout, panelId);
+  return {
+    ...withoutDockedPanel,
+    floating: withoutDockedPanel.floating.filter((panel) => panel.panelId !== panelId),
+    activePanelId: withoutDockedPanel.activePanelId === panelId ? undefined : withoutDockedPanel.activePanelId,
+  };
+}
+
+function removeSoundCloudPanelsFromLayout(layout: PanelLayoutState): PanelLayoutState {
+  return SOUNDCLOUD_PANEL_IDS.reduce<PanelLayoutState>((nextLayout, panelId) => removePanelFromLayout(nextLayout, panelId), layout);
+}
+
+function getSoundCloudPanelId(mode: SoundCloudPanelMode): SoundCloudPanelId {
+  switch (mode) {
+    case "radio":
+      return "soundcloud-radio";
+    case "widget":
+      return "soundcloud-widget";
+    case "decks":
+      return "soundcloud-decks";
+  }
+}
+
+function getSoundCloudModeForPanelId(panelId: SoundCloudPanelId): SoundCloudPanelMode {
+  switch (panelId) {
+    case "soundcloud-radio":
+      return "radio";
+    case "soundcloud-widget":
+      return "widget";
+    case "soundcloud-decks":
+      return "decks";
+  }
+}
+
+function getInitialSoundCloudPanelMode(layout: PanelLayoutState): SoundCloudPanelMode {
+  const restoredPanelId = SOUNDCLOUD_PANEL_IDS.find((panelId) => layoutHasPanel(layout, panelId));
+  return restoredPanelId ? getSoundCloudModeForPanelId(restoredPanelId) : "radio";
+}
+
+function floatPanelInLayout(layout: PanelLayoutState, panelId: PanelId, rect: PanelRect): PanelLayoutState {
+  const undockedLayout = panelLayoutReducer(layout, {
+    type: "undock-panel",
+    panelId,
+    rect,
+  });
+  const layoutWithFloatingRect =
+    undockedLayout === layout
+      ? panelLayoutReducer(layout, {
+          type: "update-floating-rect",
+          panelId,
+          rect,
+        })
+      : undockedLayout;
+
+  return panelLayoutReducer(layoutWithFloatingRect, {
+    type: "focus-floating-panel",
+    panelId,
+  });
+}
+
+function getDockPlacementFromPoint(bounds: DOMRect, pointerX: number, pointerY: number): DockPlacement | null {
+  const xRatio = (pointerX - bounds.left) / bounds.width;
+  const yRatio = (pointerY - bounds.top) / bounds.height;
+
+  if (xRatio < 0 || xRatio > 1 || yRatio < 0 || yRatio > 1) {
+    return null;
+  }
+
+  if (xRatio <= 0.25) {
+    return "left";
+  }
+
+  if (xRatio >= 0.75) {
+    return "right";
+  }
+
+  if (yRatio <= 0.25) {
+    return "top";
+  }
+
+  if (yRatio >= 0.75) {
+    return "bottom";
+  }
+
+  return null;
+}
+
+function getWorkspaceDockPlacementFromPoint(bounds: DOMRect, pointerX: number, pointerY: number): DockPlacement | null {
+  if (bounds.width <= 0 || bounds.height <= 0) {
+    return null;
+  }
+
+  if (pointerX < bounds.left || pointerX > bounds.right || pointerY < bounds.top || pointerY > bounds.bottom) {
+    return null;
+  }
+
+  const horizontalEdgeBand = Math.min(96, Math.max(32, bounds.width * 0.12), bounds.width / 2);
+  const verticalEdgeBand = Math.min(96, Math.max(32, bounds.height * 0.12), bounds.height / 2);
+  const edgeDistances: Array<{ placement: DockPlacement; distance: number }> = [
+    { placement: "left", distance: pointerX - bounds.left },
+    { placement: "right", distance: bounds.right - pointerX },
+    { placement: "top", distance: pointerY - bounds.top },
+    { placement: "bottom", distance: bounds.bottom - pointerY },
+  ];
+  const matchingEdgeDistances = edgeDistances.filter(
+    ({ placement, distance }) => distance <= (placement === "left" || placement === "right" ? horizontalEdgeBand : verticalEdgeBand),
+  );
+
+  matchingEdgeDistances.sort((first, second) => first.distance - second.distance);
+
+  return matchingEdgeDistances[0]?.placement ?? null;
+}
+
 export function MainScreen() {
+  const [corePanelLayout, setCorePanelLayout] = useState<PanelLayoutState>(() => {
+    const defaultLayout = createDefaultPanelLayout();
+
+    try {
+      const savedLayout = window.localStorage.getItem(PANEL_LAYOUT_STORAGE_KEY);
+      return savedLayout ? parsePanelLayout(savedLayout) ?? defaultLayout : defaultLayout;
+    } catch {
+      return defaultLayout;
+    }
+  });
+  const corePanelLayoutRef = useRef(corePanelLayout);
+  const panelWorkspaceRef = useRef<HTMLDivElement | null>(null);
+  const debugConsoleLastFloatingRectRef = useRef<PanelRect>(DEBUG_CONSOLE_INITIAL_RECT);
+  const globeLastFloatingRectRef = useRef<PanelRect>(GLOBE_PANEL_DEFINITION.defaultFloatingRect);
+  const adminLastFloatingRectRef = useRef<PanelRect>(ADMIN_PANEL_DEFINITION.defaultFloatingRect);
+  const soundCloudLastFloatingRectRef = useRef<Record<SoundCloudPanelId, PanelRect>>({
+    "soundcloud-radio": getPanelDefinition("soundcloud-radio").defaultFloatingRect,
+    "soundcloud-widget": getPanelDefinition("soundcloud-widget").defaultFloatingRect,
+    "soundcloud-decks": getPanelDefinition("soundcloud-decks").defaultFloatingRect,
+  });
+  const [debugConsoleDropPreview, setDebugConsoleDropPreview] = useState<PanelWorkspaceDropPreview | null>(null);
+  const dockedPanelDragPointerIdRef = useRef<number | null>(null);
+  const dockedPanelDragHeaderRef = useRef<HTMLElement | null>(null);
+  const dockedPanelDragPanelIdRef = useRef<PanelId | null>(null);
+  const dockedPanelDragStartPointRef = useRef<{ panelId: PanelId; pointerX: number; pointerY: number } | null>(null);
+  const [draggingDockedPanelId, setDraggingDockedPanelId] = useState<PanelId | null>(null);
+  const [isSmallMode, setIsSmallMode] = useState(false);
   const [isDebugConsoleOpen, setIsDebugConsoleOpen] = useState(false);
   const [debugConsoleDisplayMode, setDebugConsoleDisplayMode] = useState<DebugConsoleDisplayMode>("float");
   const [fullscreen2StartMode, setFullscreen2StartMode] = useState<Fullscreen2ConsoleMode>("full");
@@ -264,16 +488,16 @@ export function MainScreen() {
   const [backgroundConsoleTextOpacityPercent, setBackgroundConsoleTextOpacityPercent] = useState(18);
   const [shouldStartDebugConsoleCompact, setShouldStartDebugConsoleCompact] = useState(true);
   const [debugCommandHistory, setDebugCommandHistory] = useState<string[]>([]);
-  const [isAdminOpen, setIsAdminOpen] = useState(false);
-  const [isJoinControlsHidden, setIsJoinControlsHidden] = useState(false);
-  const [isGlobePanelVisible, setIsGlobePanelVisible] = useState(false);
+  const [isAdminOpen, setIsAdminOpen] = useState(() => layoutHasPanel(corePanelLayout, "admin"));
+  const [isJoinControlsHidden, setIsJoinControlsHidden] = useState(true);
+  const [isGlobePanelVisible, setIsGlobePanelVisible] = useState(() => layoutHasPanel(corePanelLayout, "globe"));
   const [isGlobePanelFullscreen, setIsGlobePanelFullscreen] = useState(false);
   const debugEventHandlerRef = useRef<((event: DebugConsoleEventInput) => void) | undefined>();
   const [isRenderingSpikeOpen, setIsRenderingSpikeOpen] = useState(hasRenderingSpikeParam);
   const [isThreeDModeOpen, setIsThreeDModeOpen] = useState(false);
   const [isGlobeVpnVisualEnabled, setIsGlobeVpnVisualEnabled] = useState(false);
-  const [isSoundCloudPanelEnabled, setIsSoundCloudPanelEnabled] = useState(false);
-  const [soundCloudPanelMode, setSoundCloudPanelMode] = useState<SoundCloudPanelMode>("radio");
+  const [isSoundCloudPanelEnabled, setIsSoundCloudPanelEnabled] = useState(() => SOUNDCLOUD_PANEL_IDS.some((panelId) => layoutHasPanel(corePanelLayout, panelId)));
+  const [soundCloudPanelMode, setSoundCloudPanelMode] = useState<SoundCloudPanelMode>(() => getInitialSoundCloudPanelMode(corePanelLayout));
   const [soundCloudWaveformBarCount, setSoundCloudWaveformBarCount] = useState(60);
   const { zoomPercent, panelOpacityPercent, setPanelOpacityPercent } = useAppViewportControls();
   const { isSecretUnlocked, resetSecretEntry, unlockCount, entryProgress, entryStepCount, lastMatchedLength, errorCount, errorProgress } =
@@ -433,6 +657,21 @@ export function MainScreen() {
   useEffect(() => {
     if (!lobbyState.canUseAdminTools) {
       setIsAdminOpen(false);
+      setCorePanelLayout((currentLayout) => {
+        const nextLayout = removePanelFromLayout(currentLayout, "admin");
+
+        if (nextLayout === currentLayout) {
+          return currentLayout;
+        }
+
+        corePanelLayoutRef.current = nextLayout;
+        try {
+          window.localStorage.setItem(PANEL_LAYOUT_STORAGE_KEY, serializePanelLayout(nextLayout));
+        } catch {
+          // Layout persistence is best-effort; keep permission gating usable if storage is unavailable.
+        }
+        return nextLayout;
+      });
     }
   }, [lobbyState.canUseAdminTools]);
   useEffect(() => {
@@ -495,15 +734,33 @@ export function MainScreen() {
     });
     debugConsoleState.appendCommandInput(rawCommand);
 
-    if (normalizedCommand === "hide") {
-      debugConsoleState.appendCommandOutput({
-        level: "info",
-        label: "command:hide",
-        detail: "Closing debug console.",
-      });
-      setIsDebugConsoleOpen(false);
-      return;
-    }
+      if (normalizedCommand === "hide") {
+        debugConsoleState.appendCommandOutput({
+          level: "info",
+          label: "command:hide",
+          detail: "Closing debug console.",
+        });
+        setIsDebugConsoleOpen(false);
+        setCorePanelLayout((currentLayout) => {
+          if (!dockTreeHasPanel(currentLayout.dockRoot, "debug-console")) {
+            return currentLayout;
+          }
+
+          const nextLayout = panelLayoutReducer(currentLayout, {
+            type: "remove-docked-panel",
+            panelId: "debug-console",
+          });
+
+          corePanelLayoutRef.current = nextLayout;
+          try {
+            window.localStorage.setItem(PANEL_LAYOUT_STORAGE_KEY, serializePanelLayout(nextLayout));
+          } catch {
+            // Layout persistence is best-effort; keep the command path usable if storage is unavailable.
+          }
+          return nextLayout;
+        });
+        return;
+      }
 
     if (normalizedCommand === "clear") {
       debugConsoleState.clearLogs();
@@ -525,6 +782,72 @@ export function MainScreen() {
       return;
     }
 
+    if (normalizedCommand === "small") {
+      setIsSmallMode(true);
+      debugConsoleState.appendCommandOutput({
+        level: "info",
+        label: "command:small",
+        detail: "Small Mode enabled.",
+      });
+      return;
+    }
+
+    if (normalizedCommand === "normal") {
+      setIsSmallMode(false);
+      debugConsoleState.appendCommandOutput({
+        level: "info",
+        label: "command:normal",
+        detail: "Small Mode disabled.",
+      });
+      return;
+    }
+
+    if (normalizedCommand === "resetlayout") {
+      const defaultLayout = createDefaultPanelLayout();
+
+      setDebugConsoleDropPreview(null);
+      dockedPanelDragPointerIdRef.current = null;
+      dockedPanelDragHeaderRef.current = null;
+      dockedPanelDragPanelIdRef.current = null;
+      dockedPanelDragStartPointRef.current = null;
+      setDraggingDockedPanelId(null);
+      setIsAdminOpen(false);
+      setIsGlobePanelVisible(false);
+      setIsGlobePanelFullscreen(false);
+      setIsSoundCloudPanelEnabled(false);
+      setSoundCloudPanelMode("radio");
+      setIsSmallMode(false);
+      setIsDebugConsoleOpen(false);
+      setDebugConsoleDisplayMode("float");
+      setFullscreen2CloseRequestId(0);
+      setFullscreen2OpenRequestId(0);
+      setFullscreen2StartMode("full");
+      debugConsoleLastFloatingRectRef.current = DEBUG_CONSOLE_INITIAL_RECT;
+      globeLastFloatingRectRef.current = GLOBE_PANEL_DEFINITION.defaultFloatingRect;
+      adminLastFloatingRectRef.current = ADMIN_PANEL_DEFINITION.defaultFloatingRect;
+      soundCloudLastFloatingRectRef.current = {
+        "soundcloud-radio": getPanelDefinition("soundcloud-radio").defaultFloatingRect,
+        "soundcloud-widget": getPanelDefinition("soundcloud-widget").defaultFloatingRect,
+        "soundcloud-decks": getPanelDefinition("soundcloud-decks").defaultFloatingRect,
+      };
+
+      corePanelLayoutRef.current = defaultLayout;
+      setCorePanelLayout(defaultLayout);
+
+      try {
+        window.localStorage.setItem(PANEL_LAYOUT_STORAGE_KEY, serializePanelLayout(defaultLayout));
+      } catch {
+        // Layout reset still updates the live session if storage is unavailable.
+      }
+
+      debugConsoleState.appendCommandOutput({
+        level: "info",
+        label: "command:resetlayout",
+        detail: "All layout panels reset to the default Lobby/Timer workspace.",
+      });
+      return;
+    }
+
     if (normalizedCommand === "admin") {
       if (!lobbyState.canUseAdminTools) {
         debugConsoleState.appendCommandOutput({
@@ -536,6 +859,21 @@ export function MainScreen() {
       }
 
       setIsAdminOpen(true);
+      setCorePanelLayout((currentLayout) => {
+        const nextLayout = restorePanelInLayout(currentLayout, "admin");
+
+        if (nextLayout === currentLayout) {
+          return currentLayout;
+        }
+
+        corePanelLayoutRef.current = nextLayout;
+        try {
+          window.localStorage.setItem(PANEL_LAYOUT_STORAGE_KEY, serializePanelLayout(nextLayout));
+        } catch {
+          // Layout persistence is best-effort; keep the command path usable if storage is unavailable.
+        }
+        return nextLayout;
+      });
       debugConsoleState.appendCommandOutput({
         level: "info",
         label: "command:admin",
@@ -564,8 +902,23 @@ export function MainScreen() {
       return;
     }
 
-    if (normalizedCommand === "showglobe") {
+    if (normalizedCommand === "showglobe" || normalizedCommand === "show globe") {
       setIsGlobePanelVisible(true);
+      setCorePanelLayout((currentLayout) => {
+        const nextLayout = restorePanelInLayout(currentLayout, "globe");
+
+        if (nextLayout === currentLayout) {
+          return currentLayout;
+        }
+
+        corePanelLayoutRef.current = nextLayout;
+        try {
+          window.localStorage.setItem(PANEL_LAYOUT_STORAGE_KEY, serializePanelLayout(nextLayout));
+        } catch {
+          // Layout persistence is best-effort; keep the command path usable if storage is unavailable.
+        }
+        return nextLayout;
+      });
       debugConsoleState.appendCommandOutput({
         level: "info",
         label: "command:showglobe",
@@ -574,9 +927,24 @@ export function MainScreen() {
       return;
     }
 
-    if (normalizedCommand === "hideglobe") {
+    if (normalizedCommand === "hideglobe" || normalizedCommand === "hide globe") {
       setIsGlobePanelVisible(false);
       setIsGlobePanelFullscreen(false);
+      setCorePanelLayout((currentLayout) => {
+        const nextLayout = removePanelFromLayout(currentLayout, "globe");
+
+        if (nextLayout === currentLayout) {
+          return currentLayout;
+        }
+
+        corePanelLayoutRef.current = nextLayout;
+        try {
+          window.localStorage.setItem(PANEL_LAYOUT_STORAGE_KEY, serializePanelLayout(nextLayout));
+        } catch {
+          // Layout persistence is best-effort; keep the command path usable if storage is unavailable.
+        }
+        return nextLayout;
+      });
       debugConsoleState.appendCommandOutput({
         level: "info",
         label: "command:hideglobe",
@@ -653,11 +1021,35 @@ export function MainScreen() {
       return;
     }
 
-    if (normalizedCommand === "float") {
-      setDebugConsoleDisplayMode("float");
-      debugConsoleState.appendCommandOutput({
-        level: "info",
-        label: "command:float",
+      if (normalizedCommand === "float") {
+        setIsDebugConsoleOpen(true);
+        setDebugConsoleDisplayMode("float");
+        setCorePanelLayout((currentLayout) => {
+          if (!dockTreeHasPanel(currentLayout.dockRoot, "debug-console")) {
+            return currentLayout;
+          }
+
+          const layoutWithFloating = panelLayoutReducer(currentLayout, {
+            type: "undock-panel",
+            panelId: "debug-console",
+            rect: debugConsoleLastFloatingRectRef.current,
+          });
+          const nextLayout = panelLayoutReducer(layoutWithFloating, {
+            type: "focus-floating-panel",
+            panelId: "debug-console",
+          });
+
+          corePanelLayoutRef.current = nextLayout;
+          try {
+            window.localStorage.setItem(PANEL_LAYOUT_STORAGE_KEY, serializePanelLayout(nextLayout));
+          } catch {
+            // Layout persistence is best-effort; keep the command path usable if storage is unavailable.
+          }
+          return nextLayout;
+        });
+        debugConsoleState.appendCommandOutput({
+          level: "info",
+          label: "command:float",
         detail: "Debug console display mode set to floating window.",
       });
       return;
@@ -771,6 +1163,17 @@ export function MainScreen() {
     if (normalizedCommand === "radio") {
       setIsSoundCloudPanelEnabled(true);
       setSoundCloudPanelMode("radio");
+      setCorePanelLayout((currentLayout) => {
+        const nextLayout = restorePanelInLayout(removeSoundCloudPanelsFromLayout(currentLayout), "soundcloud-radio");
+
+        corePanelLayoutRef.current = nextLayout;
+        try {
+          window.localStorage.setItem(PANEL_LAYOUT_STORAGE_KEY, serializePanelLayout(nextLayout));
+        } catch {
+          // Layout persistence is best-effort; keep the command path usable if storage is unavailable.
+        }
+        return nextLayout;
+      });
       debugConsoleState.appendCommandOutput({
         level: "info",
         label: "command:radio",
@@ -840,7 +1243,7 @@ export function MainScreen() {
       label: "command:unknown",
       detail: `Unknown command: ${rawCommand}. ${DEBUG_CONSOLE_COMMAND_HELP}`,
     });
-  }, [debugConsoleState, forceStartRound, forceStopRound, lobbyState.canUseAdminTools, openDebugConsole, retryDiscordProfile, setRoundNumber]);
+  }, [debugConsoleDisplayMode, debugConsoleState, forceStartRound, forceStopRound, lobbyState.canUseAdminTools, openDebugConsole, retryDiscordProfile, setRoundNumber]);
   const countdownDisplay = useCountdownDisplay(state);
   const { playCue, playSecretCodeStep } = useSoundEffects(state, lobbyState, countdownDisplay);
   const frontEndSoundCloudPlayer = useSoundCloudPlayer({
@@ -1313,7 +1716,840 @@ export function MainScreen() {
   const handleGlobePanelClose = useCallback(() => {
     setIsGlobePanelVisible(false);
     setIsGlobePanelFullscreen(false);
+    setCorePanelLayout((currentLayout) => {
+      const nextLayout = removePanelFromLayout(currentLayout, "globe");
+
+      if (nextLayout === currentLayout) {
+        return currentLayout;
+      }
+
+      corePanelLayoutRef.current = nextLayout;
+      try {
+        window.localStorage.setItem(PANEL_LAYOUT_STORAGE_KEY, serializePanelLayout(nextLayout));
+      } catch {
+        // Layout persistence is best-effort; keep closing usable if storage is unavailable.
+      }
+      return nextLayout;
+    });
   }, []);
+
+  const handleAdminPanelClose = useCallback(() => {
+    setIsAdminOpen(false);
+    setCorePanelLayout((currentLayout) => {
+      const nextLayout = removePanelFromLayout(currentLayout, "admin");
+
+      if (nextLayout === currentLayout) {
+        return currentLayout;
+      }
+
+      corePanelLayoutRef.current = nextLayout;
+      try {
+        window.localStorage.setItem(PANEL_LAYOUT_STORAGE_KEY, serializePanelLayout(nextLayout));
+      } catch {
+        // Layout persistence is best-effort; keep closing usable if storage is unavailable.
+      }
+      return nextLayout;
+    });
+  }, []);
+
+  const persistCorePanelLayout = useCallback((layout: PanelLayoutState = corePanelLayoutRef.current) => {
+    try {
+      window.localStorage.setItem(PANEL_LAYOUT_STORAGE_KEY, serializePanelLayout(layout));
+    } catch {
+      // Layout persistence is best-effort; keep floating panels usable if storage is unavailable.
+    }
+  }, []);
+
+  const handleCorePanelSplitResize = useCallback((splitId: string, ratio: number, availableSize: number) => {
+    setCorePanelLayout((currentLayout) => {
+      const nextLayout = panelLayoutReducer(currentLayout, {
+        type: "update-split-ratio",
+        splitId,
+        ratio,
+        availableSize,
+      });
+
+      corePanelLayoutRef.current = nextLayout;
+      return nextLayout;
+    });
+  }, []);
+
+  const handleCorePanelSplitResizeEnd = useCallback(() => {
+    persistCorePanelLayout();
+  }, [persistCorePanelLayout]);
+
+  const handlePanelEdgeCreateEmpty = useCallback(
+    (panelId: PanelId, edge: DockEdge, ratio: number, availableSize: number, shouldPersist = true) => {
+      setCorePanelLayout((currentLayout) => {
+        const nextLayout = panelLayoutReducer(currentLayout, {
+          type: "create-empty-cell-from-panel-edge",
+          panelId,
+          edge,
+          ratio,
+          availableSize,
+        });
+
+        if (nextLayout === currentLayout) {
+          return currentLayout;
+        }
+
+        corePanelLayoutRef.current = nextLayout;
+        if (shouldPersist) {
+          persistCorePanelLayout(nextLayout);
+        }
+        return nextLayout;
+      });
+    },
+    [persistCorePanelLayout],
+  );
+
+  const debugConsoleFloatingPanel = corePanelLayout.floating.find((panel) => panel.panelId === "debug-console");
+  const isDebugConsoleDocked = dockTreeHasPanel(corePanelLayout.dockRoot, "debug-console");
+  const globeFloatingPanel = corePanelLayout.floating.find((panel) => panel.panelId === "globe");
+  const adminFloatingPanel = corePanelLayout.floating.find((panel) => panel.panelId === "admin");
+  const isGlobeDocked = dockTreeHasPanel(corePanelLayout.dockRoot, "globe");
+  const isAdminDocked = dockTreeHasPanel(corePanelLayout.dockRoot, "admin");
+  const shouldShowFloatingDashboardPanels = !isSmallMode;
+
+  const getPanelDropPreview = useCallback((draggedPanelId: PanelId, dragInfo: Pick<PanelShellDragInfo, "pointerX" | "pointerY">): PanelWorkspaceDropPreview | null => {
+    const workspaceElement = panelWorkspaceRef.current;
+
+    if (!workspaceElement) {
+      return null;
+    }
+
+    const workspaceBounds = workspaceElement.getBoundingClientRect();
+
+    if (dragInfo.pointerX < workspaceBounds.left || dragInfo.pointerX > workspaceBounds.right || dragInfo.pointerY < workspaceBounds.top || dragInfo.pointerY > workspaceBounds.bottom) {
+      return null;
+    }
+
+    const emptyCells = Array.from(workspaceElement.querySelectorAll<HTMLElement>(".panel-workspace-empty[data-empty-cell-id]"));
+
+    for (const emptyCell of emptyCells) {
+      const emptyId = emptyCell.dataset.emptyCellId;
+
+      if (!emptyId) {
+        continue;
+      }
+
+      const bounds = emptyCell.getBoundingClientRect();
+
+      if (dragInfo.pointerX >= bounds.left && dragInfo.pointerX <= bounds.right && dragInfo.pointerY >= bounds.top && dragInfo.pointerY <= bounds.bottom) {
+        return { kind: "empty", emptyId };
+      }
+    }
+
+    const leaves = Array.from(workspaceElement.querySelectorAll<HTMLElement>(".panel-workspace-leaf[data-panel-id]"));
+
+    for (const leaf of leaves) {
+      const panelId = leaf.dataset.panelId as PanelId | undefined;
+
+      if (!panelId || panelId === draggedPanelId) {
+        continue;
+      }
+
+      const placement = getDockPlacementFromPoint(leaf.getBoundingClientRect(), dragInfo.pointerX, dragInfo.pointerY);
+
+      if (placement) {
+        return { kind: "panel", panelId, placement };
+      }
+    }
+
+    const workspacePlacement = getWorkspaceDockPlacementFromPoint(workspaceBounds, dragInfo.pointerX, dragInfo.pointerY);
+
+    return workspacePlacement ? { kind: "workspace", placement: workspacePlacement } : null;
+  }, []);
+
+  const handleDebugConsoleFloatingRectChange = useCallback((rect: PanelRect) => {
+    debugConsoleLastFloatingRectRef.current = rect;
+
+    setCorePanelLayout((currentLayout) => {
+      const nextLayout = panelLayoutReducer(currentLayout, {
+        type: "update-floating-rect",
+        panelId: "debug-console",
+        rect,
+      });
+
+      corePanelLayoutRef.current = nextLayout;
+      return nextLayout;
+    });
+  }, []);
+
+  const handleGlobeFloatingRectChange = useCallback((rect: PanelRect) => {
+    globeLastFloatingRectRef.current = rect;
+
+    setCorePanelLayout((currentLayout) => {
+      const nextLayout = panelLayoutReducer(currentLayout, {
+        type: "update-floating-rect",
+        panelId: "globe",
+        rect,
+      });
+
+      corePanelLayoutRef.current = nextLayout;
+      return nextLayout;
+    });
+  }, []);
+
+  const handleAdminFloatingRectChange = useCallback((rect: PanelRect) => {
+    adminLastFloatingRectRef.current = rect;
+
+    setCorePanelLayout((currentLayout) => {
+      const nextLayout = panelLayoutReducer(currentLayout, {
+        type: "update-floating-rect",
+        panelId: "admin",
+        rect,
+      });
+
+      corePanelLayoutRef.current = nextLayout;
+      return nextLayout;
+    });
+  }, []);
+
+  const handleGlobeDock = useCallback(() => {
+    setIsGlobePanelVisible(true);
+    setCorePanelLayout((currentLayout) => {
+      globeLastFloatingRectRef.current = currentLayout.floating.find((panel) => panel.panelId === "globe")?.rect ?? globeLastFloatingRectRef.current;
+      const nextLayout = panelLayoutReducer(currentLayout, {
+        type: "dock-panel",
+        panelId: "globe",
+        placement: "bottom",
+      });
+
+      corePanelLayoutRef.current = nextLayout;
+      persistCorePanelLayout(nextLayout);
+      return nextLayout;
+    });
+  }, [persistCorePanelLayout]);
+
+  const handleAdminDock = useCallback(() => {
+    if (!lobbyState.canUseAdminTools) {
+      return;
+    }
+
+    setIsAdminOpen(true);
+    setCorePanelLayout((currentLayout) => {
+      adminLastFloatingRectRef.current = currentLayout.floating.find((panel) => panel.panelId === "admin")?.rect ?? adminLastFloatingRectRef.current;
+      const nextLayout = panelLayoutReducer(currentLayout, {
+        type: "dock-panel",
+        panelId: "admin",
+        placement: "bottom",
+      });
+
+      corePanelLayoutRef.current = nextLayout;
+      persistCorePanelLayout(nextLayout);
+      return nextLayout;
+    });
+  }, [lobbyState.canUseAdminTools, persistCorePanelLayout]);
+
+  const handleGlobeFloat = useCallback(() => {
+    setIsGlobePanelVisible(true);
+    setCorePanelLayout((currentLayout) => {
+      const nextLayout = floatPanelInLayout(currentLayout, "globe", globeLastFloatingRectRef.current);
+
+      corePanelLayoutRef.current = nextLayout;
+      persistCorePanelLayout(nextLayout);
+      return nextLayout;
+    });
+  }, [persistCorePanelLayout]);
+
+  const handleAdminFloat = useCallback(() => {
+    if (!lobbyState.canUseAdminTools) {
+      return;
+    }
+
+    setIsAdminOpen(true);
+    setCorePanelLayout((currentLayout) => {
+      const nextLayout = floatPanelInLayout(currentLayout, "admin", adminLastFloatingRectRef.current);
+
+      corePanelLayoutRef.current = nextLayout;
+      persistCorePanelLayout(nextLayout);
+      return nextLayout;
+    });
+  }, [lobbyState.canUseAdminTools, persistCorePanelLayout]);
+
+  const handleGlobeReset = useCallback(() => {
+    globeLastFloatingRectRef.current = GLOBE_PANEL_DEFINITION.defaultFloatingRect;
+    setIsGlobePanelVisible(true);
+    setIsGlobePanelFullscreen(false);
+    setCorePanelLayout((currentLayout) => {
+      const nextLayout = floatPanelInLayout(currentLayout, "globe", GLOBE_PANEL_DEFINITION.defaultFloatingRect);
+
+      corePanelLayoutRef.current = nextLayout;
+      persistCorePanelLayout(nextLayout);
+      return nextLayout;
+    });
+  }, [persistCorePanelLayout]);
+
+  const handleAdminReset = useCallback(() => {
+    if (!lobbyState.canUseAdminTools) {
+      return;
+    }
+
+    adminLastFloatingRectRef.current = ADMIN_PANEL_DEFINITION.defaultFloatingRect;
+    setIsAdminOpen(true);
+    setCorePanelLayout((currentLayout) => {
+      const nextLayout = floatPanelInLayout(currentLayout, "admin", ADMIN_PANEL_DEFINITION.defaultFloatingRect);
+
+      corePanelLayoutRef.current = nextLayout;
+      persistCorePanelLayout(nextLayout);
+      return nextLayout;
+    });
+  }, [lobbyState.canUseAdminTools, persistCorePanelLayout]);
+
+  const handleGlobeFloatingFocus = useCallback(() => {
+    setCorePanelLayout((currentLayout) => {
+      const nextLayout = panelLayoutReducer(currentLayout, {
+        type: "focus-floating-panel",
+        panelId: "globe",
+      });
+
+      corePanelLayoutRef.current = nextLayout;
+      persistCorePanelLayout(nextLayout);
+      return nextLayout;
+    });
+  }, [persistCorePanelLayout]);
+
+  const handleAdminFloatingFocus = useCallback(() => {
+    setCorePanelLayout((currentLayout) => {
+      const nextLayout = panelLayoutReducer(currentLayout, {
+        type: "focus-floating-panel",
+        panelId: "admin",
+      });
+
+      corePanelLayoutRef.current = nextLayout;
+      persistCorePanelLayout(nextLayout);
+      return nextLayout;
+    });
+  }, [persistCorePanelLayout]);
+
+  const activeSoundCloudPanelId = getSoundCloudPanelId(soundCloudPanelMode);
+  const activeSoundCloudPanelDefinition = getPanelDefinition(activeSoundCloudPanelId);
+  const activeSoundCloudFloatingPanel = corePanelLayout.floating.find((panel) => panel.panelId === activeSoundCloudPanelId);
+  const isActiveSoundCloudDocked = dockTreeHasPanel(corePanelLayout.dockRoot, activeSoundCloudPanelId);
+
+  const handleSoundCloudPanelModeChange = useCallback(
+    (nextMode: SoundCloudPanelMode) => {
+      const nextPanelId = getSoundCloudPanelId(nextMode);
+
+      setSoundCloudPanelMode(nextMode);
+      setIsSoundCloudPanelEnabled(true);
+      setCorePanelLayout((currentLayout) => {
+        const nextLayout = restorePanelInLayout(removeSoundCloudPanelsFromLayout(currentLayout), nextPanelId);
+
+        corePanelLayoutRef.current = nextLayout;
+        persistCorePanelLayout(nextLayout);
+        return nextLayout;
+      });
+    },
+    [persistCorePanelLayout],
+  );
+
+  const handleSoundCloudPanelClose = useCallback(() => {
+    setIsSoundCloudPanelEnabled(false);
+    setCorePanelLayout((currentLayout) => {
+      const nextLayout = removeSoundCloudPanelsFromLayout(currentLayout);
+
+      corePanelLayoutRef.current = nextLayout;
+      persistCorePanelLayout(nextLayout);
+      return nextLayout;
+    });
+  }, [persistCorePanelLayout]);
+
+  const handleSoundCloudFloatingRectChange = useCallback(
+    (rect: PanelRect) => {
+      soundCloudLastFloatingRectRef.current[activeSoundCloudPanelId] = rect;
+
+      setCorePanelLayout((currentLayout) => {
+        const nextLayout = panelLayoutReducer(currentLayout, {
+          type: "update-floating-rect",
+          panelId: activeSoundCloudPanelId,
+          rect,
+        });
+
+        corePanelLayoutRef.current = nextLayout;
+        return nextLayout;
+      });
+    },
+    [activeSoundCloudPanelId],
+  );
+
+  const handleSoundCloudDock = useCallback(() => {
+    setIsSoundCloudPanelEnabled(true);
+    setCorePanelLayout((currentLayout) => {
+      soundCloudLastFloatingRectRef.current[activeSoundCloudPanelId] =
+        currentLayout.floating.find((panel) => panel.panelId === activeSoundCloudPanelId)?.rect ?? soundCloudLastFloatingRectRef.current[activeSoundCloudPanelId];
+      const nextLayout = panelLayoutReducer(currentLayout, {
+        type: "dock-panel",
+        panelId: activeSoundCloudPanelId,
+        placement: "bottom",
+      });
+
+      corePanelLayoutRef.current = nextLayout;
+      persistCorePanelLayout(nextLayout);
+      return nextLayout;
+    });
+  }, [activeSoundCloudPanelId, persistCorePanelLayout]);
+
+  const handleSoundCloudFloat = useCallback(() => {
+    setIsSoundCloudPanelEnabled(true);
+    setCorePanelLayout((currentLayout) => {
+      const nextLayout = floatPanelInLayout(currentLayout, activeSoundCloudPanelId, soundCloudLastFloatingRectRef.current[activeSoundCloudPanelId]);
+
+      corePanelLayoutRef.current = nextLayout;
+      persistCorePanelLayout(nextLayout);
+      return nextLayout;
+    });
+  }, [activeSoundCloudPanelId, persistCorePanelLayout]);
+
+  const handleSoundCloudReset = useCallback(() => {
+    const defaultRect = activeSoundCloudPanelDefinition.defaultFloatingRect;
+    soundCloudLastFloatingRectRef.current[activeSoundCloudPanelId] = defaultRect;
+    setIsSoundCloudPanelEnabled(true);
+    setCorePanelLayout((currentLayout) => {
+      const nextLayout = floatPanelInLayout(currentLayout, activeSoundCloudPanelId, defaultRect);
+
+      corePanelLayoutRef.current = nextLayout;
+      persistCorePanelLayout(nextLayout);
+      return nextLayout;
+    });
+  }, [activeSoundCloudPanelDefinition.defaultFloatingRect, activeSoundCloudPanelId, persistCorePanelLayout]);
+
+  const handleSoundCloudFloatingFocus = useCallback(() => {
+    setCorePanelLayout((currentLayout) => {
+      const nextLayout = panelLayoutReducer(currentLayout, {
+        type: "focus-floating-panel",
+        panelId: activeSoundCloudPanelId,
+      });
+
+      corePanelLayoutRef.current = nextLayout;
+      persistCorePanelLayout(nextLayout);
+      return nextLayout;
+    });
+  }, [activeSoundCloudPanelId, persistCorePanelLayout]);
+
+  const getLastFloatingRectForPanel = useCallback(
+    (panelId: PanelId): PanelRect => {
+      if (panelId === "debug-console") {
+        return debugConsoleLastFloatingRectRef.current;
+      }
+
+      if (panelId === "globe") {
+        return globeLastFloatingRectRef.current;
+      }
+
+      if (panelId === "admin") {
+        return adminLastFloatingRectRef.current;
+      }
+
+      if (isSoundCloudPanelId(panelId)) {
+        return soundCloudLastFloatingRectRef.current[panelId];
+      }
+
+      return getPanelDefinition(panelId).defaultFloatingRect;
+    },
+    [],
+  );
+
+  const setLastFloatingRectForPanel = useCallback((panelId: PanelId, rect: PanelRect) => {
+    if (panelId === "debug-console") {
+      debugConsoleLastFloatingRectRef.current = rect;
+      return;
+    }
+
+    if (panelId === "globe") {
+      globeLastFloatingRectRef.current = rect;
+      return;
+    }
+
+    if (panelId === "admin") {
+      adminLastFloatingRectRef.current = rect;
+      return;
+    }
+
+    if (isSoundCloudPanelId(panelId)) {
+      soundCloudLastFloatingRectRef.current[panelId] = rect;
+    }
+  }, []);
+
+  const ensurePanelVisibleForDockedDrag = useCallback((panelId: PanelId) => {
+    if (panelId === "debug-console") {
+      setIsDebugConsoleOpen(true);
+      setDebugConsoleDisplayMode("float");
+      return;
+    }
+
+    if (panelId === "globe") {
+      setIsGlobePanelVisible(true);
+      return;
+    }
+
+    if (panelId === "admin") {
+      setIsAdminOpen(true);
+      return;
+    }
+
+    if (isSoundCloudPanelId(panelId)) {
+      setSoundCloudPanelMode(getSoundCloudModeForPanelId(panelId));
+      setIsSoundCloudPanelEnabled(true);
+    }
+  }, []);
+
+  const handleDockedPanelDragMove = useCallback(
+    (panelId: PanelId, dragInfo: Pick<PanelShellDragInfo, "pointerX" | "pointerY">) => {
+      if (dockedPanelDragStartPointRef.current?.panelId !== panelId) {
+        dockedPanelDragStartPointRef.current = { panelId, pointerX: dragInfo.pointerX, pointerY: dragInfo.pointerY };
+      }
+
+      setDebugConsoleDropPreview(getPanelDropPreview(panelId, dragInfo));
+    },
+    [getPanelDropPreview],
+  );
+
+  const handleDockedPanelDragEnd = useCallback(
+    (panelId: PanelId, dragInfo: Pick<PanelShellDragInfo, "pointerX" | "pointerY">) => {
+      const dropPreview = getPanelDropPreview(panelId, dragInfo);
+      const startPoint = dockedPanelDragStartPointRef.current;
+      const hasMovedPastClickThreshold =
+        !startPoint || startPoint.panelId !== panelId || Math.hypot(dragInfo.pointerX - startPoint.pointerX, dragInfo.pointerY - startPoint.pointerY) >= 6;
+
+      dockedPanelDragStartPointRef.current = null;
+      const currentFloatingRect = getLastFloatingRectForPanel(panelId);
+      const dragFloatingRect = {
+        ...currentFloatingRect,
+        x: Math.max(0, dragInfo.pointerX - currentFloatingRect.width / 2),
+        y: Math.max(0, dragInfo.pointerY - 32),
+      };
+
+      setDebugConsoleDropPreview(null);
+
+      if (!hasMovedPastClickThreshold) {
+        return;
+      }
+
+      ensurePanelVisibleForDockedDrag(panelId);
+
+      if (!dropPreview) {
+        setLastFloatingRectForPanel(panelId, dragFloatingRect);
+        setCorePanelLayout((currentLayout) => {
+          const nextLayout = panelLayoutReducer(currentLayout, {
+            type: "float-docked-panel-preserve-cell",
+            panelId,
+            rect: dragFloatingRect,
+            emptyCellId: `${panelId}-drag-origin`,
+          });
+
+          corePanelLayoutRef.current = nextLayout;
+          persistCorePanelLayout(nextLayout);
+          return nextLayout;
+        });
+        return;
+      }
+
+      setCorePanelLayout((currentLayout) => {
+        const layoutWithEmptyOrigin = panelLayoutReducer(currentLayout, {
+          type: "float-docked-panel-preserve-cell",
+          panelId,
+          rect: dragFloatingRect,
+          emptyCellId: `${panelId}-drag-origin`,
+        });
+        const nextLayout =
+          dropPreview.kind === "empty"
+            ? panelLayoutReducer(layoutWithEmptyOrigin, {
+                type: "dock-panel-in-empty-cell",
+                panelId,
+                emptyCellId: dropPreview.emptyId,
+              })
+            : panelLayoutReducer(layoutWithEmptyOrigin, {
+                type: "dock-panel",
+                panelId,
+                placement: dropPreview.placement,
+                ...(dropPreview.kind === "panel" ? { targetPanelId: dropPreview.panelId } : {}),
+              });
+
+        corePanelLayoutRef.current = nextLayout;
+        persistCorePanelLayout(nextLayout);
+        return nextLayout;
+      });
+    },
+    [ensurePanelVisibleForDockedDrag, getLastFloatingRectForPanel, getPanelDropPreview, persistCorePanelLayout, setLastFloatingRectForPanel],
+  );
+
+  const handleWorkspaceManagedHeaderPointerDown = useCallback(
+    (panelId: PanelId, event: ReactPointerEvent<HTMLElement>) => {
+      event.currentTarget.setPointerCapture(event.pointerId);
+      dockedPanelDragPointerIdRef.current = event.pointerId;
+      dockedPanelDragHeaderRef.current = event.currentTarget;
+      dockedPanelDragPanelIdRef.current = panelId;
+      dockedPanelDragStartPointRef.current = { panelId, pointerX: event.clientX, pointerY: event.clientY };
+      setDraggingDockedPanelId(panelId);
+      handleDockedPanelDragMove(panelId, { pointerX: event.clientX, pointerY: event.clientY });
+    },
+    [handleDockedPanelDragMove],
+  );
+
+  const handleWorkspaceManagedHeaderPointerMove = useCallback(
+    (panelId: PanelId, event: ReactPointerEvent<HTMLElement>) => {
+      if (dockedPanelDragPointerIdRef.current !== event.pointerId || dockedPanelDragPanelIdRef.current !== panelId) {
+        return;
+      }
+
+      handleDockedPanelDragMove(panelId, { pointerX: event.clientX, pointerY: event.clientY });
+    },
+    [handleDockedPanelDragMove],
+  );
+
+  const handleWorkspaceManagedHeaderPointerUp = useCallback(
+    (panelId: PanelId, event: ReactPointerEvent<HTMLElement>) => {
+      if (dockedPanelDragPointerIdRef.current !== event.pointerId || dockedPanelDragPanelIdRef.current !== panelId) {
+        return;
+      }
+
+      dockedPanelDragPointerIdRef.current = null;
+      dockedPanelDragHeaderRef.current = null;
+      dockedPanelDragPanelIdRef.current = null;
+      setDraggingDockedPanelId(null);
+      if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+        event.currentTarget.releasePointerCapture(event.pointerId);
+      }
+      handleDockedPanelDragEnd(panelId, { pointerX: event.clientX, pointerY: event.clientY });
+    },
+    [handleDockedPanelDragEnd],
+  );
+
+  useEffect(() => {
+    if (!draggingDockedPanelId) {
+      return;
+    }
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") {
+        return;
+      }
+
+      const pointerId = dockedPanelDragPointerIdRef.current;
+      const capturedHeader = dockedPanelDragHeaderRef.current;
+
+      if (pointerId !== null && capturedHeader?.hasPointerCapture(pointerId)) {
+        capturedHeader.releasePointerCapture(pointerId);
+      }
+
+      dockedPanelDragPointerIdRef.current = null;
+      dockedPanelDragHeaderRef.current = null;
+      dockedPanelDragPanelIdRef.current = null;
+      dockedPanelDragStartPointRef.current = null;
+      setDraggingDockedPanelId(null);
+      setDebugConsoleDropPreview(null);
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [draggingDockedPanelId]);
+
+  const handleDebugConsoleDock = useCallback(() => {
+    setDebugConsoleDropPreview(null);
+    setIsDebugConsoleOpen(true);
+    setDebugConsoleDisplayMode("float");
+
+    setCorePanelLayout((currentLayout) => {
+      const currentFloatingPanel = currentLayout.floating.find((panel) => panel.panelId === "debug-console");
+      debugConsoleLastFloatingRectRef.current = currentFloatingPanel?.rect ?? debugConsoleLastFloatingRectRef.current;
+      const nextLayout = panelLayoutReducer(currentLayout, {
+        type: "dock-panel",
+        panelId: "debug-console",
+        placement: "bottom",
+      });
+
+      corePanelLayoutRef.current = nextLayout;
+      persistCorePanelLayout(nextLayout);
+      return nextLayout;
+    });
+  }, [persistCorePanelLayout]);
+
+  const handleDebugConsoleFloat = useCallback(() => {
+    setDebugConsoleDropPreview(null);
+    setIsDebugConsoleOpen(true);
+    setDebugConsoleDisplayMode("float");
+
+    setCorePanelLayout((currentLayout) => {
+      const nextRect = debugConsoleLastFloatingRectRef.current;
+      const undockedLayout = panelLayoutReducer(currentLayout, {
+        type: "undock-panel",
+        panelId: "debug-console",
+        rect: nextRect,
+      });
+      const layoutWithFloatingRect =
+        undockedLayout === currentLayout
+          ? panelLayoutReducer(currentLayout, {
+              type: "update-floating-rect",
+              panelId: "debug-console",
+              rect: nextRect,
+            })
+          : undockedLayout;
+      const nextLayout = panelLayoutReducer(layoutWithFloatingRect, {
+        type: "focus-floating-panel",
+        panelId: "debug-console",
+      });
+
+      corePanelLayoutRef.current = nextLayout;
+      persistCorePanelLayout(nextLayout);
+      return nextLayout;
+    });
+  }, [persistCorePanelLayout]);
+
+  const handleDebugConsoleReset = useCallback(() => {
+    setDebugConsoleDropPreview(null);
+    debugConsoleLastFloatingRectRef.current = DEBUG_CONSOLE_INITIAL_RECT;
+    setIsDebugConsoleOpen(true);
+    setDebugConsoleDisplayMode("float");
+
+    setCorePanelLayout((currentLayout) => {
+      const undockedLayout = panelLayoutReducer(currentLayout, {
+        type: "undock-panel",
+        panelId: "debug-console",
+        rect: DEBUG_CONSOLE_INITIAL_RECT,
+      });
+      const layoutWithDefaultRect =
+        undockedLayout === currentLayout
+          ? panelLayoutReducer(currentLayout, {
+              type: "update-floating-rect",
+              panelId: "debug-console",
+              rect: DEBUG_CONSOLE_INITIAL_RECT,
+            })
+          : panelLayoutReducer(undockedLayout, {
+              type: "update-floating-rect",
+              panelId: "debug-console",
+              rect: DEBUG_CONSOLE_INITIAL_RECT,
+            });
+      const nextLayout = panelLayoutReducer(layoutWithDefaultRect, {
+        type: "focus-floating-panel",
+        panelId: "debug-console",
+      });
+
+      corePanelLayoutRef.current = nextLayout;
+      persistCorePanelLayout(nextLayout);
+      return nextLayout;
+    });
+  }, [persistCorePanelLayout]);
+
+  const handleDebugConsoleDockedClose = useCallback(() => {
+    setDebugConsoleDropPreview(null);
+    setIsDebugConsoleOpen(false);
+
+    setCorePanelLayout((currentLayout) => {
+      const nextLayout = panelLayoutReducer(currentLayout, {
+        type: "remove-docked-panel",
+        panelId: "debug-console",
+      });
+
+      corePanelLayoutRef.current = nextLayout;
+      persistCorePanelLayout(nextLayout);
+      return nextLayout;
+    });
+  }, [persistCorePanelLayout]);
+
+  const handleDebugConsoleFloatingInteractionEnd = useCallback(() => {
+    persistCorePanelLayout();
+  }, [persistCorePanelLayout]);
+
+  const handleDebugConsoleFloatingDragMove = useCallback(
+    (dragInfo: PanelShellDragInfo) => {
+      setDebugConsoleDropPreview(getPanelDropPreview("debug-console", dragInfo));
+    },
+    [getPanelDropPreview],
+  );
+
+  const handleDebugConsoleFloatingDragEnd = useCallback(
+    (dragInfo: PanelShellDragInfo) => {
+      const dropPreview = getPanelDropPreview("debug-console", dragInfo);
+      setDebugConsoleDropPreview(null);
+
+      if (!dropPreview) {
+        return;
+      }
+
+      setIsDebugConsoleOpen(true);
+      setDebugConsoleDisplayMode("float");
+      setCorePanelLayout((currentLayout) => {
+        debugConsoleLastFloatingRectRef.current = currentLayout.floating.find((panel) => panel.panelId === "debug-console")?.rect ?? dragInfo.rect;
+        const nextLayout =
+          dropPreview.kind === "empty"
+            ? panelLayoutReducer(currentLayout, {
+                type: "dock-panel-in-empty-cell",
+                panelId: "debug-console",
+                emptyCellId: dropPreview.emptyId,
+              })
+            : panelLayoutReducer(currentLayout, {
+                type: "dock-panel",
+                panelId: "debug-console",
+                placement: dropPreview.placement,
+                ...(dropPreview.kind === "panel" ? { targetPanelId: dropPreview.panelId } : {}),
+              });
+
+        corePanelLayoutRef.current = nextLayout;
+        persistCorePanelLayout(nextLayout);
+        return nextLayout;
+      });
+    },
+    [getPanelDropPreview, persistCorePanelLayout],
+  );
+
+  const handleDebugConsoleDockedDragMove = useCallback(
+    (dragInfo: DebugConsoleDockedDragInfo) => {
+      handleDockedPanelDragMove("debug-console", dragInfo);
+    },
+    [handleDockedPanelDragMove],
+  );
+
+  const handleDebugConsoleDockedDragEnd = useCallback(
+    (dragInfo: DebugConsoleDockedDragInfo) => {
+      handleDockedPanelDragEnd("debug-console", dragInfo);
+    },
+    [handleDockedPanelDragEnd],
+  );
+
+  const handleDebugConsoleDockedDragCancel = useCallback(() => {
+    setDebugConsoleDropPreview(null);
+  }, []);
+
+  const handleDebugConsoleFloatingFocus = useCallback(() => {
+    setCorePanelLayout((currentLayout) => {
+      const nextLayout = panelLayoutReducer(currentLayout, {
+        type: "focus-floating-panel",
+        panelId: "debug-console",
+      });
+
+      corePanelLayoutRef.current = nextLayout;
+      persistCorePanelLayout(nextLayout);
+      return nextLayout;
+    });
+  }, [persistCorePanelLayout]);
+
+  useEffect(() => {
+    if (!isDebugConsoleOpen || debugConsoleDisplayMode !== "float" || debugConsoleFloatingPanel || isDebugConsoleDocked) {
+      return;
+    }
+
+    setCorePanelLayout((currentLayout) => {
+      if (currentLayout.floating.some((panel) => panel.panelId === "debug-console")) {
+        return currentLayout;
+      }
+
+      const layoutWithRect = panelLayoutReducer(currentLayout, {
+        type: "update-floating-rect",
+        panelId: "debug-console",
+        rect: DEBUG_CONSOLE_INITIAL_RECT,
+      });
+      const nextLayout = panelLayoutReducer(layoutWithRect, {
+        type: "focus-floating-panel",
+        panelId: "debug-console",
+      });
+
+      corePanelLayoutRef.current = nextLayout;
+      persistCorePanelLayout(nextLayout);
+      return nextLayout;
+    });
+  }, [debugConsoleDisplayMode, debugConsoleFloatingPanel, isDebugConsoleDocked, isDebugConsoleOpen, persistCorePanelLayout]);
 
   const handleStartReadyHold = () => {
     if (isThreeDModeOpen) {
@@ -1334,6 +2570,42 @@ export function MainScreen() {
   const shouldMountDeckWorkspace = (isSoundCloudPanelEnabled && soundCloudPanelMode === "decks") || isThreeDModeOpen;
   const soundCloudDiagnosticPanelMode = isSoundCloudPanelEnabled ? soundCloudPanelMode : "hidden";
   const adminSoundCloudPlayer = soundCloudPanelMode === "decks" ? soundCloudDeckA : frontEndSoundCloudPlayer;
+  const renderSoundCloudDeckPanel = (isVisible = true) => (
+    <SoundCloudDeckPanel
+      decks={[
+        { id: "A", label: "Deck A", player: soundCloudDeckA },
+        { id: "B", label: "Deck B", player: soundCloudDeckB },
+      ]}
+      gridControllers={{
+        A: loggedSoundCloudGridA,
+        B: loggedSoundCloudGridB,
+      }}
+      mixer={{
+        crossfader: soundCloudCrossfader,
+        masterVolume: soundCloudMasterVolume,
+      }}
+      mixerReadout={{
+        deckAOutputPercent: soundCloudDeckA.state.effectiveVolume,
+        deckBOutputPercent: soundCloudDeckB.state.effectiveVolume,
+      }}
+      onSetCrossfader={(value) => setSoundCloudCrossfader(clampSoundCloudCrossfader(value))}
+      onSetMasterVolume={(value) => setSoundCloudMasterVolume(clampSoundCloudMasterVolume(value))}
+      mode={soundCloudPanelMode}
+      onChangeMode={handleSoundCloudPanelModeChange}
+      isVisible={isVisible}
+    />
+  );
+  const renderActiveSoundCloudPanel = (isVisible = true) => {
+    if (soundCloudPanelMode === "radio") {
+      return <SoundCloudPanel player={frontEndSoundCloudPlayer} mode={soundCloudPanelMode} onChangeMode={handleSoundCloudPanelModeChange} />;
+    }
+
+    if (soundCloudPanelMode === "widget") {
+      return <SoundCloudWidgetPanel player={frontEndSoundCloudPlayer} mode={soundCloudPanelMode} onChangeMode={handleSoundCloudPanelModeChange} />;
+    }
+
+    return renderSoundCloudDeckPanel(isVisible);
+  };
   const loadingScreenDiagnostics = useMemo<LoadingScreenDiagnosticEvent[]>(() => {
     const syncDetailParts = [
       `mode=${state.syncStatus.mode}`,
@@ -1530,6 +2802,7 @@ export function MainScreen() {
         className="app-shell"
         data-secret-unlocked={isSecretUnlocked ? "true" : undefined}
         data-3d-shell-open={isThreeDModeOpen ? "true" : undefined}
+        data-small-mode={isSmallMode ? "true" : undefined}
         onClickCapture={!isThreeDModeOpen ? resetSecretEntry : undefined}
       >
         <AppHeader
@@ -1542,21 +2815,24 @@ export function MainScreen() {
           secretUnlockCount={unlockCount}
           secretErrorProgress={errorProgress}
           secretErrorCount={errorCount}
+          isSmallMode={isSmallMode}
+          countdownDisplay={countdownDisplay}
+          onToggleSmallMode={() => setIsSmallMode((current) => !current)}
         />
 
-        {state.syncStatus.connection === "connecting" ? (
+        {!isSmallMode && state.syncStatus.connection === "connecting" ? (
           <div className="panel sync-banner">
             <strong>Sync warming up.</strong> Waiting for the timing link before enabling shared controls.
           </div>
         ) : null}
 
-        {state.syncStatus.connection === "offline" || state.syncStatus.connection === "error" ? (
+        {!isSmallMode && (state.syncStatus.connection === "offline" || state.syncStatus.connection === "error") ? (
           <div className="panel sync-banner sync-banner-alert">
             <strong>Sync unavailable.</strong> {state.syncStatus.warning ?? "Reconnect the sync layer to resume shared timing."}
           </div>
         ) : null}
 
-        {sdkState.enabled && (sdkState.authError || sdkState.identitySource === "local_fallback" || sdkState.identitySource === "participant_discord") ? (
+        {!isSmallMode && sdkState.enabled && (sdkState.authError || sdkState.identitySource === "local_fallback" || sdkState.identitySource === "participant_discord") ? (
           <div className="panel sync-banner sync-banner-alert discord-identity-banner">
             <div className="discord-identity-banner-copy">
               <strong>{sdkState.identitySource === "participant_discord" ? "Discord identity degraded." : "Discord identity unavailable."}</strong>{" "}
@@ -1568,142 +2844,364 @@ export function MainScreen() {
           </div>
         ) : null}
 
-        {!sdkState.enabled && sdkState.startupError ? (
+        {!isSmallMode && !sdkState.enabled && sdkState.startupError ? (
           <div className="panel sync-banner sync-banner-alert discord-identity-banner">
             <strong>Discord SDK startup failed.</strong> {sdkState.startupError}
           </div>
         ) : null}
 
-        <div className="content-grid">
-          <LobbyPanel
-            session={state.session}
-            users={state.users}
-            lobbyState={lobbyState}
-            generatedDisplayNames={generatedDisplayNames}
-            discordDisplayName={discordDisplayName}
-            isJoinControlsHidden={isJoinControlsHidden}
-            onJoinSession={handleJoinSession}
-            onRollDisplayName={rollDisplayName}
-            onSelectDisplayName={selectDisplayName}
-            onUseDiscordDisplayName={useDiscordDisplayName}
+        {!isSmallMode ? (
+          <PanelWorkspace
+            dockRoot={corePanelLayout.dockRoot}
+            workspaceRef={panelWorkspaceRef}
+            dropPreview={debugConsoleDropPreview}
+            onSplitResize={handleCorePanelSplitResize}
+            onSplitResizeEnd={handleCorePanelSplitResizeEnd}
+            onPanelEdgeCreateEmpty={handlePanelEdgeCreateEmpty}
+            renderPanel={(panelId) => {
+              switch (panelId) {
+                case "lobby":
+                  return (
+                    <LobbyPanel
+                      session={state.session}
+                      users={state.users}
+                      lobbyState={lobbyState}
+                      generatedDisplayNames={generatedDisplayNames}
+                      discordDisplayName={discordDisplayName}
+                      isJoinControlsHidden={isJoinControlsHidden}
+                      onJoinSession={handleJoinSession}
+                      onRollDisplayName={rollDisplayName}
+                      onSelectDisplayName={selectDisplayName}
+                      onUseDiscordDisplayName={useDiscordDisplayName}
+                    />
+                  );
+                case "timer":
+                  return (
+                    <TimerPanel
+                      state={state}
+                      lobbyState={lobbyState}
+                      countdownDisplay={countdownDisplay}
+                      readyHotkeyEnabled={!isThreeDModeOpen}
+                      onStartReadyHold={handleStartReadyHold}
+                      onEndReadyHold={handleEndReadyHold}
+                      onSetTimerDuration={setTimerDuration}
+                      onSetPrecountDuration={setPrecountDuration}
+                    />
+                  );
+                case "globe":
+                  return isGlobePanelVisible ? (
+                    <section className="workspace-managed-panel" aria-label={GLOBE_PANEL_DEFINITION.title} data-dragging={draggingDockedPanelId === "globe" ? "true" : undefined}>
+                      <header
+                        className="workspace-managed-panel-header"
+                        tabIndex={0}
+                        aria-label="Drag Globe docked panel"
+                        onPointerDown={(event) => handleWorkspaceManagedHeaderPointerDown("globe", event)}
+                        onPointerMove={(event) => handleWorkspaceManagedHeaderPointerMove("globe", event)}
+                        onPointerUp={(event) => handleWorkspaceManagedHeaderPointerUp("globe", event)}
+                        onPointerCancel={(event) => handleWorkspaceManagedHeaderPointerUp("globe", event)}
+                      >
+                        <strong>{GLOBE_PANEL_DEFINITION.title}</strong>
+                        <div className="workspace-managed-panel-actions" onPointerDown={(event) => event.stopPropagation()}>
+                          <button type="button" aria-label="Float Globe panel" onClick={handleGlobeFloat}>
+                            Float
+                          </button>
+                          <button type="button" aria-label="Close Globe panel" onClick={handleGlobePanelClose}>
+                            Close
+                          </button>
+                          <button type="button" aria-label="Reset Globe panel position" onClick={handleGlobeReset}>
+                            Reset
+                          </button>
+                        </div>
+                      </header>
+                      <div className="workspace-managed-panel-body">
+                        <GlobePanel
+                          session={state.session}
+                          users={state.users}
+                          localUserId={lobbyState.localUser?.id}
+                          vpnVisualEnabled={isGlobeVpnVisualEnabled}
+                          onToggleVpnVisual={() => setIsGlobeVpnVisualEnabled((current) => !current)}
+                          onFullscreenChange={setIsGlobePanelFullscreen}
+                          onClose={handleGlobePanelClose}
+                        />
+                      </div>
+                    </section>
+                  ) : null;
+                case "admin":
+                  return isAdminOpen && lobbyState.canUseAdminTools ? (
+                    <section className="workspace-managed-panel" aria-label={ADMIN_PANEL_DEFINITION.title} data-dragging={draggingDockedPanelId === "admin" ? "true" : undefined}>
+                      <header
+                        className="workspace-managed-panel-header"
+                        tabIndex={0}
+                        aria-label="Drag Admin panel docked panel"
+                        onPointerDown={(event) => handleWorkspaceManagedHeaderPointerDown("admin", event)}
+                        onPointerMove={(event) => handleWorkspaceManagedHeaderPointerMove("admin", event)}
+                        onPointerUp={(event) => handleWorkspaceManagedHeaderPointerUp("admin", event)}
+                        onPointerCancel={(event) => handleWorkspaceManagedHeaderPointerUp("admin", event)}
+                      >
+                        <strong>{ADMIN_PANEL_DEFINITION.title}</strong>
+                        <div className="workspace-managed-panel-actions" onPointerDown={(event) => event.stopPropagation()}>
+                          <button type="button" aria-label="Float Admin panel" onClick={handleAdminFloat}>
+                            Float
+                          </button>
+                          <button type="button" aria-label="Close Admin panel" onClick={handleAdminPanelClose}>
+                            Close
+                          </button>
+                          <button type="button" aria-label="Reset Admin panel position" onClick={handleAdminReset}>
+                            Reset
+                          </button>
+                        </div>
+                      </header>
+                      <div className="workspace-managed-panel-body">
+                        <AdminPanel
+                          state={state}
+                          lobbyState={lobbyState}
+                          isOpen={isAdminOpen}
+                          waveformBarCount={soundCloudWaveformBarCount}
+                          soundCloudPlayer={adminSoundCloudPlayer}
+                          onClose={handleAdminPanelClose}
+                          onSetWaveformBarCount={setSoundCloudWaveformBarCount}
+                          onForceStartRound={forceStartRound}
+                          onForceCompleteRound={forceCompleteRound}
+                          onResetSession={adminResetSession}
+                          onAddTestParticipant={addTestParticipant}
+                          onToggleTestParticipantsReady={toggleTestParticipantsReady}
+                          onClearTestParticipants={clearTestParticipants}
+                          onSetLateJoinersJoinReady={setLateJoinersJoinReady}
+                          onSetAutoJoinOnLoad={setAutoJoinOnLoad}
+                          onSetCountdownPrecisionDigits={setCountdownPrecisionDigits}
+                        />
+                      </div>
+                    </section>
+                  ) : null;
+                case "soundcloud-radio":
+                case "soundcloud-widget":
+                case "soundcloud-decks":
+                  return isSoundCloudPanelEnabled && panelId === activeSoundCloudPanelId ? (
+                    <section className="workspace-managed-panel" aria-label={activeSoundCloudPanelDefinition.title} data-dragging={draggingDockedPanelId === panelId ? "true" : undefined}>
+                      <header
+                        className="workspace-managed-panel-header"
+                        tabIndex={0}
+                        aria-label={`Drag ${activeSoundCloudPanelDefinition.title} docked panel`}
+                        onPointerDown={(event) => handleWorkspaceManagedHeaderPointerDown(panelId, event)}
+                        onPointerMove={(event) => handleWorkspaceManagedHeaderPointerMove(panelId, event)}
+                        onPointerUp={(event) => handleWorkspaceManagedHeaderPointerUp(panelId, event)}
+                        onPointerCancel={(event) => handleWorkspaceManagedHeaderPointerUp(panelId, event)}
+                      >
+                        <strong>{activeSoundCloudPanelDefinition.title}</strong>
+                        <div className="workspace-managed-panel-actions" onPointerDown={(event) => event.stopPropagation()}>
+                          <button type="button" aria-label={`Float ${activeSoundCloudPanelDefinition.title}`} onClick={handleSoundCloudFloat}>
+                            Float
+                          </button>
+                          <button type="button" aria-label={`Close ${activeSoundCloudPanelDefinition.title}`} onClick={handleSoundCloudPanelClose}>
+                            Close
+                          </button>
+                          <button type="button" aria-label={`Reset ${activeSoundCloudPanelDefinition.title} position`} onClick={handleSoundCloudReset}>
+                            Reset
+                          </button>
+                        </div>
+                      </header>
+                      <div className="workspace-managed-panel-body">{renderActiveSoundCloudPanel()}</div>
+                    </section>
+                  ) : null;
+                case "debug-console":
+                  return isDebugConsoleOpen ? (
+                    <DebugConsoleDockedPanel
+                      isOpen={isDebugConsoleOpen}
+                      onClose={handleDebugConsoleDockedClose}
+                      onFloat={handleDebugConsoleFloat}
+                      onReset={handleDebugConsoleReset}
+                      snapshot={debugConsoleState.snapshot}
+                      logs={debugConsoleState.visibleLogs}
+                      commandHistory={debugCommandHistory}
+                      activeFilter={debugConsoleState.activeFilter}
+                      onSubmitCommand={handleDebugConsoleCommand}
+                      onDockedDragMove={handleDebugConsoleDockedDragMove}
+                      onDockedDragEnd={handleDebugConsoleDockedDragEnd}
+                      onDockedDragCancel={handleDebugConsoleDockedDragCancel}
+                    />
+                  ) : null;
+                default:
+                  return null;
+              }
+            }}
           />
-          <TimerPanel
-            state={state}
-            lobbyState={lobbyState}
-            countdownDisplay={countdownDisplay}
-            readyHotkeyEnabled={!isThreeDModeOpen}
-            onStartReadyHold={handleStartReadyHold}
-            onEndReadyHold={handleEndReadyHold}
-            onSetTimerDuration={setTimerDuration}
-            onSetPrecountDuration={setPrecountDuration}
-          />
-        </div>
+        ) : null}
 
-        {isGlobePanelVisible ? (
-          <GlobePanel
-            session={state.session}
-            users={state.users}
-            localUserId={lobbyState.localUser?.id}
-            vpnVisualEnabled={isGlobeVpnVisualEnabled}
-            onToggleVpnVisual={() => setIsGlobeVpnVisualEnabled((current) => !current)}
-            onFullscreenChange={setIsGlobePanelFullscreen}
+        {isThreeDModeOpen && (!isSoundCloudPanelEnabled || soundCloudPanelMode !== "decks") ? (
+          <div className="soundcloud-deck-standby" aria-hidden="true">
+            {renderSoundCloudDeckPanel(false)}
+          </div>
+        ) : null}
+
+        {shouldShowFloatingDashboardPanels && isGlobePanelVisible && !isGlobeDocked && globeFloatingPanel ? (
+          <FloatingWindow
+            title={GLOBE_PANEL_DEFINITION.title}
+            isOpen={isGlobePanelVisible}
+            initialRect={GLOBE_PANEL_DEFINITION.defaultFloatingRect}
+            rect={globeFloatingPanel.rect}
+            zIndex={globeFloatingPanel.zIndex}
+            minWidth={GLOBE_PANEL_DEFINITION.minWidth}
+            minHeight={GLOBE_PANEL_DEFINITION.minHeight}
             onClose={handleGlobePanelClose}
-          />
+            onRectChange={handleGlobeFloatingRectChange}
+            onInteractionEnd={handleCorePanelSplitResizeEnd}
+            onFocusPanel={handleGlobeFloatingFocus}
+            actions={
+              <>
+                <button type="button" className="panel-shell-action floating-window-action" aria-label="Dock Globe panel" onClick={handleGlobeDock}>
+                  Dock
+                </button>
+                <button type="button" className="panel-shell-action floating-window-action" aria-label="Reset Globe panel position" onClick={handleGlobeReset}>
+                  Reset
+                </button>
+              </>
+            }
+          >
+            <div className="workspace-managed-floating-body">
+              <GlobePanel
+                session={state.session}
+                users={state.users}
+                localUserId={lobbyState.localUser?.id}
+                vpnVisualEnabled={isGlobeVpnVisualEnabled}
+                onToggleVpnVisual={() => setIsGlobeVpnVisualEnabled((current) => !current)}
+                onFullscreenChange={setIsGlobePanelFullscreen}
+                onClose={handleGlobePanelClose}
+              />
+            </div>
+          </FloatingWindow>
         ) : null}
 
-        {isSoundCloudPanelEnabled && soundCloudPanelMode === "radio" ? (
-          <SoundCloudPanel player={frontEndSoundCloudPlayer} mode={soundCloudPanelMode} onChangeMode={setSoundCloudPanelMode} />
+        {shouldShowFloatingDashboardPanels && isAdminOpen && lobbyState.canUseAdminTools && !isAdminDocked && adminFloatingPanel ? (
+          <FloatingWindow
+            title={ADMIN_PANEL_DEFINITION.title}
+            isOpen={isAdminOpen}
+            initialRect={ADMIN_PANEL_DEFINITION.defaultFloatingRect}
+            rect={adminFloatingPanel.rect}
+            zIndex={adminFloatingPanel.zIndex}
+            minWidth={ADMIN_PANEL_DEFINITION.minWidth}
+            minHeight={ADMIN_PANEL_DEFINITION.minHeight}
+            onClose={handleAdminPanelClose}
+            onRectChange={handleAdminFloatingRectChange}
+            onInteractionEnd={handleCorePanelSplitResizeEnd}
+            onFocusPanel={handleAdminFloatingFocus}
+            actions={
+              <>
+                <button type="button" className="panel-shell-action floating-window-action" aria-label="Dock Admin panel" onClick={handleAdminDock}>
+                  Dock
+                </button>
+                <button type="button" className="panel-shell-action floating-window-action" aria-label="Reset Admin panel position" onClick={handleAdminReset}>
+                  Reset
+                </button>
+              </>
+            }
+          >
+            <div className="workspace-managed-floating-body">
+              <AdminPanel
+                state={state}
+                lobbyState={lobbyState}
+                isOpen={isAdminOpen}
+                waveformBarCount={soundCloudWaveformBarCount}
+                soundCloudPlayer={adminSoundCloudPlayer}
+                onClose={handleAdminPanelClose}
+                onSetWaveformBarCount={setSoundCloudWaveformBarCount}
+                onForceStartRound={forceStartRound}
+                onForceCompleteRound={forceCompleteRound}
+                onResetSession={adminResetSession}
+                onAddTestParticipant={addTestParticipant}
+                onToggleTestParticipantsReady={toggleTestParticipantsReady}
+                onClearTestParticipants={clearTestParticipants}
+                onSetLateJoinersJoinReady={setLateJoinersJoinReady}
+                onSetAutoJoinOnLoad={setAutoJoinOnLoad}
+                onSetCountdownPrecisionDigits={setCountdownPrecisionDigits}
+              />
+            </div>
+          </FloatingWindow>
         ) : null}
 
-        {isSoundCloudPanelEnabled && soundCloudPanelMode === "widget" ? (
-          <SoundCloudWidgetPanel player={frontEndSoundCloudPlayer} mode={soundCloudPanelMode} onChangeMode={setSoundCloudPanelMode} />
+        {shouldShowFloatingDashboardPanels && isSoundCloudPanelEnabled && !isActiveSoundCloudDocked && activeSoundCloudFloatingPanel ? (
+          <FloatingWindow
+            title={activeSoundCloudPanelDefinition.title}
+            isOpen={isSoundCloudPanelEnabled}
+            initialRect={activeSoundCloudPanelDefinition.defaultFloatingRect}
+            rect={activeSoundCloudFloatingPanel.rect}
+            zIndex={activeSoundCloudFloatingPanel.zIndex}
+            minWidth={activeSoundCloudPanelDefinition.minWidth}
+            minHeight={activeSoundCloudPanelDefinition.minHeight}
+            onClose={handleSoundCloudPanelClose}
+            onRectChange={handleSoundCloudFloatingRectChange}
+            onInteractionEnd={handleCorePanelSplitResizeEnd}
+            onFocusPanel={handleSoundCloudFloatingFocus}
+            actions={
+              <>
+                <button type="button" className="panel-shell-action floating-window-action" aria-label={`Dock ${activeSoundCloudPanelDefinition.title}`} onClick={handleSoundCloudDock}>
+                  Dock
+                </button>
+                <button type="button" className="panel-shell-action floating-window-action" aria-label={`Reset ${activeSoundCloudPanelDefinition.title} position`} onClick={handleSoundCloudReset}>
+                  Reset
+                </button>
+              </>
+            }
+          >
+            <div className="workspace-managed-floating-body">{renderActiveSoundCloudPanel()}</div>
+          </FloatingWindow>
         ) : null}
 
-        {shouldMountDeckWorkspace ? (
-          <SoundCloudDeckPanel
-            decks={[
-              { id: "A", label: "Deck A", player: soundCloudDeckA },
-              { id: "B", label: "Deck B", player: soundCloudDeckB },
-            ]}
-            gridControllers={{
-              A: loggedSoundCloudGridA,
-              B: loggedSoundCloudGridB,
-            }}
-            mixer={{
-              crossfader: soundCloudCrossfader,
-              masterVolume: soundCloudMasterVolume,
-            }}
-            mixerReadout={{
-              deckAOutputPercent: soundCloudDeckA.state.effectiveVolume,
-              deckBOutputPercent: soundCloudDeckB.state.effectiveVolume,
-            }}
-            onSetCrossfader={(value) => setSoundCloudCrossfader(clampSoundCloudCrossfader(value))}
-            onSetMasterVolume={(value) => setSoundCloudMasterVolume(clampSoundCloudMasterVolume(value))}
-            mode={soundCloudPanelMode}
-            onChangeMode={setSoundCloudPanelMode}
-            isVisible={soundCloudPanelMode === "decks"}
-          />
+        {!isSmallMode ? <StatusFooter syncStatus={state.syncStatus} sdkState={sdkState} /> : null}
+
+        {shouldShowFloatingDashboardPanels ? (
+          debugConsoleDisplayMode === "float" ? (
+            !isDebugConsoleDocked ? (
+              <DebugConsoleWindow
+                isOpen={isDebugConsoleOpen}
+                onClose={() => {
+                  setDebugConsoleDropPreview(null);
+                  setIsDebugConsoleOpen(false);
+                }}
+                snapshot={debugConsoleState.snapshot}
+                logs={debugConsoleState.visibleLogs}
+                commandHistory={debugCommandHistory}
+                activeFilter={debugConsoleState.activeFilter}
+                onSubmitCommand={handleDebugConsoleCommand}
+                floatingRect={debugConsoleFloatingPanel?.rect}
+                floatingZIndex={debugConsoleFloatingPanel?.zIndex}
+                onFloatingRectChange={handleDebugConsoleFloatingRectChange}
+                onFloatingInteractionEnd={handleDebugConsoleFloatingInteractionEnd}
+                onFloatingFocus={handleDebugConsoleFloatingFocus}
+                onFloatingDragMove={handleDebugConsoleFloatingDragMove}
+                onFloatingDragEnd={handleDebugConsoleFloatingDragEnd}
+                onDock={handleDebugConsoleDock}
+                onReset={handleDebugConsoleReset}
+              />
+            ) : null
+          ) : debugConsoleDisplayMode === "fullscreen2" ? (
+            <DebugConsoleFullscreen2
+              isOpen={isDebugConsoleOpen}
+              openRequestId={fullscreen2OpenRequestId}
+              closeRequestId={fullscreen2CloseRequestId}
+              startMode={fullscreen2StartMode}
+              backgroundOpacityPercent={backgroundConsoleOpacityPercent}
+              commandBackgroundOpacityPercent={backgroundConsoleCommandOpacityPercent}
+              textOpacityPercent={backgroundConsoleTextOpacityPercent}
+              logs={debugConsoleState.visibleLogs}
+              commandHistory={debugCommandHistory}
+              onCloseAnimationEnd={handleConsole2CloseAnimationEnd}
+              onRequestClose={closeDebugConsole2}
+              onApplyModePreset={applyConsole2ModePreset}
+              onSubmitCommand={handleDebugConsoleCommand}
+            />
+          ) : (
+            <DebugConsoleFullscreen
+              isOpen={isDebugConsoleOpen}
+              startCompact={shouldStartDebugConsoleCompact}
+              onClose={() => setIsDebugConsoleOpen(false)}
+              snapshot={debugConsoleState.snapshot}
+              logs={debugConsoleState.visibleLogs}
+              commandHistory={debugCommandHistory}
+              activeFilter={debugConsoleState.activeFilter}
+              onSubmitCommand={handleDebugConsoleCommand}
+            />
+          )
         ) : null}
-
-        <AdminPanel
-          state={state}
-          lobbyState={lobbyState}
-          isOpen={isAdminOpen}
-          waveformBarCount={soundCloudWaveformBarCount}
-          soundCloudPlayer={adminSoundCloudPlayer}
-          onClose={() => setIsAdminOpen(false)}
-          onSetWaveformBarCount={setSoundCloudWaveformBarCount}
-          onForceStartRound={forceStartRound}
-          onForceCompleteRound={forceCompleteRound}
-          onResetSession={adminResetSession}
-          onAddTestParticipant={addTestParticipant}
-          onToggleTestParticipantsReady={toggleTestParticipantsReady}
-          onClearTestParticipants={clearTestParticipants}
-          onSetLateJoinersJoinReady={setLateJoinersJoinReady}
-          onSetAutoJoinOnLoad={setAutoJoinOnLoad}
-          onSetCountdownPrecisionDigits={setCountdownPrecisionDigits}
-        />
-
-        <StatusFooter syncStatus={state.syncStatus} sdkState={sdkState} />
-
-        {debugConsoleDisplayMode === "float" ? (
-          <DebugConsoleWindow
-            isOpen={isDebugConsoleOpen}
-            onClose={() => setIsDebugConsoleOpen(false)}
-            snapshot={debugConsoleState.snapshot}
-            logs={debugConsoleState.visibleLogs}
-            commandHistory={debugCommandHistory}
-            activeFilter={debugConsoleState.activeFilter}
-            onSubmitCommand={handleDebugConsoleCommand}
-          />
-        ) : debugConsoleDisplayMode === "fullscreen2" ? (
-          <DebugConsoleFullscreen2
-            isOpen={isDebugConsoleOpen}
-            openRequestId={fullscreen2OpenRequestId}
-            closeRequestId={fullscreen2CloseRequestId}
-            startMode={fullscreen2StartMode}
-            backgroundOpacityPercent={backgroundConsoleOpacityPercent}
-            commandBackgroundOpacityPercent={backgroundConsoleCommandOpacityPercent}
-            textOpacityPercent={backgroundConsoleTextOpacityPercent}
-            logs={debugConsoleState.visibleLogs}
-            commandHistory={debugCommandHistory}
-            onCloseAnimationEnd={handleConsole2CloseAnimationEnd}
-            onRequestClose={closeDebugConsole2}
-            onApplyModePreset={applyConsole2ModePreset}
-            onSubmitCommand={handleDebugConsoleCommand}
-          />
-        ) : (
-          <DebugConsoleFullscreen
-            isOpen={isDebugConsoleOpen}
-            startCompact={shouldStartDebugConsoleCompact}
-            onClose={() => setIsDebugConsoleOpen(false)}
-            snapshot={debugConsoleState.snapshot}
-            logs={debugConsoleState.visibleLogs}
-            commandHistory={debugCommandHistory}
-            activeFilter={debugConsoleState.activeFilter}
-            onSubmitCommand={handleDebugConsoleCommand}
-          />
-        )}
 
         {isThreeDModeOpen ? (
           <Suspense fallback={<HiddenWorldLoadingPanel label="Loading 3D world" />}>
