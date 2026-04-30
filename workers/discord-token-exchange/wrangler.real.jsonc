@@ -1,0 +1,19 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "sync-sesh-real-discord-token",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-04-29",
+  "observability": {
+    "enabled": true
+  },
+  "vars": {
+    "DISCORD_CLIENT_ID": "1495526466950009013",
+    "DISCORD_REDIRECT_URI": "https://127.0.0.1",
+    "BUILD_ID": "real-worker-001"
+  },
+  "secrets": {
+    "required": [
+      "DISCORD_CLIENT_SECRET"
+    ]
+  }
+}

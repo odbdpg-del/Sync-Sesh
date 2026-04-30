@@ -8,6 +8,14 @@ Entries must be in reverse chronological order. New entries go at the top, above
 
 Use a level-two heading for every entry so the editor can fold each change.
 
+## [2591] - 2026-04-30 14:57 - `syncsesh-activity-promotion / Real Discord Token Worker Config`
+
+- Added a real Discord token Worker config for the production SyncSesh Activity.
+- Pointed the Worker at Discord client id `1495526466950009013` with the standard `https://127.0.0.1` redirect URI.
+- Kept `DISCORD_CLIENT_SECRET` as a required Cloudflare Worker secret instead of storing it in the repo.
+- Touched `workers/discord-token-exchange/wrangler.real.jsonc` and `changelog.md`.
+- Build/test: not run (deployment config only).
+
 ## [2590] - 2026-04-30 18:12 - `codex/merge-ui-and-3d-world / Add Player Ping to Lobby Cards`
 
 - Added support for optional per-user latency values on `SessionUser` via `latencyMs?: number`.
