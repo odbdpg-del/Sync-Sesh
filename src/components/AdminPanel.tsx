@@ -6,10 +6,14 @@ interface AdminPanelProps {
   state: DabSyncState;
   lobbyState: DerivedLobbyState;
   isOpen: boolean;
+  areEmptyCellsHidden: boolean;
+  maxVisibleEmptyPlayerSlots: number;
   waveformBarCount: number;
   soundCloudPlayer: SoundCloudPlayerController;
   onClose: () => void;
   onSetWaveformBarCount: (count: number) => void;
+  onSetEmptyCellsHidden: (hidden: boolean) => void;
+  onSetMaxVisibleEmptyPlayerSlots: (count: number) => void;
   onForceStartRound: () => void;
   onForceCompleteRound: () => void;
   onResetSession: () => void;
@@ -43,10 +47,14 @@ export function AdminPanel({
   state,
   lobbyState,
   isOpen,
+  areEmptyCellsHidden,
+  maxVisibleEmptyPlayerSlots,
   waveformBarCount,
   soundCloudPlayer,
   onClose,
   onSetWaveformBarCount,
+  onSetEmptyCellsHidden,
+  onSetMaxVisibleEmptyPlayerSlots,
   onForceStartRound,
   onForceCompleteRound,
   onResetSession,
@@ -67,6 +75,8 @@ export function AdminPanel({
   const soundCloudState = soundCloudPlayer.state;
   const isActiveCountdown = state.session.phase === "precount" || state.session.phase === "countdown";
   const countdownPrecisionDigits = state.timerConfig.countdownPrecisionDigits;
+  const normalizedVisibleEmptySlots = Math.min(maxVisibleEmptyPlayerSlots, Math.max(state.session.capacity.max, 0));
+  const maxSlotRange = Math.max(state.session.capacity.max, 1);
 
   return (
     <aside className="panel admin-panel">
@@ -129,6 +139,29 @@ export function AdminPanel({
           type="checkbox"
           checked={state.timerConfig.autoJoinOnLoad}
           onChange={(event) => onSetAutoJoinOnLoad(event.target.checked)}
+        />
+      </label>
+
+      <label className="panel inset-panel admin-toggle-row">
+        <div>
+          <p className="meta-label">Hide empty cells</p>
+          <p>{areEmptyCellsHidden ? "Panel empty cells are hidden but preserve layout." : "Panel empty cells are visible."}</p>
+        </div>
+        <input type="checkbox" checked={areEmptyCellsHidden} onChange={(event) => onSetEmptyCellsHidden(event.target.checked)} />
+      </label>
+
+      <label className="panel inset-panel admin-toggle-row">
+        <div>
+          <p className="meta-label">Empty player slots shown</p>
+          <p>Set how many placeholder player slots are shown in the lobby. Current: {normalizedVisibleEmptySlots}</p>
+        </div>
+        <input
+          type="range"
+          min={0}
+          max={maxSlotRange}
+          value={normalizedVisibleEmptySlots}
+          onChange={(event) => onSetMaxVisibleEmptyPlayerSlots(Number(event.target.value))}
+          aria-label={`Show up to ${normalizedVisibleEmptySlots} empty player slots`}
         />
       </label>
 

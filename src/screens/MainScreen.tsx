@@ -73,6 +73,8 @@ const CONSOLE2_FULL_TEXT_OPACITY_PERCENT = 100;
 const GLOBE_PANEL_DEFINITION = getPanelDefinition("globe");
 const ADMIN_PANEL_DEFINITION = getPanelDefinition("admin");
 const SOUNDCLOUD_PANEL_IDS = ["soundcloud-radio", "soundcloud-widget", "soundcloud-decks"] as const;
+const EMPTY_CELLS_HIDDEN_STORAGE_KEY = "sync_sesh_admin_hide_empty_cells";
+const MAX_VISIBLE_EMPTY_PLAYER_SLOTS_STORAGE_KEY = "sync_sesh_admin_max_visible_empty_player_slots";
 
 type SoundCloudPanelId = (typeof SOUNDCLOUD_PANEL_IDS)[number];
 
@@ -490,8 +492,27 @@ export function MainScreen() {
   const [debugCommandHistory, setDebugCommandHistory] = useState<string[]>([]);
   const [isAdminOpen, setIsAdminOpen] = useState(() => layoutHasPanel(corePanelLayout, "admin"));
   const [isJoinControlsHidden, setIsJoinControlsHidden] = useState(true);
+  const [areEmptyCellsHidden, setAreEmptyCellsHidden] = useState(() => {
+    try {
+      const savedValue = window.localStorage.getItem(EMPTY_CELLS_HIDDEN_STORAGE_KEY);
+
+      return savedValue === null ? true : savedValue !== "false";
+    } catch {
+      return true;
+    }
+  });
   const [isGlobePanelVisible, setIsGlobePanelVisible] = useState(() => layoutHasPanel(corePanelLayout, "globe"));
   const [isGlobePanelFullscreen, setIsGlobePanelFullscreen] = useState(false);
+  const [maxVisibleEmptyPlayerSlots, setMaxVisibleEmptyPlayerSlots] = useState(() => {
+    try {
+      const savedValue = window.localStorage.getItem(MAX_VISIBLE_EMPTY_PLAYER_SLOTS_STORAGE_KEY);
+      const parsedValue = savedValue ? Number(savedValue) : NaN;
+
+      return Number.isFinite(parsedValue) ? Math.max(0, Math.floor(parsedValue)) : 4;
+    } catch {
+      return 4;
+    }
+  });
   const debugEventHandlerRef = useRef<((event: DebugConsoleEventInput) => void) | undefined>();
   const [isRenderingSpikeOpen, setIsRenderingSpikeOpen] = useState(hasRenderingSpikeParam);
   const [isThreeDModeOpen, setIsThreeDModeOpen] = useState(false);
@@ -1752,6 +1773,27 @@ export function MainScreen() {
     });
   }, []);
 
+  const handleSetEmptyCellsHidden = useCallback((hidden: boolean) => {
+    setAreEmptyCellsHidden(hidden);
+
+    try {
+      window.localStorage.setItem(EMPTY_CELLS_HIDDEN_STORAGE_KEY, String(hidden));
+    } catch {
+      // Persisting admin preference is optional; keep this feature working when storage is unavailable.
+    }
+  }, []);
+
+  const handleSetMaxVisibleEmptyPlayerSlots = useCallback((slotCount: number) => {
+    const nextCount = Number.isFinite(slotCount) ? Math.max(0, Math.floor(slotCount)) : 4;
+    setMaxVisibleEmptyPlayerSlots(nextCount);
+
+    try {
+      window.localStorage.setItem(MAX_VISIBLE_EMPTY_PLAYER_SLOTS_STORAGE_KEY, String(nextCount));
+    } catch {
+      // Persisting admin preference is optional; keep this feature working when storage is unavailable.
+    }
+  }, []);
+
   const persistCorePanelLayout = useCallback((layout: PanelLayoutState = corePanelLayoutRef.current) => {
     try {
       window.localStorage.setItem(PANEL_LAYOUT_STORAGE_KEY, serializePanelLayout(layout));
@@ -1779,7 +1821,7 @@ export function MainScreen() {
   }, [persistCorePanelLayout]);
 
   const handlePanelEdgeCreateEmpty = useCallback(
-    (panelId: PanelId, edge: DockEdge, ratio: number, availableSize: number, shouldPersist = true) => {
+    (panelId: PanelId, edge: DockEdge, ratio: number, availableSize: number, shouldPersist = true, parentLock?: { splitId: string; blockSize: number }) => {
       setCorePanelLayout((currentLayout) => {
         const nextLayout = panelLayoutReducer(currentLayout, {
           type: "create-empty-cell-from-panel-edge",
@@ -1787,6 +1829,8 @@ export function MainScreen() {
           edge,
           ratio,
           availableSize,
+          parentSplitId: parentLock?.splitId,
+          parentAvailableBlockSize: parentLock?.blockSize,
         });
 
         if (nextLayout === currentLayout) {
@@ -2851,13 +2895,15 @@ export function MainScreen() {
         ) : null}
 
         {!isSmallMode ? (
-          <PanelWorkspace
+        <PanelWorkspace
             dockRoot={corePanelLayout.dockRoot}
             workspaceRef={panelWorkspaceRef}
             dropPreview={debugConsoleDropPreview}
             onSplitResize={handleCorePanelSplitResize}
             onSplitResizeEnd={handleCorePanelSplitResizeEnd}
             onPanelEdgeCreateEmpty={handlePanelEdgeCreateEmpty}
+            hideEmptyCells={areEmptyCellsHidden}
+            zoomScale={zoomPercent / 100}
             renderPanel={(panelId) => {
               switch (panelId) {
                 case "lobby":
@@ -2868,6 +2914,7 @@ export function MainScreen() {
                       lobbyState={lobbyState}
                       generatedDisplayNames={generatedDisplayNames}
                       discordDisplayName={discordDisplayName}
+                      maxVisibleEmptyPlayerSlots={maxVisibleEmptyPlayerSlots}
                       isJoinControlsHidden={isJoinControlsHidden}
                       onJoinSession={handleJoinSession}
                       onRollDisplayName={rollDisplayName}
@@ -2956,10 +3003,14 @@ export function MainScreen() {
                           state={state}
                           lobbyState={lobbyState}
                           isOpen={isAdminOpen}
+                          areEmptyCellsHidden={areEmptyCellsHidden}
+                          maxVisibleEmptyPlayerSlots={maxVisibleEmptyPlayerSlots}
                           waveformBarCount={soundCloudWaveformBarCount}
                           soundCloudPlayer={adminSoundCloudPlayer}
                           onClose={handleAdminPanelClose}
                           onSetWaveformBarCount={setSoundCloudWaveformBarCount}
+                          onSetEmptyCellsHidden={handleSetEmptyCellsHidden}
+                          onSetMaxVisibleEmptyPlayerSlots={handleSetMaxVisibleEmptyPlayerSlots}
                           onForceStartRound={forceStartRound}
                           onForceCompleteRound={forceCompleteRound}
                           onResetSession={adminResetSession}
@@ -3096,17 +3147,21 @@ export function MainScreen() {
             }
           >
             <div className="workspace-managed-floating-body">
-              <AdminPanel
-                state={state}
-                lobbyState={lobbyState}
-                isOpen={isAdminOpen}
-                waveformBarCount={soundCloudWaveformBarCount}
-                soundCloudPlayer={adminSoundCloudPlayer}
-                onClose={handleAdminPanelClose}
-                onSetWaveformBarCount={setSoundCloudWaveformBarCount}
-                onForceStartRound={forceStartRound}
-                onForceCompleteRound={forceCompleteRound}
-                onResetSession={adminResetSession}
+                <AdminPanel
+                  state={state}
+                  lobbyState={lobbyState}
+                  isOpen={isAdminOpen}
+                  areEmptyCellsHidden={areEmptyCellsHidden}
+                  maxVisibleEmptyPlayerSlots={maxVisibleEmptyPlayerSlots}
+                  waveformBarCount={soundCloudWaveformBarCount}
+                  soundCloudPlayer={adminSoundCloudPlayer}
+                  onClose={handleAdminPanelClose}
+                  onSetWaveformBarCount={setSoundCloudWaveformBarCount}
+                  onSetEmptyCellsHidden={handleSetEmptyCellsHidden}
+                  onSetMaxVisibleEmptyPlayerSlots={handleSetMaxVisibleEmptyPlayerSlots}
+                  onForceStartRound={forceStartRound}
+                  onForceCompleteRound={forceCompleteRound}
+                  onResetSession={adminResetSession}
                 onAddTestParticipant={addTestParticipant}
                 onToggleTestParticipantsReady={toggleTestParticipantsReady}
                 onClearTestParticipants={clearTestParticipants}

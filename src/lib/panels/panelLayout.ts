@@ -50,6 +50,8 @@ export interface DockSplitNode {
   direction: "row" | "column";
   ratio: number;
   availableSize?: number;
+  lockedBlockSize?: number;
+  edgeLockAxis?: "block" | "inline";
   first: DockNode;
   second: DockNode;
 }
@@ -90,7 +92,16 @@ export type PanelLayoutAction =
   | { type: "undock-panel"; panelId: PanelId; rect?: PanelRect }
   | { type: "float-docked-panel-preserve-cell"; panelId: PanelId; rect?: PanelRect; emptyCellId?: string }
   | { type: "dock-panel-in-empty-cell"; panelId: PanelId; emptyCellId: string }
-  | { type: "create-empty-cell-from-panel-edge"; panelId: PanelId; edge: DockEdge; ratio?: number; availableSize?: number; emptyCellId?: string }
+  | {
+      type: "create-empty-cell-from-panel-edge";
+      panelId: PanelId;
+      edge: DockEdge;
+      ratio?: number;
+      availableSize?: number;
+      emptyCellId?: string;
+      parentSplitId?: string;
+      parentAvailableBlockSize?: number;
+    }
   | { type: "remove-docked-panel"; panelId: PanelId }
   | { type: "reset-layout" };
 
@@ -246,6 +257,25 @@ function updateSplitRatio(node: DockNode, splitId: string, ratio: number, availa
     ...node,
     first: updateSplitRatio(node.first, splitId, ratio, availableSize),
     second: updateSplitRatio(node.second, splitId, ratio, availableSize),
+  };
+}
+
+function updateSplitLockedBlockSize(node: DockNode | null, splitId: string | undefined, lockedBlockSize: number | undefined): DockNode | null {
+  if (!node || !splitId || !lockedBlockSize || lockedBlockSize <= 0 || node.type !== "split") {
+    return node;
+  }
+
+  if (node.id === splitId) {
+    return {
+      ...node,
+      lockedBlockSize,
+    };
+  }
+
+  return {
+    ...node,
+    first: updateSplitLockedBlockSize(node.first, splitId, lockedBlockSize) ?? node.first,
+    second: updateSplitLockedBlockSize(node.second, splitId, lockedBlockSize) ?? node.second,
   };
 }
 
@@ -434,6 +464,7 @@ function createEdgeSplit(panel: DockPanelNode, edge: DockEdge, ratio: number, av
     id: `split-empty-${panel.panelId}-${edge}`,
     direction,
     ratio,
+    edgeLockAxis: direction === "column" ? "block" : "inline",
     first: panelIsFirst ? panel : emptyNode,
     second: panelIsFirst ? emptyNode : panel,
   };
@@ -441,6 +472,7 @@ function createEdgeSplit(panel: DockPanelNode, edge: DockEdge, ratio: number, av
   return {
     ...split,
     ratio: clampSplitRatio(split, ratio, availableSize),
+    availableSize,
   };
 }
 
@@ -458,6 +490,10 @@ function createEmptyCellFromPanelEdge(
 
   if (node.type === "panel") {
     if (node.panelId !== panelId) {
+      return { node, created: false };
+    }
+
+    if (shouldCollapseEmptyEdgeSplit(edge, ratio, availableSize)) {
       return { node, created: false };
     }
 
@@ -486,7 +522,8 @@ function createEmptyCellFromPanelEdge(
       node: {
         ...node,
         ratio: clampSplitRatio(node, ratio, availableSize),
-        availableSize: undefined,
+        availableSize,
+        edgeLockAxis: node.edgeLockAxis ?? (node.direction === "column" ? "block" : "inline"),
       },
       created: true,
     };
@@ -722,7 +759,7 @@ export function panelLayoutReducer(state: PanelLayoutState, action: PanelLayoutA
       return {
         ...state,
         activePanelId: action.panelId,
-        dockRoot: result.node,
+        dockRoot: updateSplitLockedBlockSize(result.node, action.parentSplitId, action.parentAvailableBlockSize),
       };
     }
 
@@ -804,6 +841,14 @@ function validateDockNode(value: unknown, panelIds: Set<PanelId>): value is Dock
   }
 
   if (value.availableSize !== undefined && (!isFiniteNumber(value.availableSize) || value.availableSize <= 0)) {
+    return false;
+  }
+
+  if (value.lockedBlockSize !== undefined && (!isFiniteNumber(value.lockedBlockSize) || value.lockedBlockSize <= 0)) {
+    return false;
+  }
+
+  if (value.edgeLockAxis !== undefined && value.edgeLockAxis !== "block" && value.edgeLockAxis !== "inline") {
     return false;
   }
 

@@ -10,6 +10,7 @@ export interface SessionUser {
   avatarSeed: string;
   avatarUrl?: string;
   presence: UserPresenceState;
+  latencyMs?: number;
   isHost: boolean;
   isTestUser?: boolean;
   joinedAt: string;

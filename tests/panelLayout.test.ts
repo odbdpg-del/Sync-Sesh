@@ -153,6 +153,8 @@ test("serialization helpers round-trip layouts with empty dock cells", () => {
       id: "split-empty-globe-row",
       direction: "row",
       ratio: 0.34,
+      lockedBlockSize: 620,
+      edgeLockAxis: "inline",
       first: createDockEmptyNode("left-slot"),
       second: {
         type: "panel",
@@ -165,6 +167,66 @@ test("serialization helpers round-trip layouts with empty dock cells", () => {
   };
 
   assert.deepEqual(parsePanelLayout(serializePanelLayout(layout)), layout);
+});
+
+test("validation rejects malformed split edge lock metadata", () => {
+  const layout = createDefaultPanelLayout();
+
+  assert.equal(
+    validatePanelLayout({
+      ...layout,
+      dockRoot: {
+        type: "split",
+        id: "split-bad-edge-lock",
+        direction: "column",
+        ratio: 0.5,
+        edgeLockAxis: "diagonal",
+        first: createDockEmptyNode("top-slot"),
+        second: {
+          type: "panel",
+          id: "panel-lobby",
+          panelId: "lobby",
+          minWidth: 1,
+          minHeight: 1,
+        },
+      },
+    }),
+    null,
+  );
+});
+
+test("dock-panel-in-empty-cell preserves edge locks after filling a Lobby bottom cell", () => {
+  const withEmpty = panelLayoutReducer(createDefaultPanelLayout(), {
+    type: "create-empty-cell-from-panel-edge",
+    panelId: "lobby",
+    edge: "bottom",
+    ratio: 0.58,
+    availableSize: 540,
+    parentSplitId: "split-core-lobby-timer",
+    parentAvailableBlockSize: 640,
+  });
+  const withGlobe = panelLayoutReducer(withEmpty, {
+    type: "dock-panel-in-empty-cell",
+    panelId: "globe",
+    emptyCellId: "lobby-bottom-slot",
+  });
+
+  if (withGlobe.dockRoot?.type !== "split" || withGlobe.dockRoot.first.type !== "split") {
+    throw new Error("expected Lobby/Globe to remain nested beside Countdown");
+  }
+
+  assert.equal(withGlobe.dockRoot.id, "split-core-lobby-timer");
+  assert.equal(withGlobe.dockRoot.direction, "row");
+  assert.equal(withGlobe.dockRoot.lockedBlockSize, 640);
+  assert.equal(withGlobe.dockRoot.second.type, "panel");
+  assert.equal(withGlobe.dockRoot.second.panelId, "timer");
+  assert.equal(withGlobe.dockRoot.first.direction, "column");
+  assert.equal(withGlobe.dockRoot.first.availableSize, 540);
+  assert.equal(withGlobe.dockRoot.first.edgeLockAxis, "block");
+  assert.equal(withGlobe.dockRoot.first.first.type, "panel");
+  assert.equal(withGlobe.dockRoot.first.first.panelId, "lobby");
+  assert.equal(withGlobe.dockRoot.first.second.type, "panel");
+  assert.equal(withGlobe.dockRoot.first.second.panelId, "globe");
 });
 
 test("dock-panel moves a floating panel beside a target panel", () => {
@@ -292,7 +354,7 @@ test("create-empty-cell-from-panel-edge creates a right empty cell beside a dock
 
   assert.equal(updated.dockRoot.second.direction, "row");
   assert.equal(updated.dockRoot.second.ratio, 0.65);
-  assert.equal(updated.dockRoot.second.availableSize, undefined);
+  assert.equal(updated.dockRoot.second.availableSize, 1600);
   assert.equal(updated.dockRoot.second.first.type, "panel");
   assert.equal(updated.dockRoot.second.first.panelId, "globe");
   assert.equal(updated.dockRoot.second.second.type, "empty");
@@ -351,6 +413,7 @@ test("create-empty-cell-from-panel-edge creates bottom empty cells and resizes t
   }
 
   assert.equal(bottom.dockRoot.second.direction, "column");
+  assert.equal(bottom.dockRoot.second.availableSize, 1200);
   assert.equal(bottom.dockRoot.second.first.type, "panel");
   assert.equal(bottom.dockRoot.second.first.panelId, "globe");
   assert.equal(bottom.dockRoot.second.second.type, "empty");
@@ -361,6 +424,34 @@ test("create-empty-cell-from-panel-edge creates bottom empty cells and resizes t
   assert.equal(top.dockRoot.first.type, "split");
   assert.equal(top.dockRoot.second.type, "panel");
   assert.equal(top.dockRoot.second.panelId, "globe");
+});
+
+test("create-empty-cell-from-panel-edge locks parent row height for nested vertical empty splits", () => {
+  const updated = panelLayoutReducer(createDefaultPanelLayout(), {
+    type: "create-empty-cell-from-panel-edge",
+    panelId: "lobby",
+    edge: "bottom",
+    ratio: 0.62,
+    availableSize: 540,
+    parentSplitId: "split-core-lobby-timer",
+    parentAvailableBlockSize: 640,
+  });
+
+  if (updated.dockRoot?.type !== "split" || updated.dockRoot.first.type !== "split") {
+    throw new Error("expected Lobby to be wrapped in a nested bottom split");
+  }
+
+  assert.equal(updated.dockRoot.id, "split-core-lobby-timer");
+  assert.equal(updated.dockRoot.direction, "row");
+  assert.equal(updated.dockRoot.lockedBlockSize, 640);
+  assert.equal(updated.dockRoot.second.type, "panel");
+  assert.equal(updated.dockRoot.second.panelId, "timer");
+  assert.equal(updated.dockRoot.first.direction, "column");
+  assert.equal(updated.dockRoot.first.availableSize, 540);
+  assert.equal(updated.dockRoot.first.edgeLockAxis, "block");
+  assert.equal(updated.dockRoot.first.first.type, "panel");
+  assert.equal(updated.dockRoot.first.first.panelId, "lobby");
+  assert.equal(updated.dockRoot.first.second.type, "empty");
 });
 
 test("create-empty-cell-from-panel-edge reuses an existing direct empty edge split without compounding ratios", () => {
@@ -403,12 +494,12 @@ test("create-empty-cell-from-panel-edge reuses an existing direct empty edge spl
   }
 
   assert.equal(second.dockRoot.second.ratio, 0.55);
-  assert.equal(second.dockRoot.second.availableSize, undefined);
+  assert.equal(second.dockRoot.second.availableSize, 1600);
   assert.equal(second.dockRoot.second.first.type, "panel");
   assert.equal(second.dockRoot.second.first.panelId, "globe");
   assert.equal(second.dockRoot.second.second.type, "empty");
   assert.equal(updatedLeft.dockRoot.second.ratio, 0.45);
-  assert.equal(updatedLeft.dockRoot.second.availableSize, undefined);
+  assert.equal(updatedLeft.dockRoot.second.availableSize, 1600);
   assert.equal(updatedLeft.dockRoot.second.first.type, "empty");
   assert.equal(updatedLeft.dockRoot.second.second.type, "panel");
   assert.equal(updatedLeft.dockRoot.second.second.panelId, "globe");
@@ -502,6 +593,20 @@ test("create-empty-cell-from-panel-edge cancels new empty cells only at the near
     panelId: "globe",
     placement: "bottom",
   });
+  const canceledNewRight = panelLayoutReducer(docked, {
+    type: "create-empty-cell-from-panel-edge",
+    panelId: "globe",
+    edge: "right",
+    ratio: 0.991,
+    availableSize: 1600,
+  });
+  const stillCreatesNewRight = panelLayoutReducer(docked, {
+    type: "create-empty-cell-from-panel-edge",
+    panelId: "globe",
+    edge: "right",
+    ratio: 0.99,
+    availableSize: 1600,
+  });
   const withRightEmpty = panelLayoutReducer(docked, {
     type: "create-empty-cell-from-panel-edge",
     panelId: "globe",
@@ -530,6 +635,20 @@ test("create-empty-cell-from-panel-edge cancels new empty cells only at the near
     ratio: 0.35,
     availableSize: 1600,
   });
+  const canceledNewLeft = panelLayoutReducer(docked, {
+    type: "create-empty-cell-from-panel-edge",
+    panelId: "globe",
+    edge: "left",
+    ratio: 0.009,
+    availableSize: 1600,
+  });
+  const stillCreatesNewLeft = panelLayoutReducer(docked, {
+    type: "create-empty-cell-from-panel-edge",
+    panelId: "globe",
+    edge: "left",
+    ratio: 0.01,
+    availableSize: 1600,
+  });
   const collapsedLeft = panelLayoutReducer(withLeftEmpty, {
     type: "create-empty-cell-from-panel-edge",
     panelId: "globe",
@@ -545,10 +664,21 @@ test("create-empty-cell-from-panel-edge cancels new empty cells only at the near
     availableSize: 1600,
   });
 
-  if (collapsedRight.dockRoot?.type !== "split" || collapsedLeft.dockRoot?.type !== "split" || stillOpenRight.dockRoot?.type !== "split" || stillOpenLeft.dockRoot?.type !== "split") {
+  if (
+    collapsedRight.dockRoot?.type !== "split" ||
+    collapsedLeft.dockRoot?.type !== "split" ||
+    stillOpenRight.dockRoot?.type !== "split" ||
+    stillOpenLeft.dockRoot?.type !== "split" ||
+    stillCreatesNewRight.dockRoot?.type !== "split" ||
+    stillCreatesNewLeft.dockRoot?.type !== "split"
+  ) {
     throw new Error("expected root split");
   }
 
+  assert.equal(canceledNewRight, docked);
+  assert.equal(canceledNewLeft, docked);
+  assert.equal(stillCreatesNewRight.dockRoot.second.type, "split");
+  assert.equal(stillCreatesNewLeft.dockRoot.second.type, "split");
   assert.equal(collapsedRight.dockRoot.second.type, "panel");
   assert.equal(collapsedRight.dockRoot.second.panelId, "globe");
   assert.equal(collapsedLeft.dockRoot.second.type, "panel");

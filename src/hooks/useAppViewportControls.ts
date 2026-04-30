@@ -156,6 +156,10 @@ function formatHeadlineRailTail(alpha: number) {
   return `${Math.max(0, alpha * 0.08)}`;
 }
 
+function formatZoomTextScale(zoomPercent: number) {
+  return `${Math.min(1, Math.max(0.78, zoomPercent / 100))}`;
+}
+
 export function useAppViewportControls() {
   const [zoomPercent, setZoomPercent] = useState(DEFAULT_ZOOM_PERCENT);
   const [panelOpacityPercent, setPanelOpacityPercent] = useState(DEFAULT_PANEL_OPACITY_PERCENT);
@@ -166,6 +170,7 @@ export function useAppViewportControls() {
     setZoomPercent(initialZoom);
     setPanelOpacityPercent(initialPanelOpacity);
     document.documentElement.style.setProperty("--app-zoom", `${initialZoom}%`);
+    document.documentElement.style.setProperty("--app-zoom-text-scale", formatZoomTextScale(initialZoom));
     document.documentElement.style.setProperty("--bg-panel", formatPanelBackground(initialPanelOpacity / 100));
     document.documentElement.style.setProperty("--bg-panel-strong", formatPanelStrongBackground(initialPanelOpacity / 100));
     document.documentElement.style.setProperty("--bg-card", formatCardBackground(initialPanelOpacity / 100));
@@ -195,6 +200,7 @@ export function useAppViewportControls() {
 
   useEffect(() => {
     document.documentElement.style.setProperty("--app-zoom", `${zoomPercent}%`);
+    document.documentElement.style.setProperty("--app-zoom-text-scale", formatZoomTextScale(zoomPercent));
     window.localStorage.setItem(APP_ZOOM_STORAGE_KEY, String(zoomPercent));
   }, [zoomPercent]);
 

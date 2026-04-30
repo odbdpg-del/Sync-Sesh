@@ -10,6 +10,7 @@ interface LobbyPanelProps {
   generatedDisplayNames: string[];
   discordDisplayName?: string;
   isJoinControlsHidden?: boolean;
+  maxVisibleEmptyPlayerSlots?: number;
   onJoinSession: () => void;
   onRollDisplayName: () => void;
   onSelectDisplayName: (displayName: string) => void;
@@ -24,6 +25,47 @@ interface NamePickerPosition {
 const NAME_PICKER_ESTIMATED_WIDTH = 300;
 const NAME_PICKER_ESTIMATED_HEIGHT = 340;
 const NAME_PICKER_VIEWPORT_GAP = 12;
+const LOBBY_RULES_STORAGE_KEY = "syncsesh.lobby-rules.v1";
+
+interface LobbyRulesPreference {
+  isOpen: boolean;
+  isCollapsed: boolean;
+}
+
+function readLobbyRulesPreference(): LobbyRulesPreference {
+  if (typeof window === "undefined") {
+    return { isOpen: true, isCollapsed: false };
+  }
+
+  try {
+    const savedPreference = window.localStorage.getItem(LOBBY_RULES_STORAGE_KEY);
+
+    if (!savedPreference) {
+      return { isOpen: true, isCollapsed: false };
+    }
+
+    const parsedPreference = JSON.parse(savedPreference) as Partial<LobbyRulesPreference>;
+
+    return {
+      isOpen: typeof parsedPreference.isOpen === "boolean" ? parsedPreference.isOpen : true,
+      isCollapsed: typeof parsedPreference.isCollapsed === "boolean" ? parsedPreference.isCollapsed : false,
+    };
+  } catch {
+    return { isOpen: true, isCollapsed: false };
+  }
+}
+
+function writeLobbyRulesPreference(preference: LobbyRulesPreference) {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  try {
+    window.localStorage.setItem(LOBBY_RULES_STORAGE_KEY, JSON.stringify(preference));
+  } catch {
+    // Non-critical UI preference; ignore private-mode or quota failures.
+  }
+}
 
 function getStateLabel(state: SessionUser["presence"]) {
   switch (state) {
@@ -77,16 +119,18 @@ export function LobbyPanel({
   generatedDisplayNames,
   discordDisplayName,
   isJoinControlsHidden = false,
+  maxVisibleEmptyPlayerSlots = 4,
   onJoinSession,
   onRollDisplayName,
   onSelectDisplayName,
   onUseDiscordDisplayName,
 }: LobbyPanelProps) {
   const [isNamePickerOpen, setIsNamePickerOpen] = useState(false);
-  const [isLobbyRulesOpen, setIsLobbyRulesOpen] = useState(true);
-  const [isLobbyRulesCollapsed, setIsLobbyRulesCollapsed] = useState(false);
+  const [lobbyRulesPreference, setLobbyRulesPreference] = useState(readLobbyRulesPreference);
   const [namePickerPosition, setNamePickerPosition] = useState<NamePickerPosition>({ left: 0, top: 0 });
+  const { isOpen: isLobbyRulesOpen, isCollapsed: isLobbyRulesCollapsed } = lobbyRulesPreference;
   const localDisplayName = lobbyState.localUser?.displayName ?? "";
+  const emptyPlayerSlotCount = Math.max(Math.min(maxVisibleEmptyPlayerSlots, session.capacity.max - users.length), 0);
   const availableDisplayNames = useMemo(() => {
     const takenNames = new Set(users
       .filter((user) => user.id !== lobbyState.localUser?.id)
@@ -97,7 +141,6 @@ export function LobbyPanel({
       !takenNames.has(name.trim().toLowerCase())
     ));
   }, [generatedDisplayNames, lobbyState.localUser?.id, localDisplayName, users]);
-  const emptyPlayerSlotCount = Math.max(session.capacity.max - users.length, 0);
 
   useEffect(() => {
     if (!isNamePickerOpen) {
@@ -123,6 +166,10 @@ export function LobbyPanel({
       window.removeEventListener("keydown", closeOnEscape);
     };
   }, [isNamePickerOpen]);
+
+  useEffect(() => {
+    writeLobbyRulesPreference(lobbyRulesPreference);
+  }, [lobbyRulesPreference]);
 
   const openNamePicker = (event: MouseEvent<HTMLButtonElement>) => {
     event.preventDefault();
@@ -196,8 +243,7 @@ export function LobbyPanel({
               type="button"
               className="lobby-rules-restore"
               onClick={() => {
-                setIsLobbyRulesOpen(true);
-                setIsLobbyRulesCollapsed(false);
+                setLobbyRulesPreference({ isOpen: true, isCollapsed: false });
               }}
               aria-label="Expand lobby rules"
               title="Expand lobby rules"
@@ -291,6 +337,11 @@ export function LobbyPanel({
             </div>
             <div className="user-status">
               <span className={`presence-chip presence-${user.presence}`}>{getStateLabel(user.presence)}</span>
+              {user.latencyMs !== undefined ? (
+                <span className="user-ping" title={`Ping ${user.latencyMs}ms`}>
+                  {user.latencyMs}ms
+                </span>
+              ) : null}
               {user.id === lobbyState.localUser?.id ? (
                 <div className="roll-name-wrapper">
                   {discordDisplayName && user.displayName !== discordDisplayName ? (
@@ -337,7 +388,7 @@ export function LobbyPanel({
             <button
               type="button"
               className="lobby-rules-toggle meta-label"
-              onClick={() => setIsLobbyRulesCollapsed((current) => !current)}
+              onClick={() => setLobbyRulesPreference((current) => ({ ...current, isCollapsed: !current.isCollapsed }))}
               aria-expanded={!isLobbyRulesCollapsed}
             >
               <span className="lobby-rules-marker" aria-hidden="true">
@@ -348,7 +399,7 @@ export function LobbyPanel({
             <button
               type="button"
               className="lobby-rules-close"
-              onClick={() => setIsLobbyRulesOpen(false)}
+              onClick={() => setLobbyRulesPreference({ isOpen: false, isCollapsed: false })}
               aria-label="Collapse lobby rules"
               title="Collapse lobby rules"
             >

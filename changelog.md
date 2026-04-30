@@ -8,6 +8,182 @@ Entries must be in reverse chronological order. New entries go at the top, above
 
 Use a level-two heading for every entry so the editor can fold each change.
 
+## [2590] - 2026-04-30 18:12 - `codex/merge-ui-and-3d-world / Add Player Ping to Lobby Cards`
+
+- Added support for optional per-user latency values on `SessionUser` via `latencyMs?: number`.
+- Rendered player ping (`<ms>ms`) in each lobby player card, anchored to the right in the card status area.
+- Added a compact `.user-ping` style for right-aligned ping display in the lobby player cards.
+- Touched `src/types/session.ts`, `src/components/LobbyPanel.tsx`, and `src/styles/global.css`.
+- Build/test: not run (scope is a UI patch).
+
+## [2588] - 2026-04-30 17:24 - `codex/merge-ui-and-3d-world / Add Admin Toggle for Empty Player Slots`
+
+- Added a new admin-controlled toggle for showing or hiding empty player slot cards in the lobby session deck.
+- Made the toggle default to ON, persisted it in local storage, and wired it through the lobby panel props.
+- Touched `src/screens/MainScreen.tsx`, `src/components/AdminPanel.tsx`, and `src/components/LobbyPanel.tsx`.
+- Build/test: not run (scope is a UI preference toggle patch).
+
+## [2589] - 2026-04-30 17:38 - `codex/merge-ui-and-3d-world / Add Slider for Empty Player Slot Visibility`
+
+- Replaced empty-slot visibility toggle with a numeric admin slider in `AdminPanel`.
+- Made the slider control how many placeholder player slots are shown in the lobby.
+- Defaulted the new setting to `4` and persisted it in local storage.
+- Wired the value through `MainScreen` into `LobbyPanel`, with clamped rendering based on open slot count.
+- Touched `src/screens/MainScreen.tsx`, `src/components/AdminPanel.tsx`, and `src/components/LobbyPanel.tsx`.
+- Build/test: not run (scope is a UI preference patch).
+
+## [2587] - 2026-04-30 17:13 - `codex/merge-ui-and-3d-world / Reinstated Empty Player Slots`
+
+- Reverted the previous “remove empty player slots” change and restored lobby session deck empty slot placeholders.
+- Re-added empty slot count calculation and placeholder rendering in `LobbyPanel`.
+- Touched `src/components/LobbyPanel.tsx` and `changelog.md`.
+- Build/test: not run (scope is a small UI patch).
+
+## [2585] - 2026-04-30 16:47 - `codex/merge-ui-and-3d-world / Add Admin Toggle for Invisible Empty Cells`
+
+- Added an Admin panel toggle to hide workspace empty cells while preserving panel space for layout continuity.
+- Kept the new toggle default-on and persisted the value in local storage.
+- Wired the preference through the panel workspace renderer so empty cells become visually hidden without affecting drop targets.
+- Touched `src/components/AdminPanel.tsx`, `src/screens/MainScreen.tsx`, `src/components/PanelWorkspace.tsx`, `src/styles/global.css`, and `changelog.md`.
+- Build/test: not run (scope is a small visual tweak).
+
+## [2583] - 2026-04-30 16:03 - `codex/merge-ui-and-3d-world / Center Lobby Metrics in Compact Heights`
+
+- Kept read/idle/spectators metric numbers centered vertically in compact lobby panel height states after hiding labels and shrinking tile spacing.
+- Adjusted lobby panel container-height query rules to center the metric mainline and avoid number drift when panel height is reduced.
+- Touched `src/styles/global.css` and `changelog.md`.
+- Build/test: not run (scope is a small visual tweak).
+
+## [2584] - 2026-04-30 16:23 - `codex/merge-ui-and-3d-world / Simplify Lobby Compact Stage Rules`
+
+- Removed extra lobby panel height stages and kept only the default and `@container lobby-panel (max-height: 560px)` compact rules.
+- Consolidated responsive metric behavior to a single compact breakpoint for simpler tuning when panel height shrinks.
+- Touched `src/styles/global.css` and `changelog.md`.
+- Build/test: not run (scope is a small visual tweak).
+
+## [2582] - 2026-04-30 15:09 - `codex/merge-ui-and-3d-world / Hide Lobby Metric Labels on Short Panel Heights`
+
+- Hidden the purple Ready/Idle/Spectators labels once the lobby panel begins shrinking vertically so large numbers stay visually prominent.
+- Kept only compact readouts in the metric row while prioritizing player cards at reduced heights.
+- Touched `src/styles/global.css` and `changelog.md`.
+- Build/test: not run (scope is a small visual tweak).
+
+## [2581] - 2026-04-30 15:01 - `codex/merge-ui-and-3d-world / Shrink Lobby Metrics on Short Panel Heights`
+
+- Made read/idle/spectators metrics scale down using lobby panel container-height queries when the panel is shortened.
+- Reduced metric card footprint first so user cards stay visible as panel height decreases.
+- Touched `src/styles/global.css` and `changelog.md`.
+- Build/test: not run (scope is a small visual tweak).
+
+## [2580] - 2026-04-30 14:45 - `codex/merge-ui-and-3d-world / Prioritize Lobby Player Cards on Narrow Layouts`
+
+- Made Lobby metrics progressively compact on narrow layouts and switch to tighter icon/number cards at very narrow widths.
+- Kept player cards positioned ahead of metrics so they remain the primary session deck information.
+- Touched `src/styles/global.css` and `changelog.md`.
+- Build/test: not run (scope is a small visual tweak).
+
+## [2579] - 2026-04-30 14:34 - `codex/merge-ui-and-3d-world / Shrink Header Sync Connected Indicator on Narrow Layouts`
+
+- Kept the top Sync pill responsive in compact widths so the green connected dot and label scale down with narrow app sizes.
+- Added tighter `Sync` pill sizing, padding, and connected-dot sizing at narrow breakpoints.
+- Touched `src/styles/global.css` and `changelog.md`.
+- Build/test: not run (scope is a small visual tweak).
+
+## [2577] - 2026-04-30 14:07 - `codex/merge-ui-and-3d-world / Fix Lobby Deck Metric Overlap`
+
+- Updated the Lobby Session Deck metric tile layout so count text no longer overlaps the purple metric labels at larger font sizes.
+- Touched `src/styles/global.css` and `changelog.md`.
+- Build/test: not run (scope is a small visual tweak).
+
+## [2578] - 2026-04-30 14:22 - `codex/merge-ui-and-3d-world / Keep Lobby Metrics in One Row on Narrow Widths`
+
+- Reduced metric tile minimum width and tightened skinny-mode spacing/typography to prevent 3-column metric cards from stacking too early.
+- Added a narrower breakpoint override for metric tiles while leaving Join and CTA stacks unchanged.
+- Touched `src/styles/global.css` and `changelog.md`.
+- Build/test: not run (scope is a small visual tweak).
+
+## [2576] - 2026-04-30 13:58 - `codex/merge-ui-and-3d-world / Centered Lobby Metric Counts`
+
+- Centered the Lobby metric labels and count text horizontally while keeping the small R/I/S marker out of the count alignment.
+- Touched `src/styles/global.css` and `changelog.md`.
+- Build/test: pending.
+
+## [2575] - 2026-04-30 13:51 - `codex/merge-ui-and-3d-world / Compact Lobby Metric Tiles`
+
+- Reduced the Lobby Ready/Idle/Spectators metric tiles to about half height while keeping the count prominent and vertically centered.
+- Touched `src/styles/global.css` and `changelog.md`.
+- Build/test: `npm.cmd run build` passed with the existing Vite large-chunk warning.
+
+## [2574] - 2026-04-30 11:03 - `codex/merge-ui-and-3d-world / Edge Cell Globe Dock Lock`
+
+- Persisted edge-created split lock metadata so a Lobby-created cell keeps its container sizing after Globe docks into it.
+- Kept parent row block-size locks active for filled edge-created cells and added constrained Globe styles for narrow managed dock cells.
+- Touched `src/lib/panels/panelLayout.ts`, `src/components/PanelWorkspace.tsx`, `src/styles/global.css`, `tests/panelLayout.test.ts`, and `changelog.md`.
+- Build/test: `npx.cmd tsx --test tests\panelLayout.test.ts tests\panelWorkspaceGeometry.test.ts` passed; `npm.cmd run build` passed with the existing Vite large-chunk warning.
+
+## [2573] - 2026-04-30 10:30 - `codex/merge-ui-and-3d-world / Zoomed Player Card Text Fit`
+
+- Added a zoom-aware text scale for lobby player cards so names, role labels, subcopy, and roll buttons shrink with app zoom.
+- Prevented player card name and subcopy text from wrapping out of the fixed-height card by truncating overflowing lines.
+- Touched `src/hooks/useAppViewportControls.ts`, `src/styles/global.css`, and `changelog.md`.
+- Build/test: `npm.cmd run build` passed with the existing Vite large-chunk warning.
+
+## [2572] - 2026-04-30 10:13 - `codex/merge-ui-and-3d-world / Zoom-Safe Dock Measurements`
+
+- Normalized `PanelWorkspace` DOM measurements by the current app zoom before storing dock `availableSize` and `lockedBlockSize` values.
+- Passed app zoom into the dock workspace and covered zoomed geometry helpers so 80% zoom measurements preserve unscaled layout pixels.
+- Touched `src/components/PanelWorkspace.tsx`, `src/screens/MainScreen.tsx`, `tests/panelWorkspaceGeometry.test.ts`, and `changelog.md`.
+- Build/test: `npx.cmd tsx --test tests\panelLayout.test.ts tests\panelWorkspaceGeometry.test.ts` passed; `npm.cmd run build` passed with the existing Vite large-chunk warning.
+
+## [2571] - 2026-04-30 09:43 - `codex/merge-ui-and-3d-world / Parent Row Height Lock`
+
+- Added parent row block-size locking for top/bottom panel-edge empty cell commits so shortening Lobby does not let the Countdown Engine row remeasure after release.
+- Captured the parent row height at pointer-down before the preview can shrink the row, then reused that original height on commit.
+- Persisted and validated `lockedBlockSize` layout metadata, while only applying it to row splits that still contain an empty subdivision.
+- Added reducer coverage for Lobby bottom empty splits keeping Countdown as the sibling and for serialization of the row lock.
+- Touched `src/components/PanelWorkspace.tsx`, `src/lib/panels/panelLayout.ts`, `src/screens/MainScreen.tsx`, `tests/panelLayout.test.ts`, and `changelog.md`.
+- Build/test: `npx.cmd tsx --test tests\panelLayout.test.ts` passed; `npm.cmd run build` passed with the existing Vite large-chunk warning.
+
+## [2570] - 2026-04-30 09:29 - `codex/merge-ui-and-3d-world / Edge Empty Split Container Lock`
+
+- Locked committed vertical panel/empty splits to their original panel leaf height so splitting Lobby below no longer grows the shared Lobby/Countdown row.
+- Kept normal non-empty column stacks content-sized so Globe remains below the full first row.
+- Touched `src/components/PanelWorkspace.tsx` and `changelog.md`.
+- Build/test: `npx.cmd tsx --test tests\panelLayout.test.ts` passed; `npm.cmd run build` passed with the existing Vite large-chunk warning.
+
+## [2569] - 2026-04-30 09:13 - `codex/merge-ui-and-3d-world / Vertical Empty Split Height Commit`
+
+- Made committed vertical panel/empty splits preserve fixed measured row heights so splitting Lobby below keeps the preview height after release.
+- Converted edge-create release ratios into committed grid track coordinates so the saved cut line matches the user's pointer instead of jumping upward by the dock gap.
+- Changed vertical panel/empty split rendering so the cut panel keeps the pointer height while the empty cell fills the remaining row height, keeping the shared Lobby/Countdown row stable.
+- Let Lobby keep scrolling internally instead of growing the shared Lobby/Countdown row and changing Countdown Engine height.
+- Touched `src/components/PanelWorkspace.tsx` and `changelog.md`.
+- Build/test: `npx.cmd tsx --test tests\panelLayout.test.ts` passed; `npm.cmd run build` passed with the existing Vite large-chunk warning.
+
+## [2568] - 2026-04-30 09:01 - `codex/merge-ui-and-3d-world / Lobby Rules Remount Preference`
+
+- Persisted the Lobby rules open/collapsed UI preference so splitting the Lobby panel no longer remounts the rules card back into view.
+- Kept the preference local to the browser and left dock layout sizing behavior unchanged.
+- Touched `src/components/LobbyPanel.tsx` and `changelog.md`.
+- Build/test: `npm.cmd run build` passed with the existing Vite large-chunk warning.
+
+## [2567] - 2026-04-30 08:53 - `codex/merge-ui-and-3d-world / Globe Column Row Flow Restore`
+
+- Restored content-sized row flow for non-empty dock column splits so Globe docked below Lobby/Round Control starts after the full first row.
+- Kept the newer empty-cell anchored column split behavior unchanged.
+- Touched `src/components/PanelWorkspace.tsx` and `changelog.md`.
+- Build/test: `npx.cmd tsx --test tests\panelLayout.test.ts` passed; `npm.cmd run build` passed with the existing Vite large-chunk warning.
+
+## [2566] - 2026-04-30 08:22 - `codex/merge-ui-and-3d-world / Docked Panel Edge Drag Smoothing`
+
+- Changed docked panel edge-created empty slots to preview during pointer drag, locally resize panel content, and commit once on release.
+- Preserved measured split sizing for edge-created and reused empty-slot splits to avoid sizing mode flips.
+- Restored edge-create cancellation so releasing back near the original edge leaves the layout unchanged.
+- Made edge-created split rendering explicitly anchor empty-cell outer edges while only the shared divider changes size.
+- Added focused reducer assertions for preserved edge split sizing and quiet preview styling for active edge drags.
+- Touched `src/components/PanelWorkspace.tsx`, `src/lib/panels/panelLayout.ts`, `src/styles/global.css`, `tests/panelLayout.test.ts`, and `changelog.md`.
+- Build/test: `npx.cmd tsx --test tests\panelLayout.test.ts` passed; `npm.cmd run build` passed with the existing Vite large-chunk warning.
+
 ## [2565] - 2026-04-30 01:10 - `codex/merge-ui-and-3d-world / Small Mode Eyebrow Padding`
 
 - Added a Small Mode-only brand copy offset so the `Discord Activity` eyebrow clears the header frame lines.

@@ -11,18 +11,36 @@ interface PanelWorkspaceProps {
   renderPanel: (panelId: PanelId) => ReactNode;
   onSplitResize?: (splitId: string, ratio: number, availableSize: number) => void;
   onSplitResizeEnd?: () => void;
-  onPanelEdgeCreateEmpty?: (panelId: PanelId, edge: DockEdge, ratio: number, availableSize: number, shouldPersist?: boolean) => void;
+  onPanelEdgeCreateEmpty?: (panelId: PanelId, edge: DockEdge, ratio: number, availableSize: number, shouldPersist?: boolean, parentLock?: EdgeCreateParentLock) => void;
   workspaceRef?: Ref<HTMLDivElement>;
   dropPreview?: PanelWorkspaceDropPreview | null;
+  zoomScale?: number;
+  hideEmptyCells?: boolean;
 }
 
 interface DockTreeProps extends PanelWorkspaceProps {
   node: DockNode;
   resizeEdges?: Partial<Record<DockEdge, EdgeResizeTarget>>;
+  parentRowLockTarget?: EdgeCreateParentLockTarget;
 }
 
 interface EdgeResizeTarget {
   direction: "row" | "column";
+  splitId: string;
+  splitRef: RefObject<HTMLDivElement | null>;
+}
+
+interface EdgeCreatePreview {
+  edge: DockEdge;
+  ratio: number;
+}
+
+interface EdgeCreateParentLock {
+  splitId: string;
+  blockSize: number;
+}
+
+interface EdgeCreateParentLockTarget {
   splitId: string;
   splitRef: RefObject<HTMLDivElement | null>;
 }
@@ -32,6 +50,30 @@ const SPLIT_KEYBOARD_LARGE_STEP = 0.1;
 const SPLIT_GAP_PX = 16;
 const EDGE_DRAG_MIN_DISTANCE = 6;
 const PANEL_EDGE_GRIPS: DockEdge[] = ["left", "right", "top", "bottom"];
+
+type RectLike = Pick<DOMRectReadOnly, "left" | "top" | "width" | "height">;
+
+export function getSafeZoomScale(zoomScale?: number) {
+  return zoomScale && Number.isFinite(zoomScale) && zoomScale > 0 ? zoomScale : 1;
+}
+
+export function toLayoutPx(value: number, zoomScale?: number) {
+  return value / getSafeZoomScale(zoomScale);
+}
+
+export function getLayoutRectSize(bounds: RectLike, direction: "row" | "column", zoomScale?: number) {
+  return toLayoutPx(direction === "row" ? bounds.width : bounds.height, zoomScale);
+}
+
+export function getLayoutPointerOffset(bounds: RectLike, direction: "row" | "column", clientX: number, clientY: number, zoomScale?: number) {
+  const visualOffset = direction === "row" ? clientX - bounds.left : clientY - bounds.top;
+  return toLayoutPx(visualOffset, zoomScale);
+}
+
+export function getCommittedTrackRatio(pointerOffset: number, availableSize: number, splitGap = SPLIT_GAP_PX) {
+  const trackSize = Math.max(1, availableSize - splitGap);
+  return Math.min(1, Math.max(0, pointerOffset / trackSize));
+}
 
 function getNodeMinWidth(node: DockNode): number {
   if (node.type === "panel" || node.type === "empty") {
@@ -53,13 +95,77 @@ function getNodeMinHeight(node: DockNode): number {
     : Math.max(getNodeMinHeight(node.first), getNodeMinHeight(node.second));
 }
 
-function DockTree({ node, renderPanel, onSplitResize, onSplitResizeEnd, onPanelEdgeCreateEmpty, workspaceRef, dropPreview, resizeEdges }: DockTreeProps) {
+function getPanelEdgePreviewStyle(preview: EdgeCreatePreview): CSSProperties {
+  const clampedRatio = Math.min(1, Math.max(0, preview.ratio));
+  const leadingPercent = `${clampedRatio * 100}%`;
+  const trailingPercent = `${(1 - clampedRatio) * 100}%`;
+
+  switch (preview.edge) {
+    case "left":
+      return { right: trailingPercent };
+    case "right":
+      return { left: leadingPercent };
+    case "top":
+      return { bottom: trailingPercent };
+    case "bottom":
+      return { top: leadingPercent };
+  }
+}
+
+function getPanelEdgePreviewPanelShare(preview: EdgeCreatePreview) {
+  return preview.edge === "left" || preview.edge === "top" ? 1 - preview.ratio : preview.ratio;
+}
+
+function nodeContainsEmptyCell(node: DockNode): boolean {
+  if (node.type === "empty") {
+    return true;
+  }
+
+  if (node.type === "panel") {
+    return false;
+  }
+
+  return nodeContainsEmptyCell(node.first) || nodeContainsEmptyCell(node.second);
+}
+
+function isBlockEdgeLockedSplit(node: DockNode): boolean {
+  return (
+    node.type === "split" &&
+    node.direction === "column" &&
+    node.availableSize !== undefined &&
+    (node.edgeLockAxis === "block" || (node.id.startsWith("split-empty-") && node.edgeLockAxis === undefined))
+  );
+}
+
+function isInlineEdgeLockedSplit(node: DockNode): boolean {
+  return (
+    node.type === "split" &&
+    node.direction === "row" &&
+    node.availableSize !== undefined &&
+    (node.edgeLockAxis === "inline" || (node.id.startsWith("split-empty-") && node.edgeLockAxis === undefined))
+  );
+}
+
+function nodeContainsEdgeLockedSplit(node: DockNode): boolean {
+  if (isBlockEdgeLockedSplit(node) || isInlineEdgeLockedSplit(node)) {
+    return true;
+  }
+
+  if (node.type !== "split") {
+    return false;
+  }
+
+  return nodeContainsEdgeLockedSplit(node.first) || nodeContainsEdgeLockedSplit(node.second);
+}
+
+function DockTree({ node, renderPanel, onSplitResize, onSplitResizeEnd, onPanelEdgeCreateEmpty, workspaceRef, dropPreview, zoomScale, resizeEdges, parentRowLockTarget, hideEmptyCells }: DockTreeProps) {
   const splitRef = useRef<HTMLDivElement | null>(null);
   const firstPaneRef = useRef<HTMLDivElement | null>(null);
   const leafRef = useRef<HTMLDivElement | null>(null);
   const activePointerIdRef = useRef<number | null>(null);
   const [measuredSplitOffset, setMeasuredSplitOffset] = useState<number | null>(null);
   const [activeEdge, setActiveEdge] = useState<DockEdge | null>(null);
+  const [edgeCreatePreview, setEdgeCreatePreview] = useState<EdgeCreatePreview | null>(null);
 
   useLayoutEffect(() => {
     if (node.type !== "split") {
@@ -79,8 +185,8 @@ function DockTree({ node, renderPanel, onSplitResize, onSplitResizeEnd, onPanelE
       const firstPaneBounds = firstPaneElement.getBoundingClientRect();
       const nextOffset =
         node.direction === "row"
-          ? firstPaneBounds.right - splitBounds.left + SPLIT_GAP_PX / 2
-          : firstPaneBounds.bottom - splitBounds.top + SPLIT_GAP_PX / 2;
+          ? toLayoutPx(firstPaneBounds.right - splitBounds.left, zoomScale) + SPLIT_GAP_PX / 2
+          : toLayoutPx(firstPaneBounds.bottom - splitBounds.top, zoomScale) + SPLIT_GAP_PX / 2;
 
       setMeasuredSplitOffset((currentOffset) => (Math.abs((currentOffset ?? 0) - nextOffset) > 0.5 ? nextOffset : currentOffset));
     };
@@ -97,6 +203,7 @@ function DockTree({ node, renderPanel, onSplitResize, onSplitResizeEnd, onPanelE
   if (node.type === "panel") {
     const isPreviewed = dropPreview?.kind === "panel" && dropPreview.panelId === node.panelId;
     const createEmptyFromPanelEdge = onPanelEdgeCreateEmpty;
+    const panelId = node.panelId;
 
     const handleEdgePointerDown = (edge: DockEdge, event: PointerEvent<HTMLButtonElement>) => {
       if (!createEmptyFromPanelEdge && !onSplitResize) {
@@ -118,8 +225,19 @@ function DockTree({ node, renderPanel, onSplitResize, onSplitResizeEnd, onPanelE
       const pointerId = event.pointerId;
       const startX = event.clientX;
       const startY = event.clientY;
-      const availableSize = edge === "left" || edge === "right" ? bounds.width : bounds.height;
+      const panelEdgeDirection = edge === "left" || edge === "right" ? "row" : "column";
+      const availableSize = getLayoutRectSize(bounds, panelEdgeDirection, zoomScale);
       const resizeTarget = resizeEdges?.[edge];
+      const parentLockTarget = edge === "top" || edge === "bottom" ? parentRowLockTarget : undefined;
+      const parentLockElement = parentLockTarget?.splitRef.current;
+      const parentLockBounds = parentLockElement?.getBoundingClientRect();
+      const parentLock =
+        parentLockTarget && parentLockBounds && parentLockBounds.height > 0
+          ? {
+              splitId: parentLockTarget.splitId,
+              blockSize: getLayoutRectSize(parentLockBounds, "column", zoomScale),
+            }
+          : undefined;
       let hasCommittedDrag = false;
 
       const cleanup = () => {
@@ -127,9 +245,20 @@ function DockTree({ node, renderPanel, onSplitResize, onSplitResizeEnd, onPanelE
         window.removeEventListener("pointerup", handleWindowPointerUp);
         window.removeEventListener("pointercancel", handleWindowPointerCancel);
         setActiveEdge(null);
+        setEdgeCreatePreview(null);
       };
 
-      const updatePanelEdgeDrag = (clientX: number, clientY: number, shouldPersist: boolean) => {
+      const getPanelEdgeRatio = (clientX: number, clientY: number) => {
+        const pointerOffset = getLayoutPointerOffset(bounds, panelEdgeDirection, clientX, clientY, zoomScale);
+        return Math.min(1, Math.max(0, pointerOffset / availableSize));
+      };
+
+      const getCommittedPanelEdgeRatio = (clientX: number, clientY: number) => {
+        const pointerOffset = getLayoutPointerOffset(bounds, panelEdgeDirection, clientX, clientY, zoomScale);
+        return getCommittedTrackRatio(pointerOffset, availableSize);
+      };
+
+      const updatePanelEdgeDrag = (clientX: number, clientY: number) => {
         const distance = Math.hypot(clientX - startX, clientY - startY);
 
         if (distance < EDGE_DRAG_MIN_DISTANCE) {
@@ -144,13 +273,13 @@ function DockTree({ node, renderPanel, onSplitResize, onSplitResizeEnd, onPanelE
           }
 
           const splitBounds = splitElement.getBoundingClientRect();
-          const splitAvailableSize = resizeTarget.direction === "row" ? splitBounds.width : splitBounds.height;
+          const splitAvailableSize = getLayoutRectSize(splitBounds, resizeTarget.direction, zoomScale);
 
           if (splitAvailableSize <= 0) {
             return;
           }
 
-          const splitPointerOffset = resizeTarget.direction === "row" ? clientX - splitBounds.left : clientY - splitBounds.top;
+          const splitPointerOffset = getLayoutPointerOffset(splitBounds, resizeTarget.direction, clientX, clientY, zoomScale);
           hasCommittedDrag = true;
           onSplitResize(resizeTarget.splitId, splitPointerOffset / splitAvailableSize, splitAvailableSize);
           return;
@@ -160,10 +289,8 @@ function DockTree({ node, renderPanel, onSplitResize, onSplitResizeEnd, onPanelE
           return;
         }
 
-        const pointerOffset = edge === "left" || edge === "right" ? clientX - bounds.left : clientY - bounds.top;
-        const ratio = Math.min(1, Math.max(0, pointerOffset / availableSize));
         hasCommittedDrag = true;
-        createEmptyFromPanelEdge(node.panelId, edge, ratio, availableSize, shouldPersist);
+        setEdgeCreatePreview({ edge, ratio: getPanelEdgeRatio(clientX, clientY) });
       };
 
       function handleWindowPointerMove(pointerEvent: globalThis.PointerEvent) {
@@ -172,7 +299,7 @@ function DockTree({ node, renderPanel, onSplitResize, onSplitResizeEnd, onPanelE
         }
 
         pointerEvent.preventDefault();
-        updatePanelEdgeDrag(pointerEvent.clientX, pointerEvent.clientY, false);
+        updatePanelEdgeDrag(pointerEvent.clientX, pointerEvent.clientY);
       }
 
       function handleWindowPointerUp(pointerEvent: globalThis.PointerEvent) {
@@ -182,9 +309,11 @@ function DockTree({ node, renderPanel, onSplitResize, onSplitResizeEnd, onPanelE
 
         pointerEvent.preventDefault();
         if (hasCommittedDrag) {
-          updatePanelEdgeDrag(pointerEvent.clientX, pointerEvent.clientY, true);
           if (resizeTarget) {
+            updatePanelEdgeDrag(pointerEvent.clientX, pointerEvent.clientY);
             onSplitResizeEnd?.();
+          } else if (createEmptyFromPanelEdge && availableSize > 0) {
+            createEmptyFromPanelEdge(panelId, edge, getCommittedPanelEdgeRatio(pointerEvent.clientX, pointerEvent.clientY), availableSize, true, parentLock);
           }
         }
         cleanup();
@@ -201,10 +330,31 @@ function DockTree({ node, renderPanel, onSplitResize, onSplitResizeEnd, onPanelE
       window.addEventListener("pointercancel", handleWindowPointerCancel);
     };
 
+    const leafStyle = edgeCreatePreview
+      ? ({
+          "--panel-workspace-edge-preview-panel-share": `${Math.min(1, Math.max(0, getPanelEdgePreviewPanelShare(edgeCreatePreview))) * 100}%`,
+        } as CSSProperties)
+      : undefined;
+
     return (
-      <div ref={leafRef} className="panel-workspace-leaf" data-panel-id={node.panelId} data-drop-placement={isPreviewed ? dropPreview.placement : undefined}>
+      <div
+        ref={leafRef}
+        className="panel-workspace-leaf"
+        data-panel-id={node.panelId}
+        data-drop-placement={isPreviewed ? dropPreview.placement : undefined}
+        data-edge-preview={edgeCreatePreview?.edge}
+        style={leafStyle}
+      >
         {renderPanel(node.panelId)}
         {isPreviewed ? <span className="panel-workspace-drop-preview" aria-hidden="true" /> : null}
+        {edgeCreatePreview ? (
+          <span
+            className="panel-workspace-edge-create-preview"
+            data-edge={edgeCreatePreview.edge}
+            style={getPanelEdgePreviewStyle(edgeCreatePreview)}
+            aria-hidden="true"
+          />
+        ) : null}
         {createEmptyFromPanelEdge
           ? PANEL_EDGE_GRIPS.map((edge) => (
               <button
@@ -223,9 +373,10 @@ function DockTree({ node, renderPanel, onSplitResize, onSplitResizeEnd, onPanelE
 
   if (node.type === "empty") {
     const isPreviewed = dropPreview?.kind === "empty" && dropPreview.emptyId === node.id;
+    const emptyCellClassName = `panel-workspace-empty${hideEmptyCells ? " panel-workspace-empty--hidden" : ""}`;
 
     return (
-      <div className="panel-workspace-empty" data-empty-cell-id={node.id} data-drop-active={isPreviewed ? "true" : undefined}>
+      <div className={emptyCellClassName} data-empty-cell-id={node.id} data-drop-active={isPreviewed ? "true" : undefined}>
         {isPreviewed ? <span className="panel-workspace-empty-drop-preview" aria-hidden="true" /> : null}
       </div>
     );
@@ -241,20 +392,42 @@ function DockTree({ node, renderPanel, onSplitResize, onSplitResizeEnd, onPanelE
   const firstTrackSize = splitAvailableSize ? Math.round(splitAvailableSize * firstSize) : undefined;
   const secondTrackSize = splitAvailableSize ? Math.round(splitAvailableSize * secondSize) : undefined;
   const splitOffset = measuredSplitOffset !== null ? `${measuredSplitOffset}px` : firstTrackSize ? `${firstTrackSize + SPLIT_GAP_PX / 2}px` : `${node.ratio * 100}%`;
+  const rowTemplate =
+    firstTrackSize !== undefined && (node.first.type === "empty" || isInlineEdgeLockedSplit(node))
+      ? `${Math.max(firstMinWidth, firstTrackSize)}px minmax(${secondMinWidth}px, calc(100% - ${Math.max(firstMinWidth, firstTrackSize)}px - ${SPLIT_GAP_PX}px))`
+      : secondTrackSize !== undefined && node.second.type === "empty"
+        ? `minmax(${firstMinWidth}px, calc(100% - ${Math.max(secondMinWidth, secondTrackSize)}px - ${SPLIT_GAP_PX}px)) ${Math.max(secondMinWidth, secondTrackSize)}px`
+        : `minmax(${firstMinWidth}px, ${firstSize}fr) minmax(${secondMinWidth}px, ${secondSize}fr)`;
+  const columnTemplate =
+    firstTrackSize !== undefined && (node.first.type === "empty" || isBlockEdgeLockedSplit(node))
+      ? `${Math.max(firstMinHeight, firstTrackSize)}px minmax(${secondMinHeight}px, 1fr)`
+      : secondTrackSize !== undefined && node.second.type === "empty"
+        ? `${Math.max(firstMinHeight, firstTrackSize ?? 0)}px minmax(${secondMinHeight}px, 1fr)`
+        : `minmax(${firstMinHeight}px, max-content) minmax(${secondMinHeight}px, max-content)`;
+  const shouldLockVerticalEmptySplitHeight = isBlockEdgeLockedSplit(node) || (node.direction === "column" && node.availableSize !== undefined && (node.first.type === "empty" || node.second.type === "empty"));
+  const shouldLockRowBlockSize = node.direction === "row" && node.lockedBlockSize !== undefined && (nodeContainsEmptyCell(node) || nodeContainsEdgeLockedSplit(node));
   const splitStyle =
     node.direction === "row"
       ? {
-          gridTemplateColumns:
-            firstTrackSize !== undefined
-              ? `minmax(${firstMinWidth}px, ${firstTrackSize}px) minmax(${secondMinWidth}px, 1fr)`
-              : `minmax(${firstMinWidth}px, ${firstSize}fr) minmax(${secondMinWidth}px, ${secondSize}fr)`,
+          gridTemplateColumns: rowTemplate,
+          ...(shouldLockRowBlockSize
+            ? {
+                height: `${node.lockedBlockSize}px`,
+                maxHeight: `${node.lockedBlockSize}px`,
+                minHeight: 0,
+              }
+            : {}),
           "--panel-workspace-split-offset": splitOffset,
         }
       : {
-          gridTemplateRows:
-            firstTrackSize && secondTrackSize
-              ? `minmax(${firstMinHeight}px, ${firstTrackSize}px) minmax(${secondMinHeight}px, ${secondTrackSize}px)`
-              : `minmax(${firstMinHeight}px, max-content) minmax(${secondMinHeight}px, max-content)`,
+          gridTemplateRows: columnTemplate,
+          ...(shouldLockVerticalEmptySplitHeight
+            ? {
+                height: `${node.availableSize}px`,
+                maxHeight: `${node.availableSize}px`,
+                minHeight: 0,
+              }
+            : {}),
           "--panel-workspace-split-offset": splitOffset,
         };
 
@@ -270,13 +443,13 @@ function DockTree({ node, renderPanel, onSplitResize, onSplitResizeEnd, onPanelE
     }
 
     const bounds = splitElement.getBoundingClientRect();
-    const availableSize = node.direction === "row" ? bounds.width : bounds.height;
+    const availableSize = getLayoutRectSize(bounds, node.direction, zoomScale);
 
     if (availableSize <= 0) {
       return;
     }
 
-    const pointerOffset = node.direction === "row" ? event.clientX - bounds.left : event.clientY - bounds.top;
+    const pointerOffset = getLayoutPointerOffset(bounds, node.direction, event.clientX, event.clientY, zoomScale);
     onSplitResize(node.id, pointerOffset / availableSize, availableSize);
   };
 
@@ -329,7 +502,7 @@ function DockTree({ node, renderPanel, onSplitResize, onSplitResizeEnd, onPanelE
     }
 
     const bounds = splitElement.getBoundingClientRect();
-    const availableSize = node.direction === "row" ? bounds.width : bounds.height;
+    const availableSize = getLayoutRectSize(bounds, node.direction, zoomScale);
 
     if (availableSize <= 0) {
       return;
@@ -341,6 +514,8 @@ function DockTree({ node, renderPanel, onSplitResize, onSplitResizeEnd, onPanelE
     window.requestAnimationFrame(() => onSplitResizeEnd?.());
   };
 
+  const childParentRowLockTarget = node.direction === "row" ? { splitId: node.id, splitRef } : parentRowLockTarget;
+
   return (
     <div ref={splitRef} className={`panel-workspace-split panel-workspace-split-${node.direction}`} style={splitStyle as CSSProperties}>
       <div ref={firstPaneRef} className="panel-workspace-split-pane">
@@ -348,11 +523,14 @@ function DockTree({ node, renderPanel, onSplitResize, onSplitResizeEnd, onPanelE
           node={node.first}
           dockRoot={null}
           renderPanel={renderPanel}
+          hideEmptyCells={hideEmptyCells}
           onSplitResize={onSplitResize}
           onSplitResizeEnd={onSplitResizeEnd}
           onPanelEdgeCreateEmpty={onPanelEdgeCreateEmpty}
           workspaceRef={workspaceRef}
           dropPreview={dropPreview}
+          zoomScale={zoomScale}
+          parentRowLockTarget={childParentRowLockTarget}
           resizeEdges={{
             ...(node.direction === "row" ? { right: { direction: node.direction, splitId: node.id, splitRef } } : { bottom: { direction: node.direction, splitId: node.id, splitRef } }),
           }}
@@ -363,11 +541,14 @@ function DockTree({ node, renderPanel, onSplitResize, onSplitResizeEnd, onPanelE
           node={node.second}
           dockRoot={null}
           renderPanel={renderPanel}
+          hideEmptyCells={hideEmptyCells}
           onSplitResize={onSplitResize}
           onSplitResizeEnd={onSplitResizeEnd}
           onPanelEdgeCreateEmpty={onPanelEdgeCreateEmpty}
           workspaceRef={workspaceRef}
           dropPreview={dropPreview}
+          zoomScale={zoomScale}
+          parentRowLockTarget={childParentRowLockTarget}
           resizeEdges={{
             ...(node.direction === "row" ? { left: { direction: node.direction, splitId: node.id, splitRef } } : { top: { direction: node.direction, splitId: node.id, splitRef } }),
           }}
@@ -392,7 +573,9 @@ function DockTree({ node, renderPanel, onSplitResize, onSplitResizeEnd, onPanelE
   );
 }
 
-export function PanelWorkspace({ dockRoot, renderPanel, onSplitResize, onSplitResizeEnd, onPanelEdgeCreateEmpty, workspaceRef, dropPreview }: PanelWorkspaceProps) {
+export function PanelWorkspace({ dockRoot, renderPanel, onSplitResize, onSplitResizeEnd, onPanelEdgeCreateEmpty, workspaceRef, dropPreview, zoomScale, hideEmptyCells }: PanelWorkspaceProps) {
+  const emptyCellClassName = `panel-workspace-empty${hideEmptyCells ? " panel-workspace-empty--hidden" : ""}`;
+
   return (
     <div ref={workspaceRef} className="panel-workspace">
       {dropPreview?.kind === "workspace" ? <span className="panel-workspace-root-drop-preview" data-drop-placement={dropPreview.placement} aria-hidden="true" /> : null}
@@ -401,13 +584,15 @@ export function PanelWorkspace({ dockRoot, renderPanel, onSplitResize, onSplitRe
           node={dockRoot}
           dockRoot={dockRoot}
           renderPanel={renderPanel}
+          hideEmptyCells={hideEmptyCells}
           onSplitResize={onSplitResize}
           onSplitResizeEnd={onSplitResizeEnd}
           onPanelEdgeCreateEmpty={onPanelEdgeCreateEmpty}
           dropPreview={dropPreview}
+          zoomScale={zoomScale}
         />
       ) : (
-        <div className="panel-workspace-empty" />
+        <div className={emptyCellClassName} />
       )}
     </div>
   );
