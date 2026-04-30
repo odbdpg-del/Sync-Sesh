@@ -8,6 +8,13 @@ Entries must be in reverse chronological order. New entries go at the top, above
 
 Use a level-two heading for every entry so the editor can fold each change.
 
+## [2593] - 2026-04-30 15:17 - `syncsesh-activity-promotion / Fullscreen Hidden 3D Viewport`
+
+- Portaled the hidden 3D world overlay to `document.body` so dashboard zoom, max-width, padding, and perspective no longer constrain the viewport.
+- Hardened the 3D shell overlay and canvas CSS to fill the browser viewport with `100vw` and `100dvh` sizing.
+- Touched `src/screens/MainScreen.tsx`, `src/styles/global.css`, and `changelog.md`.
+- Build/test: `npm.cmd run build` passed with the existing Vite large-chunk warning.
+
 ## [2592] - 2026-04-30 15:03 - `syncsesh-activity-promotion / Honor Real Activity URL Mappings`
 
 - Changed Discord Activity websocket resolution so proxied Discord hosts always use the same-origin `/ws` mapping instead of a configured remote `VITE_SYNC_SERVER_URL`.

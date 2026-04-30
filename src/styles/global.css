@@ -1365,11 +1365,16 @@ textarea {
 .three-d-shell-overlay {
   position: fixed;
   inset: 0;
-  z-index: 70;
+  z-index: 1500;
+  width: 100vw;
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
   background: #03060c;
 }
 
 .three-d-shell-canvas {
+  display: block;
   width: 100%;
   height: 100%;
 }

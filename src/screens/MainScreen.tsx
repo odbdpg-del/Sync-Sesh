@@ -1,4 +1,5 @@
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
+import { createPortal } from "react-dom";
 import { AdminPanel } from "../components/AdminPanel";
 import { AppHeader } from "../components/AppHeader";
 import { DebugConsoleFullscreen } from "../components/DebugConsoleFullscreen";
@@ -3258,9 +3259,15 @@ export function MainScreen() {
           )
         ) : null}
 
-        {isThreeDModeOpen ? (
-          <Suspense fallback={<HiddenWorldLoadingPanel label="Loading 3D world" />}>
-            <ThreeDModeShell
+        {isRenderingSpikeOpen ? (
+          <Suspense fallback={<HiddenWorldLoadingPanel label="Loading render spike" />}>
+            <RenderingStackSpike onClose={() => setIsRenderingSpikeOpen(false)} />
+          </Suspense>
+        ) : null}
+      </main>
+      {isThreeDModeOpen ? createPortal(
+        <Suspense fallback={<HiddenWorldLoadingPanel label="Loading 3D world" />}>
+          <ThreeDModeShell
             countdownDisplay={countdownDisplay}
             users={state.users}
             localUserId={state.localProfile.id}
@@ -3290,15 +3297,10 @@ export function MainScreen() {
             onPickupStudioGuitar={pickupStudioGuitar}
             onDropStudioGuitar={dropStudioGuitar}
             onExit={() => setIsThreeDModeOpen(false)}
-            />
-          </Suspense>
-        ) : null}
-        {isRenderingSpikeOpen ? (
-          <Suspense fallback={<HiddenWorldLoadingPanel label="Loading render spike" />}>
-            <RenderingStackSpike onClose={() => setIsRenderingSpikeOpen(false)} />
-          </Suspense>
-        ) : null}
-      </main>
+          />
+        </Suspense>,
+        document.body,
+      ) : null}
     </div>
   );
 }
