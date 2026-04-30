@@ -27,9 +27,13 @@ function normalizeWebSocketUrl(configuredUrl: string) {
 }
 
 function resolveSyncServerUrl() {
+  if (isDiscordProxyHost()) {
+    return buildActivityProxyWebSocketUrl();
+  }
+
   const directSyncUrl = import.meta.env.VITE_SYNC_DIRECT_URL;
 
-  if (directSyncUrl && directSyncUrl !== "auto" && !isDiscordProxyHost()) {
+  if (directSyncUrl && directSyncUrl !== "auto") {
     try {
       return normalizeWebSocketUrl(directSyncUrl);
     } catch {

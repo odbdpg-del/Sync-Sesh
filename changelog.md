@@ -8,6 +8,13 @@ Entries must be in reverse chronological order. New entries go at the top, above
 
 Use a level-two heading for every entry so the editor can fold each change.
 
+## [2592] - 2026-04-30 15:03 - `syncsesh-activity-promotion / Honor Real Activity URL Mappings`
+
+- Changed Discord Activity websocket resolution so proxied Discord hosts always use the same-origin `/ws` mapping instead of a configured remote `VITE_SYNC_SERVER_URL`.
+- Stopped runtime URL mapping patches from overriding real Discord Developer Portal mappings while running inside Discord, and kept `/api` owned by the portal/Worker mapping.
+- Touched `src/lib/sync/createSyncClient.ts`, `src/lib/discord/embeddedApp.ts`, and `changelog.md`.
+- Build/test: `npm.cmd run build` passed with the existing Vite large-chunk warning.
+
 ## [2591] - 2026-04-30 14:57 - `syncsesh-activity-promotion / Real Discord Token Worker Config`
 
 - Added a real Discord token Worker config for the production SyncSesh Activity.

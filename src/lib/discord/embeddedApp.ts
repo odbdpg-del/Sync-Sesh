@@ -66,6 +66,10 @@ function isDiscordProxyHost() {
 }
 
 function resolveConfiguredSyncProxyTarget() {
+  if (isDiscordProxyHost()) {
+    return undefined;
+  }
+
   const configuredUrl = import.meta.env.VITE_SYNC_SERVER_URL;
 
   if (configuredUrl && configuredUrl !== "auto") {
@@ -96,7 +100,6 @@ export function ensureDiscordActivityUrlMappingsPatched() {
       ? [
           { prefix: "/ws", target: syncProxyTarget },
           { prefix: "/sync", target: syncProxyTarget },
-          { prefix: "/api", target: syncProxyTarget },
         ]
       : []),
     ...STATIC_ACTIVITY_URL_MAPPINGS,
