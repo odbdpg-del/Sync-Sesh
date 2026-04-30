@@ -250,7 +250,7 @@ export const level1Config = {
       colorRole: "blue-main",
       groupId: "hero-wall",
       priority: 10,
-      position: [0, 2.55, -8.82],
+      position: [0, 2.0, -8.82],
       rotation: [0, 0, 0],
       size: {
         width: 6.4,
@@ -264,7 +264,7 @@ export const level1Config = {
       colorRole: "green-status",
       groupId: "hero-wall",
       priority: 20,
-      position: [-5.45, 3.25, -8.82],
+      position: [-5.45, 3.0, -8.82],
       rotation: [0, 0, 0],
       size: {
         width: 3.6,
@@ -278,7 +278,7 @@ export const level1Config = {
       colorRole: "green-status",
       groupId: "hero-wall",
       priority: 30,
-      position: [5.45, 3.25, -8.82],
+      position: [5.45, 3.0, -8.82],
       rotation: [0, 0, 0],
       size: {
         width: 3.6,
@@ -292,7 +292,7 @@ export const level1Config = {
       colorRole: "cyan-data",
       groupId: "hero-wall",
       priority: 40,
-      position: [0, 3.85, -8.8],
+      position: [0, 4.20, -8.8],
       rotation: [0, 0, 0],
       size: {
         width: 8.2,
@@ -306,10 +306,10 @@ export const level1Config = {
       colorRole: "amber-alert",
       groupId: "hero-wall",
       priority: 50,
-      position: [-7.35, 2.0, -8.82],
+      position: [-8.00, 1.8, -8.82],
       rotation: [0, 0, 0],
       size: {
-        width: 2.15,
+        width: 3.15,
         height: 1.05,
       },
     },
@@ -320,10 +320,10 @@ export const level1Config = {
       colorRole: "cyan-data",
       groupId: "hero-wall",
       priority: 60,
-      position: [7.35, 2.0, -8.82],
+      position: [8.0, 1.8, -8.82],
       rotation: [0, 0, 0],
       size: {
-        width: 2.15,
+        width: 3.15,
         height: 1.05,
       },
     },
@@ -334,7 +334,7 @@ export const level1Config = {
       colorRole: "green-status",
       groupId: "hero-wall",
       priority: 70,
-      position: [-3.85, 1.2, -8.82],
+      position: [-4.85, 1.2, -8.82],
       rotation: [0, 0, 0],
       size: {
         width: 1.65,
@@ -376,7 +376,7 @@ export const level1Config = {
       colorRole: "green-status",
       groupId: "hero-wall",
       priority: 100,
-      position: [3.85, 1.2, -8.82],
+      position: [4.85, 1.1, -8.82],
       rotation: [0, 0, 0],
       size: {
         width: 1.65,
