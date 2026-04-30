@@ -287,6 +287,22 @@ textarea {
   z-index: 1;
 }
 
+.app-shell[data-small-mode="true"] {
+  padding: 0  ;
+}
+
+.app-shell[data-small-mode="true"] .app-header {
+  padding: 3  ;
+}
+
+.app-shell[data-small-mode="true"] .brand-copy {
+  padding-top: 6px;
+}
+
+.app-shell[data-small-mode="true"] .brand-copy .eyebrow {
+  padding-left: 14px;
+}
+
 .app-background-media {
   position: fixed;
   inset: 0;

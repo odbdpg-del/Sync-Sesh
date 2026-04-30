@@ -8,6 +8,20 @@ Entries must be in reverse chronological order. New entries go at the top, above
 
 Use a level-two heading for every entry so the editor can fold each change.
 
+## [2565] - 2026-04-30 01:10 - `codex/merge-ui-and-3d-world / Small Mode Eyebrow Padding`
+
+- Added a Small Mode-only brand copy offset so the `Discord Activity` eyebrow clears the header frame lines.
+- Kept the zero-padding tile experiment intact and avoided changing normal dashboard header spacing.
+- Touched `src/styles/global.css` and `changelog.md`.
+- Build/test: `npm.cmd run build` passed with the existing Vite large-chunk warning.
+
+## [2564] - 2026-04-30 01:02 - `codex/merge-ui-and-3d-world / Small Mode Zero Padding Trial`
+
+- Removed outer app shell and header padding while Small Mode is active to test compact Discord activity tile fit.
+- Kept normal dashboard padding unchanged by scoping the rule to `data-small-mode="true"`.
+- Touched `src/styles/global.css` and `changelog.md`.
+- Build/test: `npm.cmd run build` passed with the existing Vite large-chunk warning.
+
 ## [2563] - 2026-04-30 00:56 - `codex/merge-ui-and-3d-world / Small Mode Timer Centering`
 
 - Centered the Small Mode timer content within its header pill for both seven-segment and text fallback states.
