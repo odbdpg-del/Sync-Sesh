@@ -88,12 +88,16 @@ interface ThreeDModeShellProps {
   syncStatus: SyncStatus;
   canControlSharedDawTransport: boolean;
   canAdminSharedDawClips: boolean;
+  canWatchReadyHold: boolean;
+  watchReadyHoldStatus: string;
   onSetSharedDawTempo: (bpm: number) => void;
   onPlaySharedDawTransport: () => void;
   onStopSharedDawTransport: () => void;
   onPublishSharedDawClip: (clip: SharedDawClipPublishPayload) => void;
   onClearSharedDawClip: (trackId: SharedDawTrackId, sceneIndex: number) => void;
   onBroadcastDawLiveSound: (sound: SharedDawLiveSoundPayload) => void;
+  onStartWatchReadyHold: () => void;
+  onEndWatchReadyHold: () => void;
   studioGuitar: SharedStudioGuitarState;
   onPickupStudioGuitar: () => void;
   onDropStudioGuitar: () => void;
@@ -113,6 +117,8 @@ const MOVEMENT_ACCELERATION_UNITS_PER_SECOND = 12;
 const MOVEMENT_DECELERATION_UNITS_PER_SECOND = 16;
 const MOVEMENT_STOP_EPSILON = 0.01;
 const JUMP_TRIGGER_CODE = "Space";
+const TOP_DOWN_TOGGLE_CODE = "KeyT";
+const WATCH_GLANCE_CODE = "Tab";
 const JUMP_VELOCITY_UNITS_PER_SECOND = 4.15;
 const JUMP_GRAVITY_UNITS_PER_SECOND = 11.5;
 const JUMP_GROUNDED_EPSILON = 0.025;
@@ -1166,6 +1172,68 @@ function ThreeDFpsCounter({
   );
 }
 
+function formatWatchPresence(user: SessionUser | null, isLocalHost: boolean) {
+  if (!user) {
+    return "UNJOINED";
+  }
+
+  const presence = user.presence.toUpperCase();
+  return isLocalHost ? `HOST / ${presence}` : presence;
+}
+
+function WatchTimerDisplay({
+  countdownDisplay,
+  users,
+  localUserId,
+  ownerId,
+  roundNumber,
+  canWatchReadyHold,
+  watchReadyHoldStatus,
+  isWatchReadyHolding,
+}: {
+  countdownDisplay: CountdownDisplayState;
+  users: SessionUser[];
+  localUserId: string;
+  ownerId: string;
+  roundNumber: number;
+  canWatchReadyHold: boolean;
+  watchReadyHoldStatus: string;
+  isWatchReadyHolding: boolean;
+}) {
+  const readyCount = users.filter((user) => user.presence === "ready").length;
+  const activeCount = users.filter((user) => user.presence !== "spectating").length;
+  const localUser = users.find((user) => user.id === localUserId) ?? null;
+  const isLocalHost = localUser?.isHost === true || localUserId === ownerId;
+  const localPresence = formatWatchPresence(localUser, isLocalHost);
+  const statusLine = countdownDisplay.accentText ?? countdownDisplay.subheadline;
+  const readyControlCopy = isWatchReadyHolding ? "HOLDING READY" : canWatchReadyHold ? "HOLD SPACE TO READY" : watchReadyHoldStatus;
+
+  return (
+    <aside className="three-d-watch-display" data-urgent={countdownDisplay.isUrgent ? "true" : "false"} aria-live="polite">
+      <div className="three-d-watch-display-bezel">
+        <div className="three-d-watch-display-header">
+          <span>WRIST SYNC</span>
+          <strong>{localPresence}</strong>
+        </div>
+        <div className="three-d-watch-display-time">{countdownDisplay.timerText}</div>
+        <div className="three-d-watch-display-headline">{countdownDisplay.headline}</div>
+        <div className="three-d-watch-display-grid">
+          <span>PHASE</span>
+          <strong>{countdownDisplay.phase.toUpperCase()}</strong>
+          <span>ROUND</span>
+          <strong>{String(roundNumber).padStart(2, "0")}</strong>
+          <span>READY</span>
+          <strong>{readyCount}/{activeCount}</strong>
+        </div>
+        <div className="three-d-watch-display-footer">
+          <span>{statusLine}</span>
+          <strong>{readyControlCopy}</strong>
+        </div>
+      </div>
+    </aside>
+  );
+}
+
 function isInteractiveTarget(target: EventTarget | null) {
   if (!(target instanceof HTMLElement)) {
     return false;
@@ -2097,7 +2165,7 @@ function TopDownViewController({
 
       if (
         !enabled ||
-        event.code !== "Tab" ||
+        event.code !== TOP_DOWN_TOGGLE_CODE ||
         event.repeat ||
         event.ctrlKey ||
         event.metaKey ||
@@ -2150,7 +2218,7 @@ function TopDownViewController({
         return;
       }
 
-      if (!enabled || event.code !== "Tab") {
+      if (!enabled || event.code !== TOP_DOWN_TOGGLE_CODE) {
         return;
       }
 
@@ -3354,12 +3422,16 @@ export function ThreeDModeShell({
   syncStatus,
   canControlSharedDawTransport,
   canAdminSharedDawClips,
+  canWatchReadyHold,
+  watchReadyHoldStatus,
   onSetSharedDawTempo,
   onPlaySharedDawTransport,
   onStopSharedDawTransport,
   onPublishSharedDawClip,
   onClearSharedDawClip,
   onBroadcastDawLiveSound,
+  onStartWatchReadyHold,
+  onEndWatchReadyHold,
   studioGuitar,
   onPickupStudioGuitar,
   onDropStudioGuitar,
@@ -3372,6 +3444,8 @@ export function ThreeDModeShell({
   const [revealState, setRevealState] = useState<RevealState>("revealing");
   const [isTopDownViewActive, setIsTopDownViewActive] = useState(false);
   const [isTopDownFreeCamActive, setIsTopDownFreeCamActive] = useState(false);
+  const [isWatchViewActive, setIsWatchViewActive] = useState(false);
+  const [isWatchReadyHolding, setIsWatchReadyHolding] = useState(false);
   const [isStudioGuitarRecordingEnabled, setIsStudioGuitarRecordingEnabled] = useState(false);
   const [studioGuitarNoteIndex, setStudioGuitarNoteIndex] = useState(0);
   const [studioGuitarFeedback, setStudioGuitarFeedback] = useState<StudioGuitarFeedbackState | null>(null);
@@ -3391,6 +3465,25 @@ export function ThreeDModeShell({
   const areaFeedbackKeyRef = useRef(0);
   const lastPlayedSharedDawLiveSoundIdRef = useRef<string | null>(null);
   const isLocalHoldingStudioGuitarRef = useRef(false);
+  const isWatchReadyHoldingRef = useRef(false);
+  const startWatchReadyHold = useCallback(() => {
+    if (isWatchReadyHoldingRef.current || !canWatchReadyHold) {
+      return;
+    }
+
+    isWatchReadyHoldingRef.current = true;
+    setIsWatchReadyHolding(true);
+    onStartWatchReadyHold();
+  }, [canWatchReadyHold, onStartWatchReadyHold]);
+  const endWatchReadyHold = useCallback(() => {
+    if (!isWatchReadyHoldingRef.current) {
+      return;
+    }
+
+    isWatchReadyHoldingRef.current = false;
+    setIsWatchReadyHolding(false);
+    onEndWatchReadyHold();
+  }, [onEndWatchReadyHold]);
   const { state: localDawState, actions: localDawActions } = useLocalDawState();
   const { state: localDawAudioState, actions: localDawAudioActions } = useLocalDawAudioEngine();
   const stationAssignments = useMemo(() => getUserStationAssignments(users, levelConfig), [levelConfig, users]);
@@ -3844,6 +3937,7 @@ export function ThreeDModeShell({
     if (status !== "ready" || revealState !== "complete") {
       setControlState("idle");
       setAreaFeedback(null);
+      setIsWatchViewActive(false);
     }
   }, [revealState, status]);
 
@@ -3852,6 +3946,133 @@ export function ThreeDModeShell({
       setIsEscapeMenuOpen(false);
     }
   }, [controlState, revealState, status]);
+
+  useEffect(() => {
+    if (isEscapeMenuOpen) {
+      setIsWatchViewActive(false);
+    }
+  }, [isEscapeMenuOpen]);
+
+  useEffect(() => {
+    if (!isWatchViewActive || isEscapeMenuOpen || status !== "ready" || revealState !== "complete" || !canWatchReadyHold) {
+      endWatchReadyHold();
+    }
+  }, [canWatchReadyHold, endWatchReadyHold, isEscapeMenuOpen, isWatchViewActive, revealState, status]);
+
+  useEffect(() => {
+    const canHandleWatchGlance = (event: KeyboardEvent) => (
+      status === "ready" &&
+      revealState === "complete" &&
+      event.code === WATCH_GLANCE_CODE &&
+      !event.ctrlKey &&
+      !event.metaKey &&
+      !event.altKey &&
+      !isInteractiveTarget(event.target)
+    );
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (!canHandleWatchGlance(event) || event.repeat || isEscapeMenuOpen) {
+        return;
+      }
+
+      event.preventDefault();
+      event.stopPropagation();
+      setIsWatchViewActive((currentValue) => !currentValue);
+    };
+
+    const handleKeyUp = (event: KeyboardEvent) => {
+      if (!canHandleWatchGlance(event)) {
+        return;
+      }
+
+      event.preventDefault();
+      event.stopPropagation();
+    };
+
+    const handleBlur = () => {
+      setIsWatchViewActive(false);
+      endWatchReadyHold();
+    };
+
+    window.addEventListener("keydown", handleKeyDown, { capture: true });
+    window.addEventListener("keyup", handleKeyUp, { capture: true });
+    window.addEventListener("blur", handleBlur);
+
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown, { capture: true });
+      window.removeEventListener("keyup", handleKeyUp, { capture: true });
+      window.removeEventListener("blur", handleBlur);
+    };
+  }, [endWatchReadyHold, isEscapeMenuOpen, revealState, status]);
+
+  useEffect(() => {
+    const isWatchReadyControlAvailable = (
+      status === "ready" &&
+      revealState === "complete" &&
+      isWatchViewActive &&
+      !isEscapeMenuOpen
+    );
+
+    const canHandleWatchReadyEvent = (event: KeyboardEvent) => (
+      event.code === JUMP_TRIGGER_CODE &&
+      !event.ctrlKey &&
+      !event.metaKey &&
+      !event.altKey &&
+      !isInteractiveTarget(event.target)
+    );
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (!isWatchReadyControlAvailable || !canHandleWatchReadyEvent(event)) {
+        return;
+      }
+
+      event.preventDefault();
+      event.stopPropagation();
+
+      if (event.repeat || !canWatchReadyHold) {
+        return;
+      }
+
+      startWatchReadyHold();
+    };
+
+    const handleKeyUp = (event: KeyboardEvent) => {
+      if (!canHandleWatchReadyEvent(event)) {
+        return;
+      }
+
+      if (!isWatchReadyControlAvailable && !isWatchReadyHoldingRef.current) {
+        return;
+      }
+
+      event.preventDefault();
+      event.stopPropagation();
+      endWatchReadyHold();
+    };
+
+    const handleBlur = () => {
+      endWatchReadyHold();
+    };
+
+    window.addEventListener("keydown", handleKeyDown, { capture: true });
+    window.addEventListener("keyup", handleKeyUp, { capture: true });
+    window.addEventListener("blur", handleBlur);
+
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown, { capture: true });
+      window.removeEventListener("keyup", handleKeyUp, { capture: true });
+      window.removeEventListener("blur", handleBlur);
+      endWatchReadyHold();
+    };
+  }, [
+    canWatchReadyHold,
+    endWatchReadyHold,
+    isEscapeMenuOpen,
+    isWatchViewActive,
+    revealState,
+    startWatchReadyHold,
+    status,
+  ]);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -3995,6 +4216,7 @@ export function ThreeDModeShell({
       data-3d-status={status}
       data-control-state={controlState}
       data-escape-menu-open={isEscapeMenuOpen ? "true" : "false"}
+      data-watch-view-active={isWatchViewActive ? "true" : "false"}
       data-level-id={levelConfig.id}
       data-area-id={currentAreaId ?? undefined}
     >
@@ -4153,6 +4375,19 @@ export function ThreeDModeShell({
       ) : null}
 
       {shouldShowFocusHint ? <div className="three-d-shell-focus-hint">Click view to move</div> : null}
+
+      {status === "ready" && revealState === "complete" && isWatchViewActive ? (
+        <WatchTimerDisplay
+          countdownDisplay={countdownDisplay}
+          users={users}
+          localUserId={localUserId}
+          ownerId={ownerId}
+          roundNumber={roundNumber}
+          canWatchReadyHold={canWatchReadyHold}
+          watchReadyHoldStatus={watchReadyHoldStatus}
+          isWatchReadyHolding={isWatchReadyHolding}
+        />
+      ) : null}
 
       {status === "ready" && revealState === "complete" && isTopDownViewActive ? (
         <div className="three-d-camera-mode" aria-live="polite">

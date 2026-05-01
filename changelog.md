@@ -8,6 +8,63 @@ Entries must be in reverse chronological order. New entries go at the top, above
 
 Use a level-two heading for every entry so the editor can fold each change.
 
+## [2601] - 2026-04-30 22:14 - `syncsesh-activity-promotion / Inline Custom Player Name Edit`
+
+- Added double-click inline editing for the local player's lobby-card display name.
+- Added custom-name validation for empty, duplicate, and over-length names while reusing the existing display-name selection path.
+- Styled the inline name input to fit the player card without disrupting role, Roll, or ping controls.
+- Touched `src/components/LobbyPanel.tsx`, `src/styles/global.css`, and `changelog.md`.
+- Build/test: `npm.cmd run build` passed with the existing Vite large-chunk warning.
+
+## [2600] - 2026-04-30 22:05 - `syncsesh-activity-promotion / Keep Roll Name Menu Open While Scrolling`
+
+- Fixed the Roll right-click name picker so scrolling inside the menu no longer triggers the global scroll dismissal handler.
+- Added wheel event containment on the portaled name picker while preserving outside scroll, outside pointer, resize, Escape, selection, and close-button dismissal.
+- Touched `src/components/LobbyPanel.tsx` and `changelog.md`.
+- Build/test: `npm.cmd run build` passed with the existing Vite large-chunk warning.
+
+## [2599] - 2026-04-30 21:52 - `syncsesh-activity-promotion / Anchor Player Ping Beside Roll`
+
+- Moved the lobby player-card ping pill to the far-right action cluster after the Roll controls.
+- Added a stable `--ms` ping placeholder when per-user latency is not available yet, so the slot remains visible.
+- Touched `src/components/LobbyPanel.tsx`, `src/styles/global.css`, and `changelog.md`.
+- Build/test: `npm.cmd run build` passed with the existing Vite large-chunk warning.
+
+## [2598] - 2026-04-30 21:01 - `syncsesh-activity-promotion / Watch Tab Toggle`
+
+- Changed the 3D watch from hold-to-view to a `Tab` toggle, while still preventing browser focus traversal on keyup.
+- Updated watch plan copy so manual checks and acceptance criteria describe toggling instead of holding.
+- Touched `src/3d/ThreeDModeShell.tsx`, `docs/3d/3dvision30-control-room-watch-ready.md`, and `changelog.md`.
+- Build/test: `npm.cmd run build` passed with the existing Vite large-chunk warning.
+
+## [2597] - 2026-04-30 20:56 - `syncsesh-activity-promotion / V30-4 - Wire Watch Space Hold To Ready`
+
+- Wired the 3D watch to start and end ready-hold with `Space` while the `Tab` watch is open, using the existing lobby and sync eligibility rules.
+- Added watch-specific ready-hold props, local hold tracking, cleanup on watch close/blur/unmount, and watch footer copy for available, holding, and unavailable states.
+- Touched `src/screens/MainScreen.tsx`, `src/3d/ThreeDModeShell.tsx`, `docs/3d/3dvision30-control-room-watch-ready.md`, and `changelog.md`.
+- Build/test: `npm.cmd run build` passed with the existing Vite large-chunk warning.
+
+## [2596] - 2026-04-30 20:04 - `syncsesh-activity-promotion / V30-3 - Render Watch Timer Display`
+
+- Added a display-only 3D watch HUD that appears when toggled with `Tab`, showing timer, phase, round, ready/active counts, and local presence.
+- Styled the watch overlay with compact responsive CSS, urgency styling, and pointer-event pass-through.
+- Touched `src/3d/ThreeDModeShell.tsx`, `src/styles/global.css`, `docs/3d/3dvision30-control-room-watch-ready.md`, and `changelog.md`.
+- Build/test: `npm.cmd run build` passed with the existing Vite large-chunk warning.
+
+## [2595] - 2026-04-30 19:47 - `syncsesh-activity-promotion / V30-2 - Add Watch Glance State On Tab`
+
+- Added local 3D watch glance state driven by `Tab` while the hidden world is ready and reveal-complete.
+- Added cleanup for watch state on blur, Escape menu open, and shell status/reveal changes, plus `data-watch-view-active` on the 3D shell root for verification.
+- Touched `src/3d/ThreeDModeShell.tsx`, `docs/3d/3dvision30-control-room-watch-ready.md`, and `changelog.md`.
+- Build/test: `npm.cmd run build` passed with the existing Vite large-chunk warning.
+
+## [2594] - 2026-04-30 15:42 - `syncsesh-activity-promotion / V30-1 - Rebind Top-Down Camera To T`
+
+- Rebound the hidden 3D top-down camera toggle from `Tab` to `T` with a named `TOP_DOWN_TOGGLE_CODE` constant.
+- Updated direct 3D manual-test top-down checks so they reference `T` instead of `Tab`.
+- Touched `src/3d/ThreeDModeShell.tsx`, `docs/3d/manual-test-checklist.md`, `docs/3d/3dvision30-control-room-watch-ready.md`, and `changelog.md`.
+- Build/test: `npm.cmd run build` passed with the existing Vite large-chunk warning.
+
 ## [2593] - 2026-04-30 15:17 - `syncsesh-activity-promotion / Fullscreen Hidden 3D Viewport`
 
 - Portaled the hidden 3D world overlay to `document.body` so dashboard zoom, max-width, padding, and perspective no longer constrain the viewport.

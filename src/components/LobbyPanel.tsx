@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
-import type { MouseEvent } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import type { KeyboardEvent as ReactKeyboardEvent, MouseEvent } from "react";
 import { createPortal } from "react-dom";
 import type { DerivedLobbyState, SessionInfo, SessionUser } from "../types/session";
 
@@ -25,6 +25,7 @@ interface NamePickerPosition {
 const NAME_PICKER_ESTIMATED_WIDTH = 300;
 const NAME_PICKER_ESTIMATED_HEIGHT = 340;
 const NAME_PICKER_VIEWPORT_GAP = 12;
+const CUSTOM_DISPLAY_NAME_MAX_LENGTH = 24;
 const LOBBY_RULES_STORAGE_KEY = "syncsesh.lobby-rules.v1";
 
 interface LobbyRulesPreference {
@@ -112,6 +113,14 @@ function getUserSubcopy(user: SessionUser) {
   }
 }
 
+function getUserPingLabel(user: SessionUser) {
+  return user.latencyMs !== undefined ? `${user.latencyMs}ms` : "--ms";
+}
+
+function normalizeDisplayName(displayName: string) {
+  return displayName.trim().replace(/\s+/g, " ");
+}
+
 export function LobbyPanel({
   session,
   users,
@@ -128,6 +137,10 @@ export function LobbyPanel({
   const [isNamePickerOpen, setIsNamePickerOpen] = useState(false);
   const [lobbyRulesPreference, setLobbyRulesPreference] = useState(readLobbyRulesPreference);
   const [namePickerPosition, setNamePickerPosition] = useState<NamePickerPosition>({ left: 0, top: 0 });
+  const [isEditingLocalName, setIsEditingLocalName] = useState(false);
+  const [draftLocalName, setDraftLocalName] = useState("");
+  const [nameEditError, setNameEditError] = useState<string | null>(null);
+  const nameEditInputRef = useRef<HTMLInputElement | null>(null);
   const { isOpen: isLobbyRulesOpen, isCollapsed: isLobbyRulesCollapsed } = lobbyRulesPreference;
   const localDisplayName = lobbyState.localUser?.displayName ?? "";
   const emptyPlayerSlotCount = Math.max(Math.min(maxVisibleEmptyPlayerSlots, session.capacity.max - users.length), 0);
@@ -141,6 +154,27 @@ export function LobbyPanel({
       !takenNames.has(name.trim().toLowerCase())
     ));
   }, [generatedDisplayNames, lobbyState.localUser?.id, localDisplayName, users]);
+  const takenCustomDisplayNames = useMemo(() => new Set(users
+    .filter((user) => user.id !== lobbyState.localUser?.id)
+    .map((user) => normalizeDisplayName(user.displayName).toLowerCase())
+    .filter(Boolean)), [lobbyState.localUser?.id, users]);
+
+  useEffect(() => {
+    if (!isEditingLocalName) {
+      return;
+    }
+
+    nameEditInputRef.current?.focus();
+    nameEditInputRef.current?.select();
+  }, [isEditingLocalName]);
+
+  useEffect(() => {
+    if (!lobbyState.localUser && isEditingLocalName) {
+      setIsEditingLocalName(false);
+      setDraftLocalName("");
+      setNameEditError(null);
+    }
+  }, [isEditingLocalName, lobbyState.localUser]);
 
   useEffect(() => {
     if (!isNamePickerOpen) {
@@ -153,16 +187,27 @@ export function LobbyPanel({
         closeNamePicker();
       }
     };
+    const closeOnScroll = (event: Event) => {
+      if (event.target instanceof Node) {
+        const namePickerMenu = document.querySelector(".roll-name-menu");
+
+        if (namePickerMenu?.contains(event.target)) {
+          return;
+        }
+      }
+
+      closeNamePicker();
+    };
 
     window.addEventListener("pointerdown", closeNamePicker);
     window.addEventListener("resize", closeNamePicker);
-    window.addEventListener("scroll", closeNamePicker, true);
+    window.addEventListener("scroll", closeOnScroll, true);
     window.addEventListener("keydown", closeOnEscape);
 
     return () => {
       window.removeEventListener("pointerdown", closeNamePicker);
       window.removeEventListener("resize", closeNamePicker);
-      window.removeEventListener("scroll", closeNamePicker, true);
+      window.removeEventListener("scroll", closeOnScroll, true);
       window.removeEventListener("keydown", closeOnEscape);
     };
   }, [isNamePickerOpen]);
@@ -170,6 +215,75 @@ export function LobbyPanel({
   useEffect(() => {
     writeLobbyRulesPreference(lobbyRulesPreference);
   }, [lobbyRulesPreference]);
+
+  const getCustomDisplayNameError = (displayName: string) => {
+    const cleanDisplayName = normalizeDisplayName(displayName);
+
+    if (!cleanDisplayName) {
+      return "Name required";
+    }
+
+    if (cleanDisplayName.length > CUSTOM_DISPLAY_NAME_MAX_LENGTH) {
+      return `Max ${CUSTOM_DISPLAY_NAME_MAX_LENGTH} chars`;
+    }
+
+    if (takenCustomDisplayNames.has(cleanDisplayName.toLowerCase())) {
+      return "Name taken";
+    }
+
+    return null;
+  };
+
+  const startLocalNameEdit = (displayName: string) => {
+    setIsNamePickerOpen(false);
+    setDraftLocalName(displayName);
+    setNameEditError(null);
+    setIsEditingLocalName(true);
+  };
+
+  const cancelLocalNameEdit = () => {
+    setIsEditingLocalName(false);
+    setDraftLocalName("");
+    setNameEditError(null);
+  };
+
+  const commitLocalNameEdit = (options: { keepOpenOnError: boolean }) => {
+    const cleanDisplayName = normalizeDisplayName(draftLocalName);
+    const validationError = getCustomDisplayNameError(cleanDisplayName);
+
+    if (validationError) {
+      if (options.keepOpenOnError) {
+        setNameEditError(validationError);
+        nameEditInputRef.current?.focus();
+        nameEditInputRef.current?.select();
+        return;
+      }
+
+      cancelLocalNameEdit();
+      return;
+    }
+
+    if (cleanDisplayName !== localDisplayName) {
+      onSelectDisplayName(cleanDisplayName);
+    }
+
+    setIsEditingLocalName(false);
+    setDraftLocalName("");
+    setNameEditError(null);
+  };
+
+  const handleLocalNameEditKeyDown = (event: ReactKeyboardEvent<HTMLInputElement>) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      commitLocalNameEdit({ keepOpenOnError: true });
+      return;
+    }
+
+    if (event.key === "Escape") {
+      event.preventDefault();
+      cancelLocalNameEdit();
+    }
+  };
 
   const openNamePicker = (event: MouseEvent<HTMLButtonElement>) => {
     event.preventDefault();
@@ -201,6 +315,7 @@ export function LobbyPanel({
             top: `${namePickerPosition.top}px`,
           }}
           onPointerDown={(event) => event.stopPropagation()}
+          onWheel={(event) => event.stopPropagation()}
           onContextMenu={(event) => event.preventDefault()}
         >
           <div className="roll-name-menu-header">
@@ -327,21 +442,41 @@ export function LobbyPanel({
             </div>
             <div className="user-copy">
               <div className="user-title-row">
-                <strong>
-                  {user.displayName}
-                  {user.id === lobbyState.localUser?.id ? " (You)" : ""}
-                </strong>
+                {user.id === lobbyState.localUser?.id && isEditingLocalName ? (
+                  <input
+                    ref={nameEditInputRef}
+                    className="user-name-edit-input"
+                    value={draftLocalName}
+                    maxLength={CUSTOM_DISPLAY_NAME_MAX_LENGTH + 8}
+                    aria-label="Edit your display name"
+                    aria-invalid={nameEditError ? "true" : undefined}
+                    onChange={(event) => {
+                      setDraftLocalName(event.target.value);
+                      if (nameEditError) {
+                        setNameEditError(null);
+                      }
+                    }}
+                    onBlur={() => commitLocalNameEdit({ keepOpenOnError: false })}
+                    onKeyDown={handleLocalNameEditKeyDown}
+                  />
+                ) : (
+                  <strong
+                    className={user.id === lobbyState.localUser?.id ? "user-name-edit-trigger" : undefined}
+                    title={user.id === lobbyState.localUser?.id ? "Double-click to edit name" : undefined}
+                    onDoubleClick={user.id === lobbyState.localUser?.id ? () => startLocalNameEdit(user.displayName) : undefined}
+                  >
+                    {user.displayName}
+                    {user.id === lobbyState.localUser?.id ? " (You)" : ""}
+                  </strong>
+                )}
                 <span className="meta-label">{getUserRoleLabel(user, session)}</span>
               </div>
-              <span className="user-subcopy">{getUserSubcopy(user)}</span>
+              <span className={`user-subcopy ${nameEditError && user.id === lobbyState.localUser?.id ? "user-subcopy-error" : ""}`}>
+                {nameEditError && user.id === lobbyState.localUser?.id ? nameEditError : getUserSubcopy(user)}
+              </span>
             </div>
             <div className="user-status">
               <span className={`presence-chip presence-${user.presence}`}>{getStateLabel(user.presence)}</span>
-              {user.latencyMs !== undefined ? (
-                <span className="user-ping" title={`Ping ${user.latencyMs}ms`}>
-                  {user.latencyMs}ms
-                </span>
-              ) : null}
               {user.id === lobbyState.localUser?.id ? (
                 <div className="roll-name-wrapper">
                   {discordDisplayName && user.displayName !== discordDisplayName ? (
@@ -369,6 +504,9 @@ export function LobbyPanel({
                   </button>
                 </div>
               ) : null}
+              <span className="user-ping" title={user.latencyMs !== undefined ? `Ping ${user.latencyMs}ms` : "Ping unavailable"}>
+                {getUserPingLabel(user)}
+              </span>
               {user.presence === "ready" ? (
                 <span className="ready-bars" aria-hidden="true">
                   III

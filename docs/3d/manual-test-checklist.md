@@ -49,8 +49,8 @@
 - Verify mouse look works with pointer lock where supported.
 - If pointer lock is unavailable or rejected, verify drag-look fallback works.
 - Press Escape and verify pointer lock releases without closing the hidden world.
-- Press Tab once and verify top-down view appears.
-- Press Tab again and verify first-person view returns.
+- Press T once and verify top-down view appears.
+- Press T again and verify first-person view returns.
 - Verify W/A/S/D does not move during reveal or while top-down is active.
 - Verify the FPV body is hidden during reveal, before first focus, top-down, return animation, and fallback/loading states.
 - In focused first-person, look down and verify the local body is visible without blocking the reticle, station targeting, or range shooting.
@@ -95,7 +95,7 @@
 - Click once to focus controls and verify this does not immediately fire a target.
 - Aim at targets and primary-click; verify shooting still works in Level 2.
 - Verify target hit feedback, score/hits/miss/accuracy behavior, and challenge reset/completion still work in Level 2.
-- Press Tab during range use and verify top-down disables shooting and reticle interaction.
+- Press T during range use and verify top-down disables shooting and reticle interaction.
 - Aim at the Level 2 BACK door and press E; verify returning to Level 1 still works.
 
 ### Presence And Sim Roaming
@@ -242,11 +242,27 @@
 - Press Escape and verify pointer lock releases without closing the hidden world.
 - In a browser or iframe where pointer lock is unavailable, drag inside the 3D view and verify fallback look works.
 - Verify movement is clamped to room/station bounds.
-- Press Tab once; verify top-down view appears.
-- Press Tab again; verify first-person view returns.
+- Press T once; verify top-down view appears.
+- Press T again; verify first-person view returns.
 - Verify W/A/S/D movement follows the current camera direction.
 - Verify W/A/S/D does not move during reveal or while top-down view is active.
 - Verify Space ready-hold still works outside the shell.
+
+## Control Room Watch Ready
+
+- Join the session, type `syncsesh`, complete the reveal, and verify the watch is closed by default with `data-watch-view-active="false"`.
+- Press Tab once in first-person and verify the watch opens with `data-watch-view-active="true"` and browser focus does not move to hidden or underlying page controls.
+- Press Tab again and verify the watch closes with `data-watch-view-active="false"`.
+- Press T to enter top-down, press Tab, and verify the watch toggles open without changing the top-down camera state.
+- Press Tab again while top-down is active and verify the watch closes while top-down remains active.
+- With the watch closed, press Space and verify the current 3D movement behavior still applies: jump in first-person, or freecam rise when top-down freecam owns Space.
+- With the watch open and ready available, hold Space and verify the watch ready-hold starts and the watch footer changes to the holding state.
+- Release Space while the watch remains open and verify ready-hold ends cleanly.
+- With the watch open, hold Space, press Tab to close the watch, and verify ready-hold ends once without a stuck holding state.
+- With the watch open, hold Space, press Escape, and verify the Escape menu opens while the watch closes and ready-hold releases.
+- With the watch open, blur the browser tab or window and verify the watch closes and ready-hold releases.
+- With the watch open, click Exit and verify the normal 2D dashboard remains usable with no stuck ready-hold.
+- If sync is unavailable, unjoined, or spectating, verify Space while the watch is open does not start ready-hold and the watch shows disabled status copy.
 
 ## First-Person Controls Hardening
 
@@ -260,8 +276,8 @@
 - If pointer lock is unavailable or rejected, drag inside the canvas; verify drag-look works.
 - Verify W/A/S/D movement follows the current camera direction.
 - Verify movement remains clamped by room bounds and blockers.
-- Press Tab; verify top-down toggles on.
-- Press Tab again; verify top-down toggles off and first-person look/position are restored.
+- Press T; verify top-down toggles on.
+- Press T again; verify top-down toggles off and first-person look/position are restored.
 - Verify W/A/S/D is paused while top-down is active.
 - Click Exit; verify normal timer app remains usable.
 - Verify typing in inputs/admin controls does not move the camera.
@@ -279,7 +295,7 @@
 - Re-enter, aim at the local monitor, and primary-click; verify it does not return to the dashboard.
 - Aim at another station monitor and press E; verify it does not return to the dashboard.
 - Enter or face the shooting range, aim at a target, and primary-click; verify shooting still works.
-- Press Tab and verify top-down view disables the reticle, monitor return, and shooting.
+- Press T and verify top-down view disables the reticle, monitor return, and shooting.
 - Click Exit and verify normal timer app remains usable.
 
 ## First-Person Body Polish
@@ -291,8 +307,8 @@
 - Look forward and verify the body does not block the reticle or main movement view.
 - Move with W/A/S/D and verify body bob is subtle.
 - Aim at the local monitor and press E; verify dashboard return works and the body hides during return.
-- Re-enter, press Tab, and verify the body hides in top-down view.
-- Press Tab again and verify the body appears again in focused first-person view.
+- Re-enter, press T, and verify the body hides in top-down view.
+- Press T again and verify the body appears again in focused first-person view.
 - Aim and shoot in the range; verify the body does not interfere with targeting.
 - Click Exit and verify normal timer app remains usable.
 
@@ -303,8 +319,8 @@
 - Click the 3D canvas and verify controls activate.
 - Verify the small center reticle appears only after controls are active.
 - Press E with no production interactables and verify there is no visible side effect or console error.
-- Press Tab and verify the top-down view toggles on while the reticle and interaction are inactive.
-- Press Tab again and verify first-person view returns.
+- Press T and verify the top-down view toggles on while the reticle and interaction are inactive.
+- Press T again and verify first-person view returns.
 - Press Escape and verify pointer lock releases without closing the hidden world.
 - Click Exit and verify normal timer app remains usable.
 - Open with `?spike3d=1` and verify the rendering spike remains independent.
@@ -317,7 +333,7 @@
 - Verify the center reticle still appears only after controls are active.
 - Press E with no production interactables and verify there is no visible side effect or console error.
 - Verify no shooting targets, score, hit feedback, or Level 2 selector appears.
-- Press Tab and verify top-down view disables the reticle and interaction behavior.
+- Press T and verify top-down view disables the reticle and interaction behavior.
 - Press Escape and verify pointer lock releases without closing the hidden world.
 - Click Exit and verify normal timer app remains usable.
 
@@ -331,8 +347,8 @@
 - Verify the aimed target flashes briefly.
 - Verify the local HITS display increments.
 - Aim away from targets and click; verify no target flashes and HITS does not increment.
-- Press Tab and verify top-down view disables shooting.
-- Press Tab again and verify first-person view returns.
+- Press T and verify top-down view disables shooting.
+- Press T again and verify first-person view returns.
 - Press Escape and verify pointer lock releases without closing the hidden world.
 - Verify no Level 2 selector, synced scoreboard, challenge timer, or host controls appear in Level 1.
 - Click Exit and verify normal timer app remains usable.
@@ -347,7 +363,7 @@
 - Click the 3D canvas to activate controls.
 - Verify Level 2 shows lane strips, range targets, the timer display, and the local HITS display.
 - Aim at range targets and primary-click; verify target flash and HITS increment.
-- Press Tab and verify top-down still works and shooting is disabled while top-down is active.
+- Press T and verify top-down still works and shooting is disabled while top-down is active.
 - Press Escape and verify pointer lock releases without closing the hidden world.
 - Click Exit, re-enter Level 2, and verify local HITS resets.
 - Open with `?level=bad`, type `syncsesh`, and verify the shell falls back to Level 1.
@@ -365,7 +381,7 @@
 - Aim away from targets and click during the challenge; verify MISS increments and accuracy changes.
 - Continue until the timer reaches zero; verify the display shows DONE and final stats remain visible.
 - Primary-click again after DONE; verify a fresh local challenge starts and stats reset.
-- Press Tab during a run; verify top-down mode disables shooting.
+- Press T during a run; verify top-down mode disables shooting.
 - Press Escape and verify pointer lock releases without closing the hidden world.
 - Click Exit and re-enter Level 2; verify challenge state resets.
 - Open without query params and verify Level 1 has no range challenge UI.
@@ -385,7 +401,7 @@
 - Improve one client's score and verify its row updates instead of duplicating.
 - Fire during a challenge and verify shots are not reflected on the other client before challenge completion.
 - Reset or replay the normal session round and verify old scoreboard rows clear or no longer display.
-- Press Tab and verify top-down still disables shooting.
+- Press T and verify top-down still disables shooting.
 - Press Escape and verify pointer lock releases without closing the hidden world.
 - Click Exit and verify the normal timer app remains usable.
 - Open with `?spike3d=1` and verify the rendering spike remains independent and above the shell.
@@ -423,7 +439,7 @@
 - Use the Level 1 RANGE door in client A and verify client B no longer sees A in Level 1 once A is in Level 2.
 - Enter Level 2 in client B and verify A appears as a simple free-roam marker there.
 - Verify range challenge and synced scoreboard still work in Level 2.
-- Press Tab in one client and verify top-down camera position is not published as that user's free-roam pose.
+- Press T in one client and verify top-down camera position is not published as that user's free-roam pose.
 - Open with `?level=level-2-range` and verify direct Level 2 entry still publishes Level 2 presence.
 - Open with `?level=bad` and verify fallback to Level 1 still works.
 - Confirm no normal-app presence controls, level selector, or new menus appear.
@@ -470,7 +486,7 @@
 - Verify other hero wall monitors do not become clickable.
 - Verify local station monitor return with E still works.
 - Verify the old east range opening is visually resolved/blocked, and direct Level 2 range loading still works.
-- Verify WASD, pointer lock, Tab top-down, FPV body, hidden unlock, sim roaming, jukebox, and the normal 2D dashboard remain unchanged.
+- Verify WASD, pointer lock, T top-down, FPV body, hidden unlock, sim roaming, jukebox, and the normal 2D dashboard remain unchanged.
 
 ## RGB Workstation Props
 
@@ -522,7 +538,7 @@
 - Verify the old range opening is not walk-through in Level 1.
 - Verify the hero wall remains readable and unobstructed.
 - Verify RGB workstations, lounge, and kitchen island are visually distinct.
-- Press Tab and verify top-down framing still gives a useful overview of Level 1.
+- Press T and verify top-down framing still gives a useful overview of Level 1.
 - Verify assigned stations and local monitor return still work.
 - Verify range shooting still works.
 - Verify sim roaming markers remain visible enough and are not obviously hidden inside props.

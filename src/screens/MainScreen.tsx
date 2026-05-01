@@ -2612,6 +2612,32 @@ export function MainScreen() {
 
     endReadyHold();
   };
+  const isReadyHoldSyncReady = state.syncStatus.mode === "mock" || state.syncStatus.connection === "connected";
+  const canWatchReadyHold = lobbyState.canHoldToReady && isReadyHoldSyncReady;
+  const watchReadyHoldStatus = !isReadyHoldSyncReady
+    ? "SYNC OFFLINE"
+    : !lobbyState.isJoined
+      ? "JOIN SESSION"
+      : lobbyState.isLocalUserSpectating
+        ? "SPECTATING"
+        : !lobbyState.canHoldToReady
+          ? "WAITING"
+          : "HOLD SPACE TO READY";
+  const handleThreeDWatchStartReadyHold = () => {
+    if (!isThreeDModeOpen || !lobbyState.canHoldToReady || !isReadyHoldSyncReady) {
+      return;
+    }
+
+    playCue("ui_ready_hold_start");
+    startReadyHold();
+  };
+  const handleThreeDWatchEndReadyHold = () => {
+    if (!lobbyState.releaseStartsCountdown) {
+      playCue("ui_ready_release_cancel");
+    }
+
+    endReadyHold();
+  };
   const shouldMountDeckWorkspace = (isSoundCloudPanelEnabled && soundCloudPanelMode === "decks") || isThreeDModeOpen;
   const soundCloudDiagnosticPanelMode = isSoundCloudPanelEnabled ? soundCloudPanelMode : "hidden";
   const adminSoundCloudPlayer = soundCloudPanelMode === "decks" ? soundCloudDeckA : frontEndSoundCloudPlayer;
@@ -3287,12 +3313,16 @@ export function MainScreen() {
             syncStatus={state.syncStatus}
             canControlSharedDawTransport={lobbyState.isLocalHost}
             canAdminSharedDawClips={lobbyState.isLocalHost}
+            canWatchReadyHold={canWatchReadyHold}
+            watchReadyHoldStatus={watchReadyHoldStatus}
             onSetSharedDawTempo={setDawTempo}
             onPlaySharedDawTransport={playDawTransport}
             onStopSharedDawTransport={stopDawTransport}
             onPublishSharedDawClip={publishDawClip}
             onClearSharedDawClip={clearDawClip}
             onBroadcastDawLiveSound={broadcastDawLiveSound}
+            onStartWatchReadyHold={handleThreeDWatchStartReadyHold}
+            onEndWatchReadyHold={handleThreeDWatchEndReadyHold}
             studioGuitar={state.studioGuitar}
             onPickupStudioGuitar={pickupStudioGuitar}
             onDropStudioGuitar={dropStudioGuitar}
