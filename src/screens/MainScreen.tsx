@@ -15,7 +15,7 @@ import { type SoundCloudPanelMode } from "../components/SoundCloudModeToggle";
 import { SoundCloudPanel } from "../components/SoundCloudPanel";
 import { SoundCloudWidgetPanel } from "../components/SoundCloudWidgetPanel";
 import { StatusFooter } from "../components/StatusFooter";
-import { TextVoicePanel, type TextVoiceLogEntry } from "../components/TextVoicePanel";
+import { TextVoicePanel, type TextVoiceBrowserVoice, type TextVoiceLogEntry, type TextVoiceStyleSettings } from "../components/TextVoicePanel";
 import { TimerPanel } from "../components/TimerPanel";
 import type { PanelShellDragInfo } from "../components/PanelShell";
 import type {
@@ -65,6 +65,10 @@ type DebugConsoleDisplayMode = "fullscreen" | "fullscreen2" | "float";
 const DEBUG_CONSOLE_COMMAND_HISTORY_LIMIT = 50;
 const TEXT_VOICE_LOG_LIMIT = 30;
 const TEXT_VOICE_MAX_LENGTH = 180;
+const TEXT_VOICE_SELECTED_VOICE_URI_STORAGE_KEY = "sync_sesh_text_voice_selected_voice_uri";
+const TEXT_VOICE_SELECTED_STYLE_STORAGE_KEY = "sync_sesh_text_voice_selected_style";
+const TEXT_VOICE_CUSTOM_STYLE_STORAGE_KEY = "sync_sesh_text_voice_custom_style";
+const TEXT_VOICE_STYLE_PANEL_EXPANDED_STORAGE_KEY = "sync_sesh_text_voice_style_panel_expanded";
 
 const DEBUG_CONSOLE_COMMAND_HELP =
   "Available commands: hide, clear, help, say-your message, showt2v, resetlayout, small, normal, admin, hidejoin, showjoin, show globe, hide globe, force start, force stop, setround = 5, copy, snapshot, retry, radio, float, console1, console2, fullscreen, background, background 0-100, trans-text 0-100, compact, filter all, filter auth, filter sdk, filter profile, filter sync, filter network, filter ui, filter command. Example: say-note to chat speaks note to chat.";
@@ -83,9 +87,75 @@ const EMPTY_CELLS_HIDDEN_STORAGE_KEY = "sync_sesh_admin_hide_empty_cells";
 const MAX_VISIBLE_EMPTY_PLAYER_SLOTS_STORAGE_KEY = "sync_sesh_admin_max_visible_empty_player_slots";
 
 type SoundCloudPanelId = (typeof SOUNDCLOUD_PANEL_IDS)[number];
+type TextVoiceStylePreset = "normal" | "fast" | "tiny" | "deep" | "announcer" | "robot" | "custom";
+type BuiltInTextVoiceStylePreset = Exclude<TextVoiceStylePreset, "custom">;
+
+const DEFAULT_TEXT_VOICE_CUSTOM_STYLE: TextVoiceStyleSettings = {
+  rate: 1,
+  pitch: 1,
+  volume: 1,
+};
+
+const TEXT_VOICE_STYLE_PRESETS: Record<BuiltInTextVoiceStylePreset, {
+  label: string;
+  rate: number;
+  pitch: number;
+  volume: number;
+  transformText?: (text: string) => string;
+}> = {
+  normal: { label: "Normal", rate: 1, pitch: 1, volume: 1 },
+  fast: { label: "Fast", rate: 1.35, pitch: 1, volume: 1 },
+  tiny: { label: "Tiny", rate: 1.15, pitch: 1.55, volume: 1 },
+  deep: { label: "Deep", rate: 0.9, pitch: 0.65, volume: 1 },
+  announcer: { label: "Announcer", rate: 0.92, pitch: 0.95, volume: 1 },
+  robot: {
+    label: "Robot",
+    rate: 0.95,
+    pitch: 0.8,
+    volume: 1,
+    transformText: (text) => text.replace(/[.!?]+/g, "."),
+  },
+};
 
 function isSoundCloudPanelId(panelId: PanelId): panelId is SoundCloudPanelId {
   return SOUNDCLOUD_PANEL_IDS.includes(panelId as SoundCloudPanelId);
+}
+
+function isTextVoiceStylePreset(value: string): value is TextVoiceStylePreset {
+  return value === "custom" || value in TEXT_VOICE_STYLE_PRESETS;
+}
+
+function clampTextVoiceStyleValue(value: number, min: number, max: number) {
+  if (!Number.isFinite(value)) {
+    return min;
+  }
+
+  return Math.max(min, Math.min(max, value));
+}
+
+function sanitizeTextVoiceStyleSettings(value: unknown): TextVoiceStyleSettings {
+  if (!value || typeof value !== "object") {
+    return DEFAULT_TEXT_VOICE_CUSTOM_STYLE;
+  }
+
+  const settings = value as Partial<TextVoiceStyleSettings>;
+
+  return {
+    rate: clampTextVoiceStyleValue(Number(settings.rate), 0.5, 2),
+    pitch: clampTextVoiceStyleValue(Number(settings.pitch), 0, 2),
+    volume: clampTextVoiceStyleValue(Number(settings.volume), 0, 1),
+  };
+}
+
+function getTextVoiceStyleConfig(style: TextVoiceStylePreset | undefined, customStyle: TextVoiceStyleSettings) {
+  if (style === "custom") {
+    return {
+      label: "Custom",
+      ...customStyle,
+    };
+  }
+
+  return TEXT_VOICE_STYLE_PRESETS[style ?? "normal"];
 }
 
 function getStartupDebugCategory(event: StartupConsoleEvent): DebugLogCategory {
@@ -126,7 +196,35 @@ function getStartupDebugLevel(status: StartupProgressStep["status"]) {
   return "info";
 }
 
-function speakDebugConsoleLine(text: string) {
+function getTextVoiceBrowserVoices(): TextVoiceBrowserVoice[] {
+  if (typeof window === "undefined" || !("speechSynthesis" in window)) {
+    return [];
+  }
+
+  const voicesByUri = new Map<string, TextVoiceBrowserVoice>();
+
+  for (const voice of window.speechSynthesis.getVoices()) {
+    if (!voicesByUri.has(voice.voiceURI)) {
+      voicesByUri.set(voice.voiceURI, {
+        name: voice.name,
+        lang: voice.lang,
+        voiceURI: voice.voiceURI,
+        default: voice.default,
+      });
+    }
+  }
+
+  return Array.from(voicesByUri.values());
+}
+
+function speakDebugConsoleLine(
+  text: string,
+  options?: {
+    voiceURI?: string;
+    style?: TextVoiceStylePreset;
+    customStyle?: TextVoiceStyleSettings;
+  },
+) {
   if (typeof window === "undefined" || !("speechSynthesis" in window) || !("SpeechSynthesisUtterance" in window)) {
     return {
       ok: false,
@@ -136,10 +234,20 @@ function speakDebugConsoleLine(text: string) {
 
   window.speechSynthesis.cancel();
 
-  const utterance = new SpeechSynthesisUtterance(text);
-  utterance.rate = 1;
-  utterance.pitch = 1;
-  utterance.volume = 1;
+  const style = getTextVoiceStyleConfig(options?.style, options?.customStyle ?? DEFAULT_TEXT_VOICE_CUSTOM_STYLE);
+  const spokenText = style.transformText ? style.transformText(text) : text;
+  const utterance = new SpeechSynthesisUtterance(spokenText);
+  const selectedVoice = options?.voiceURI
+    ? window.speechSynthesis.getVoices().find((voice) => voice.voiceURI === options.voiceURI)
+    : undefined;
+
+  if (selectedVoice) {
+    utterance.voice = selectedVoice;
+  }
+
+  utterance.rate = style.rate;
+  utterance.pitch = style.pitch;
+  utterance.volume = style.volume;
   window.speechSynthesis.speak(utterance);
 
   return {
@@ -558,6 +666,62 @@ export function MainScreen() {
   const [soundCloudDeckSyncLabels, setSoundCloudDeckSyncLabels] = useState<Record<SoundCloudDeckId, string>>({ A: "SYNC", B: "SYNC" });
   const [soundCloudBoothConsoleEvents, setSoundCloudBoothConsoleEvents] = useState<SoundCloudBoothConsoleEvent[]>([]);
   const [textVoiceLog, setTextVoiceLog] = useState<TextVoiceLogEntry[]>([]);
+  const [availableTextVoiceVoices, setAvailableTextVoiceVoices] = useState<TextVoiceBrowserVoice[]>([]);
+  const [selectedTextVoiceURI, setSelectedTextVoiceURI] = useState(() => {
+    if (typeof window === "undefined") {
+      return "";
+    }
+
+    try {
+      return window.localStorage.getItem(TEXT_VOICE_SELECTED_VOICE_URI_STORAGE_KEY) ?? "";
+    } catch {
+      return "";
+    }
+  });
+  const [selectedTextVoiceStyle, setSelectedTextVoiceStyle] = useState<TextVoiceStylePreset>(() => {
+    if (typeof window === "undefined") {
+      return "normal";
+    }
+
+    try {
+      const savedStyle = window.localStorage.getItem(TEXT_VOICE_SELECTED_STYLE_STORAGE_KEY);
+      return savedStyle && isTextVoiceStylePreset(savedStyle) ? savedStyle : "normal";
+    } catch {
+      return "normal";
+    }
+  });
+  const [customTextVoiceStyle, setCustomTextVoiceStyle] = useState<TextVoiceStyleSettings>(() => {
+    if (typeof window === "undefined") {
+      return DEFAULT_TEXT_VOICE_CUSTOM_STYLE;
+    }
+
+    try {
+      const savedStyle = window.localStorage.getItem(TEXT_VOICE_CUSTOM_STYLE_STORAGE_KEY);
+      return savedStyle ? sanitizeTextVoiceStyleSettings(JSON.parse(savedStyle)) : DEFAULT_TEXT_VOICE_CUSTOM_STYLE;
+    } catch {
+      return DEFAULT_TEXT_VOICE_CUSTOM_STYLE;
+    }
+  });
+  const [isTextVoiceStyleControlsExpanded, setIsTextVoiceStyleControlsExpanded] = useState(() => {
+    if (typeof window === "undefined") {
+      return false;
+    }
+
+    try {
+      return window.localStorage.getItem(TEXT_VOICE_STYLE_PANEL_EXPANDED_STORAGE_KEY) === "true";
+    } catch {
+      return false;
+    }
+  });
+  const textVoiceStyleOptions = useMemo(() => (
+    [
+      ...Object.entries(TEXT_VOICE_STYLE_PRESETS).map(([id, preset]) => ({
+        id,
+        label: preset.label,
+      })),
+      { id: "custom", label: "Custom" },
+    ]
+  ), []);
   const [isStartupDebugPaused, setIsStartupDebugPaused] = useState(false);
   const [isStartupOverlayHidden, setIsStartupOverlayHidden] = useState(false);
   const [isStartupConsoleDraining, setIsStartupConsoleDraining] = useState(false);
@@ -570,11 +734,22 @@ export function MainScreen() {
   const previousSoundCloudTrackUrlRef = useRef<Record<SoundCloudDeckId, string | null>>({ A: null, B: null });
   const previousSoundCloudWidgetReadyRef = useRef<Record<SoundCloudDeckId, boolean>>({ A: false, B: false });
   const previousSoundCloudErrorRef = useRef<Record<SoundCloudDeckId, string | null>>({ A: null, B: null });
+  useEffect(() => {
+    if (typeof window === "undefined" || !("speechSynthesis" in window)) {
+      return undefined;
+    }
+
+    const loadVoices = () => setAvailableTextVoiceVoices(getTextVoiceBrowserVoices());
+    loadVoices();
+    window.speechSynthesis.addEventListener("voiceschanged", loadVoices);
+
+    return () => window.speechSynthesis.removeEventListener("voiceschanged", loadVoices);
+  }, []);
   const handleDebugEvent = useCallback((event: DebugConsoleEventInput) => {
     debugEventHandlerRef.current?.(event);
   }, []);
   const handleTextVoiceEvent = useCallback((event: TextVoiceEvent) => {
-    const result = speakDebugConsoleLine(event.text);
+    const result = speakDebugConsoleLine(event.text, { voiceURI: selectedTextVoiceURI, style: selectedTextVoiceStyle, customStyle: customTextVoiceStyle });
 
     setTextVoiceLog((current) => {
       if (current.some((entry) => entry.id === event.id)) {
@@ -598,7 +773,7 @@ export function MainScreen() {
       label: result.ok ? "command:say:received" : "command:say:unavailable",
       detail: `${event.senderName}: ${result.detail}`,
     });
-  }, [handleDebugEvent]);
+  }, [customTextVoiceStyle, handleDebugEvent, selectedTextVoiceStyle, selectedTextVoiceURI]);
   const handleTextVoiceReplayEvent = useCallback((event: TextVoiceReplayEvent) => {
     let didApplyReplay = false;
 
@@ -754,6 +929,67 @@ export function MainScreen() {
     return true;
   }, [debugConsoleState, sendTextVoice]);
 
+  const handleTextVoiceVoiceChange = useCallback((voiceURI: string) => {
+    setSelectedTextVoiceURI(voiceURI);
+
+    try {
+      if (voiceURI) {
+        window.localStorage.setItem(TEXT_VOICE_SELECTED_VOICE_URI_STORAGE_KEY, voiceURI);
+      } else {
+        window.localStorage.removeItem(TEXT_VOICE_SELECTED_VOICE_URI_STORAGE_KEY);
+      }
+    } catch {
+      // Local preference persistence is best-effort.
+    }
+  }, []);
+
+  const handleTextVoiceStyleChange = useCallback((style: string) => {
+    if (!isTextVoiceStylePreset(style)) {
+      return;
+    }
+
+    setSelectedTextVoiceStyle(style);
+
+    try {
+      window.localStorage.setItem(TEXT_VOICE_SELECTED_STYLE_STORAGE_KEY, style);
+    } catch {
+      // Local preference persistence is best-effort.
+    }
+  }, []);
+
+  const handleTextVoiceStylePanelToggle = useCallback(() => {
+    setIsTextVoiceStyleControlsExpanded((current) => {
+      const next = !current;
+
+      try {
+        window.localStorage.setItem(TEXT_VOICE_STYLE_PANEL_EXPANDED_STORAGE_KEY, String(next));
+      } catch {
+        // Local preference persistence is best-effort.
+      }
+
+      return next;
+    });
+  }, []);
+
+  const handleTextVoiceCustomStyleChange = useCallback((key: keyof TextVoiceStyleSettings, value: number) => {
+    setCustomTextVoiceStyle((current) => {
+      const next = sanitizeTextVoiceStyleSettings({
+        ...current,
+        [key]: value,
+      });
+
+      try {
+        window.localStorage.setItem(TEXT_VOICE_CUSTOM_STYLE_STORAGE_KEY, JSON.stringify(next));
+        window.localStorage.setItem(TEXT_VOICE_SELECTED_STYLE_STORAGE_KEY, "custom");
+      } catch {
+        // Local preference persistence is best-effort.
+      }
+
+      return next;
+    });
+    setSelectedTextVoiceStyle("custom");
+  }, []);
+
   const handleReplayTextVoice = useCallback((id: string) => {
     const entry = textVoiceLog.find((candidate) => candidate.id === id);
 
@@ -761,7 +997,7 @@ export function MainScreen() {
       return;
     }
 
-    const result = speakDebugConsoleLine(entry.text);
+    const result = speakDebugConsoleLine(entry.text, { voiceURI: selectedTextVoiceURI, style: selectedTextVoiceStyle, customStyle: customTextVoiceStyle });
 
     sendTextVoiceReplay(id);
     debugConsoleState.appendCommandOutput({
@@ -769,7 +1005,7 @@ export function MainScreen() {
       label: result.ok ? "command:say:replay" : "command:say:unavailable",
       detail: `${entry.senderName}: ${result.detail}`,
     });
-  }, [debugConsoleState, sendTextVoiceReplay, textVoiceLog]);
+  }, [customTextVoiceStyle, debugConsoleState, selectedTextVoiceStyle, selectedTextVoiceURI, sendTextVoiceReplay, textVoiceLog]);
   const hideStartupOverlay = useCallback(() => {
     if (isStartupOverlayHidden) {
       return;
@@ -3344,9 +3580,19 @@ export function MainScreen() {
                           entries={textVoiceLog}
                           syncConnection={state.syncStatus.connection}
                           localProfileId={state.localProfile.id}
+                          browserVoices={availableTextVoiceVoices}
+                          selectedVoiceURI={selectedTextVoiceURI}
+                          voiceStyleOptions={textVoiceStyleOptions}
+                          selectedVoiceStyle={selectedTextVoiceStyle}
+                          customVoiceStyle={customTextVoiceStyle}
+                          isVoiceStyleControlsExpanded={isTextVoiceStyleControlsExpanded}
                           maxLength={TEXT_VOICE_MAX_LENGTH}
                           onSubmitText={handleSubmitTextVoice}
                           onReplay={handleReplayTextVoice}
+                          onVoiceChange={handleTextVoiceVoiceChange}
+                          onVoiceStyleChange={handleTextVoiceStyleChange}
+                          onToggleVoiceStyleControls={handleTextVoiceStylePanelToggle}
+                          onCustomVoiceStyleChange={handleTextVoiceCustomStyleChange}
                         />
                       </div>
                     </section>
@@ -3529,9 +3775,19 @@ export function MainScreen() {
                 entries={textVoiceLog}
                 syncConnection={state.syncStatus.connection}
                 localProfileId={state.localProfile.id}
+                browserVoices={availableTextVoiceVoices}
+                selectedVoiceURI={selectedTextVoiceURI}
+                voiceStyleOptions={textVoiceStyleOptions}
+                selectedVoiceStyle={selectedTextVoiceStyle}
+                customVoiceStyle={customTextVoiceStyle}
+                isVoiceStyleControlsExpanded={isTextVoiceStyleControlsExpanded}
                 maxLength={TEXT_VOICE_MAX_LENGTH}
                 onSubmitText={handleSubmitTextVoice}
                 onReplay={handleReplayTextVoice}
+                onVoiceChange={handleTextVoiceVoiceChange}
+                onVoiceStyleChange={handleTextVoiceStyleChange}
+                onToggleVoiceStyleControls={handleTextVoiceStylePanelToggle}
+                onCustomVoiceStyleChange={handleTextVoiceCustomStyleChange}
               />
             </div>
           </FloatingWindow>

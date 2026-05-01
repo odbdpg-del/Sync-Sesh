@@ -8,6 +8,45 @@ Entries must be in reverse chronological order. New entries go at the top, above
 
 Use a level-two heading for every entry so the editor can fold each change.
 
+## [2613] - 2026-05-01 11:00 - `syncsesh-activity-promotion / Small Mode Timer Only`
+
+- Changed Small Mode header rendering so the Sync Sesh title and logo are hidden while compacted.
+- Made the compact timer itself a button that exits Small Mode and returns the normal dashboard.
+- Reduced Small Mode shell/header padding and shrank the header timer display.
+- Touched `src/components/AppHeader.tsx`, `src/styles/global.css`, and `changelog.md`.
+- Build/test: `npm.cmd run build` passed with the existing Vite large-chunk warning.
+
+## [2612] - 2026-05-01 00:10 - `syncsesh-activity-promotion / TV-2.5 Custom Voice Style Sliders`
+
+- Added a triangle toggle beside the Text Voice Style label to expand custom voice controls.
+- Added local Rate, Pitch, and Volume sliders that switch the selected style to Custom when changed.
+- Persisted custom style values and the expanded control state locally.
+- Updated Text Voice playback so received lines and local replays use built-in presets or custom slider settings.
+- Kept custom style settings local-only with no sync/server payload changes.
+- Closed `TV-2.5` in `docs/2d/text-to-voice-lobby-vision.md`.
+- Touched `src/screens/MainScreen.tsx`, `src/components/TextVoicePanel.tsx`, `src/styles/global.css`, `docs/2d/text-to-voice-lobby-vision.md`, and `changelog.md`.
+- Build/test: `npm.cmd run build` passed with the existing Vite large-chunk warning.
+
+## [2611] - 2026-05-01 00:03 - `syncsesh-activity-promotion / TV-2.4 Local Voice Style Presets`
+
+- Added local Text Voice style presets for Normal, Fast, Tiny, Deep, Announcer, and Robot.
+- Persisted the selected style locally and applied preset rate, pitch, volume, and conservative Robot text transformation during local playback.
+- Added a compact Style selector beside the existing Voice selector in the Text Voice panel.
+- Kept style selection local-only with no sync/server payload changes.
+- Closed `TV-2.4` in `docs/2d/text-to-voice-lobby-vision.md`.
+- Touched `src/screens/MainScreen.tsx`, `src/components/TextVoicePanel.tsx`, `src/styles/global.css`, `docs/2d/text-to-voice-lobby-vision.md`, and `changelog.md`.
+- Build/test: `npm.cmd run build` passed with the existing Vite large-chunk warning.
+
+## [2610] - 2026-04-30 23:58 - `syncsesh-activity-promotion / TV-2.3 Local Browser Voice Picker`
+
+- Added local browser voice discovery for Text Voice using `speechSynthesis.getVoices()` and `voiceschanged`.
+- Added a persisted local `voiceURI` selection for Text Voice playback.
+- Updated Text Voice speech/replay playback to use the selected browser voice when available and fall back to browser default when missing.
+- Added a compact Voice selector to both docked and floating Text Voice panel render paths.
+- Closed `TV-2.3` in `docs/2d/text-to-voice-lobby-vision.md`.
+- Touched `src/screens/MainScreen.tsx`, `src/components/TextVoicePanel.tsx`, `src/styles/global.css`, `docs/2d/text-to-voice-lobby-vision.md`, and `changelog.md`.
+- Build/test: `npm.cmd run build` passed with the existing Vite large-chunk warning.
+
 ## [2609] - 2026-04-30 23:44 - `syncsesh-activity-promotion / TV-2.2 Text Voice Replay Attribution`
 
 - Added ephemeral `TextVoiceReplayEvent` support across shared types, sync clients, hook wiring, and the sync server.

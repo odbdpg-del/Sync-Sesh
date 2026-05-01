@@ -152,8 +152,9 @@ The server should validate the same basic constraints as the client: text length
 - [x] TV-2: Add Text Voice Panel With Input, Log, And Replay.
 - [x] TV-2.1: Mark Local Replay Activity In The Text Voice Log.
 - [x] TV-2.2: Add Synced Replay Attribution Events.
-- [ ] TV-2.3: Add Local Browser Voice Picker.
-- [ ] TV-2.4: Add Local Browser Voice Style Presets.
+- [x] TV-2.3: Add Local Browser Voice Picker.
+- [x] TV-2.4: Add Local Browser Voice Style Presets.
+- [x] TV-2.5: Add Expandable Custom Voice Style Sliders.
 - [ ] TV-3: Optional Lobby Shortcut Or Header Entry Point.
 - [ ] TV-4: Add Mute And Queue Controls.
 - [ ] TV-5: Add Server-Side Validation, Cooldown, And Manual Discord Checks.
@@ -822,7 +823,7 @@ Implementation steps:
 - Replaying audio on every client when one user clicks Replay.
 - Turning the panel into a durable chat transcript.
 
-## [ ] TV-2.3 - Add Local Browser Voice Picker
+## [x] TV-2.3 - Add Local Browser Voice Picker
 
 ### Summary
 
@@ -832,42 +833,184 @@ This phase should stay fully client-side. It should not add server-generated aud
 
 ### Implementation Spec
 
-Pending.
+Status: Completed on 2026-04-30.
 
 Code seams:
 
 - `src/screens/MainScreen.tsx` owns `speakDebugConsoleLine(...)`, which currently creates `SpeechSynthesisUtterance` with default voice, rate, pitch, and volume.
 - `src/components/TextVoicePanel.tsx` is the first UI surface for a compact local voice selector.
 - Local preferences should use `localStorage`, similar to other local-only UI preferences.
+- `TextVoicePanel` is rendered twice from `MainScreen.tsx`, once docked and once floating; both call sites need the same voice props.
+- Existing TTS calls flow through `handleTextVoiceEvent(...)` and `handleReplayTextVoice(...)`, so changing the shared helper changes both received lines and local replays.
 
-Recommended implementation:
+Implementation steps:
 
-1. Add a small hook or helper to load browser voices:
-   - call `window.speechSynthesis.getVoices()`
+1. Add local constants/types near the other Text Voice constants in `src/screens/MainScreen.tsx`:
+
+   ```ts
+   const TEXT_VOICE_SELECTED_VOICE_URI_STORAGE_KEY = "sync_sesh_text_voice_selected_voice_uri";
+
+   interface TextVoiceBrowserVoice {
+     name: string;
+     lang: string;
+     voiceURI: string;
+     default: boolean;
+   }
+   ```
+
+   Use `voiceURI` as the stable selection key because browser `SpeechSynthesisVoice` objects are not serializable.
+
+2. Add a helper in `MainScreen.tsx` to normalize voices:
+
+   ```ts
+   function getTextVoiceBrowserVoices(): TextVoiceBrowserVoice[] {
+     if (typeof window === "undefined" || !("speechSynthesis" in window)) {
+       return [];
+     }
+
+     return window.speechSynthesis.getVoices().map((voice) => ({
+       name: voice.name,
+       lang: voice.lang,
+       voiceURI: voice.voiceURI,
+       default: voice.default,
+     }));
+   }
+   ```
+
+   Deduplicate by `voiceURI` if needed.
+
+3. Add local state in `MainScreen.tsx`:
+
+   ```ts
+   const [availableTextVoiceVoices, setAvailableTextVoiceVoices] = useState<TextVoiceBrowserVoice[]>([]);
+   const [selectedTextVoiceURI, setSelectedTextVoiceURI] = useState(() => {
+     if (typeof window === "undefined") {
+       return "";
+     }
+
+     return window.localStorage.getItem(TEXT_VOICE_SELECTED_VOICE_URI_STORAGE_KEY) ?? "";
+   });
+   ```
+
+4. Add a `useEffect` in `MainScreen.tsx` that loads voices:
+
+   - call `setAvailableTextVoiceVoices(getTextVoiceBrowserVoices())` on mount
    - listen for `voiceschanged`
-   - normalize each voice to `{ name, lang, voiceURI, default }`
-   - handle empty voice lists gracefully
+   - remove the listener on cleanup
+   - handle browsers that expose `speechSynthesis.onvoiceschanged` instead of `addEventListener` if TypeScript complains
 
-2. Add local state in `MainScreen.tsx`:
-   - `availableTextVoiceVoices`
-   - `selectedTextVoiceURI`
-   - persist selected voice URI in local storage
+5. Add a selected voice lookup in `MainScreen.tsx`:
 
-3. Update `speakDebugConsoleLine(...)` or replace it with a configurable helper:
-   - find the selected voice by `voiceURI`
-   - set `utterance.voice = selectedVoice`
-   - fall back to browser default if the selected voice is unavailable
+   ```ts
+   const selectedTextVoice = useMemo(() => (
+     availableTextVoiceVoices.find((voice) => voice.voiceURI === selectedTextVoiceURI)
+   ), [availableTextVoiceVoices, selectedTextVoiceURI]);
+   ```
 
-4. Add a compact selector to `TextVoicePanel.tsx`:
-   - label can be short: `Voice`
-   - options should show `voice.name` and `voice.lang`
-   - include `Browser default`
-   - disable or show fallback text if no voices are available yet
+   Note: the speech helper ultimately needs the real `SpeechSynthesisVoice`, not only the normalized object. Either:
 
-5. Keep all voice choice behavior local:
-   - do not send selected voice through `text_voice`
-   - do not store voice choice in `SessionSnapshot`
-   - do not imply everyone hears the same voice
+   - look up the real voice from `window.speechSynthesis.getVoices()` inside the helper using `voiceURI`, or
+   - store both normalized UI voices and a ref/map of actual `SpeechSynthesisVoice` objects.
+
+   Prefer looking up the real voice inside the helper for a smaller patch.
+
+6. Replace `speakDebugConsoleLine(text)` with a configurable helper:
+
+   ```ts
+   function speakDebugConsoleLine(text: string, options?: { voiceURI?: string }) {
+     ...
+     const utterance = new SpeechSynthesisUtterance(text);
+     const selectedVoice = options?.voiceURI
+       ? window.speechSynthesis.getVoices().find((voice) => voice.voiceURI === options.voiceURI)
+       : undefined;
+
+     if (selectedVoice) {
+       utterance.voice = selectedVoice;
+     }
+     ...
+   }
+   ```
+
+   Keep rate, pitch, and volume at `1` for this phase.
+
+7. Update both call sites in `MainScreen.tsx`:
+
+   - `handleTextVoiceEvent(...)`
+   - `handleReplayTextVoice(...)`
+
+   Pass `{ voiceURI: selectedTextVoiceURI }`.
+
+8. Add a handler in `MainScreen.tsx`:
+
+   ```ts
+   const handleTextVoiceVoiceChange = useCallback((voiceURI: string) => {
+     setSelectedTextVoiceURI(voiceURI);
+
+     try {
+       if (voiceURI) {
+         window.localStorage.setItem(TEXT_VOICE_SELECTED_VOICE_URI_STORAGE_KEY, voiceURI);
+       } else {
+         window.localStorage.removeItem(TEXT_VOICE_SELECTED_VOICE_URI_STORAGE_KEY);
+       }
+     } catch {
+       // Local preference persistence is best-effort.
+     }
+   }, []);
+   ```
+
+9. Update `TextVoicePanelProps` in `src/components/TextVoicePanel.tsx`:
+
+   ```ts
+   browserVoices: Array<{
+     name: string;
+     lang: string;
+     voiceURI: string;
+     default: boolean;
+   }>;
+   selectedVoiceURI: string;
+   onVoiceChange: (voiceURI: string) => void;
+   ```
+
+10. Add a compact selector to `TextVoicePanel.tsx` near the composer note or directly under the input:
+
+    - label: `Voice`
+    - first option: `Browser default`
+    - each browser voice option: `${voice.name} (${voice.lang})`
+    - append `default` to the label for the browser default voice if useful
+    - if no voices are available, disable the select and show only `Browser default`
+
+    Suggested class names:
+
+    - `.text-voice-controls`
+    - `.text-voice-control`
+    - `.text-voice-select`
+
+11. Pass the new props at both `TextVoicePanel` render sites in `MainScreen.tsx`.
+
+12. Add styles in `src/styles/global.css`:
+
+    - keep the selector compact
+    - match the Text Voice input styling
+    - avoid widening the panel
+    - make long voice names truncate cleanly
+
+13. Update this doc after implementation:
+
+    - mark TV-2.3 `[x]`
+    - add a completed implementation section
+    - leave TV-2.4 as the next style-preset phase
+
+14. Update `changelog.md` and run `npm.cmd run build`.
+
+### Completed Implementation
+
+- Added browser voice discovery through `speechSynthesis.getVoices()` and `voiceschanged`.
+- Added local `voiceURI` selection state with best-effort `localStorage` persistence.
+- Updated Text Voice playback to look up the selected live `SpeechSynthesisVoice` at speak time.
+- Added a compact `Voice` selector to the Text Voice panel with `Browser default` fallback.
+- Passed voice picker props through both docked and floating Text Voice panel render paths.
+- Kept voice selection local-only with no sync/server payload changes.
+- Build passed with the existing Vite large-chunk warning.
 
 ### Acceptance Criteria
 
@@ -885,7 +1028,7 @@ Recommended implementation:
 - Custom AI voice models.
 - Voice cloning.
 
-## [ ] TV-2.4 - Add Local Browser Voice Style Presets
+## [x] TV-2.4 - Add Local Browser Voice Style Presets
 
 ### Summary
 
@@ -895,7 +1038,15 @@ This phase should make the feature more playful without adding cloud TTS. Styles
 
 ### Implementation Spec
 
-Pending.
+Status: Completed on 2026-05-01.
+
+Code seams:
+
+- `src/screens/MainScreen.tsx` already owns `speakDebugConsoleLine(text, { voiceURI })`; this phase should extend that options object with a style preset id.
+- `src/screens/MainScreen.tsx` already persists `TEXT_VOICE_SELECTED_VOICE_URI_STORAGE_KEY`; add a parallel local storage key for style.
+- `src/components/TextVoicePanel.tsx` already renders a compact `Voice` selector in `.text-voice-controls`; add the `Style` selector beside or below it using the same visual pattern.
+- `src/styles/global.css` already has `.text-voice-controls`, `.text-voice-control`, and `.text-voice-select`.
+- This phase must not change `TextVoiceEvent`, `TextVoiceReplayEvent`, `SyncClient`, WebSocket messages, or server code.
 
 Recommended presets:
 
@@ -906,45 +1057,175 @@ Recommended presets:
 - `Announcer`: slightly slower, strong/default volume
 - `Robot`: flatter feel using lower pitch plus punctuation/text transform if useful
 
-Recommended implementation:
+Implementation steps:
 
-1. Add a local `TextVoiceStylePreset` type:
+1. Add a local storage key near the other Text Voice constants in `src/screens/MainScreen.tsx`:
+
+   ```ts
+   const TEXT_VOICE_SELECTED_STYLE_STORAGE_KEY = "sync_sesh_text_voice_selected_style";
+   ```
+
+2. Add a local `TextVoiceStylePreset` type near the TTS helper:
 
    ```ts
    type TextVoiceStylePreset = "normal" | "fast" | "tiny" | "deep" | "announcer" | "robot";
    ```
 
-2. Add a preset config map near the TTS helper:
+3. Add a preset config map near the TTS helper:
 
    ```ts
-   const TEXT_VOICE_STYLE_PRESETS = {
+   const TEXT_VOICE_STYLE_PRESETS: Record<TextVoiceStylePreset, {
+     label: string;
+     rate: number;
+     pitch: number;
+     volume: number;
+     transformText?: (text: string) => string;
+   }> = {
      normal: { label: "Normal", rate: 1, pitch: 1, volume: 1 },
      fast: { label: "Fast", rate: 1.35, pitch: 1, volume: 1 },
      tiny: { label: "Tiny", rate: 1.15, pitch: 1.55, volume: 1 },
      deep: { label: "Deep", rate: 0.9, pitch: 0.65, volume: 1 },
      announcer: { label: "Announcer", rate: 0.92, pitch: 0.95, volume: 1 },
-     robot: { label: "Robot", rate: 0.95, pitch: 0.8, volume: 1 },
+     robot: {
+       label: "Robot",
+       rate: 0.95,
+       pitch: 0.8,
+       volume: 1,
+       transformText: (text) => text.replace(/[.!?]+/g, "."),
+     },
    };
    ```
 
-3. Add local state in `MainScreen.tsx`:
-   - `selectedTextVoiceStyle`
-   - persist in local storage
+   Keep transforms conservative. If the text transform feels risky, skip it and rely on rate/pitch only.
 
-4. Update the TTS helper:
-   - apply selected preset to each `SpeechSynthesisUtterance`
-   - keep selected voice from TV-2.3 working if present
-   - do not change the shared text event
+4. Add helpers in `MainScreen.tsx`:
 
-5. Add a compact style selector to `TextVoicePanel.tsx`:
-   - label: `Style`
-   - show preset labels
-   - keep UI small and secondary to the input/log
+   ```ts
+   function isTextVoiceStylePreset(value: string): value is TextVoiceStylePreset {
+     return value in TEXT_VOICE_STYLE_PRESETS;
+   }
+   ```
 
-6. Keep styles local:
-   - do not sync selected style
-   - do not store in `SessionSnapshot`
-   - do not describe it as a real shared voice model
+5. Add local state in `MainScreen.tsx`:
+
+   ```ts
+   const [selectedTextVoiceStyle, setSelectedTextVoiceStyle] = useState<TextVoiceStylePreset>(() => {
+     if (typeof window === "undefined") {
+       return "normal";
+     }
+
+     try {
+       const savedStyle = window.localStorage.getItem(TEXT_VOICE_SELECTED_STYLE_STORAGE_KEY);
+       return savedStyle && isTextVoiceStylePreset(savedStyle) ? savedStyle : "normal";
+     } catch {
+       return "normal";
+     }
+   });
+   ```
+
+6. Update `speakDebugConsoleLine(...)` in `MainScreen.tsx`:
+
+   ```ts
+   function speakDebugConsoleLine(
+     text: string,
+     options?: {
+       voiceURI?: string;
+       style?: TextVoiceStylePreset;
+     },
+   ) {
+     ...
+     const style = TEXT_VOICE_STYLE_PRESETS[options?.style ?? "normal"];
+     const spokenText = style.transformText ? style.transformText(text) : text;
+     const utterance = new SpeechSynthesisUtterance(spokenText);
+     ...
+     utterance.rate = style.rate;
+     utterance.pitch = style.pitch;
+     utterance.volume = style.volume;
+     ...
+   }
+   ```
+
+   Keep the debug detail as the original text, not transformed text, unless debugging the transform becomes necessary.
+
+7. Update both TTS call sites in `MainScreen.tsx`:
+
+   - `handleTextVoiceEvent(...)`
+   - `handleReplayTextVoice(...)`
+
+   Pass `{ voiceURI: selectedTextVoiceURI, style: selectedTextVoiceStyle }`.
+
+8. Add a handler in `MainScreen.tsx`:
+
+   ```ts
+   const handleTextVoiceStyleChange = useCallback((style: TextVoiceStylePreset) => {
+     setSelectedTextVoiceStyle(style);
+
+     try {
+       window.localStorage.setItem(TEXT_VOICE_SELECTED_STYLE_STORAGE_KEY, style);
+     } catch {
+       // Local preference persistence is best-effort.
+     }
+   }, []);
+   ```
+
+9. Update `TextVoicePanelProps` in `src/components/TextVoicePanel.tsx`:
+
+   ```ts
+   voiceStyleOptions: Array<{ id: string; label: string }>;
+   selectedVoiceStyle: string;
+   onVoiceStyleChange: (style: string) => void;
+   ```
+
+   Keep `TextVoicePanel` generic and avoid importing the `TextVoiceStylePreset` type from `MainScreen.tsx`.
+
+10. Add a compact `Style` selector to `TextVoicePanel.tsx` inside `.text-voice-controls`:
+
+    - render next to the `Voice` selector when width allows
+    - render below it on narrow widths using CSS grid
+    - use the same `.text-voice-control` and `.text-voice-select` classes
+
+11. Pass style props at both `TextVoicePanel` render sites in `MainScreen.tsx`:
+
+    ```ts
+    voiceStyleOptions={Object.entries(TEXT_VOICE_STYLE_PRESETS).map(([id, preset]) => ({ id, label: preset.label }))}
+    selectedVoiceStyle={selectedTextVoiceStyle}
+    onVoiceStyleChange={(style) => {
+      if (isTextVoiceStylePreset(style)) {
+        handleTextVoiceStyleChange(style);
+      }
+    }}
+    ```
+
+    Prefer memoizing `voiceStyleOptions` with `useMemo` to avoid rebuilding the array every render.
+
+12. Update `src/styles/global.css`:
+
+    - make `.text-voice-controls` a responsive grid:
+
+      ```css
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      ```
+
+    - keep both selectors from making the panel wider
+    - preserve current styling for `.text-voice-control` and `.text-voice-select`
+
+13. Update this doc after implementation:
+
+    - mark TV-2.4 `[x]`
+    - add a completed implementation section
+    - leave TV-3 as the next optional visible entry point phase
+
+14. Update `changelog.md` and run `npm.cmd run build`.
+
+### Completed Implementation
+
+- Added local Text Voice style presets: Normal, Fast, Tiny, Deep, Announcer, and Robot.
+- Added best-effort local storage persistence for the selected style.
+- Extended Text Voice playback options so selected browser voice and selected style work together.
+- Applied preset rate, pitch, volume, and the conservative Robot punctuation transform during local speech only.
+- Added a compact `Style` selector next to the existing `Voice` selector in the Text Voice panel.
+- Kept style selection local-only with no sync/server payload changes.
+- Build passed with the existing Vite large-chunk warning.
 
 ### Acceptance Criteria
 
@@ -962,6 +1243,191 @@ Recommended implementation:
 - Cloud TTS voice models.
 - Per-message synced style selection.
 - Guaranteed identical playback across all clients.
+
+## [x] TV-2.5 - Add Expandable Custom Voice Style Sliders
+
+### Summary
+
+Add a small triangle button next to the `Style` label in the Text Voice panel.
+
+Clicking the triangle expands a compact advanced style area with three sliders:
+
+- `Rate`
+- `Pitch`
+- `Volume`
+
+When the user changes any slider, the style selector should switch to `Custom`. Custom settings should affect future local TTS playback and persist in the same browser.
+
+### Implementation Spec
+
+Status: Completed on 2026-05-01.
+
+Code seams:
+
+- `src/components/TextVoicePanel.tsx` currently renders the `Style` selector in `.text-voice-controls`.
+- `src/screens/MainScreen.tsx` owns `TextVoiceStylePreset`, selected style state, persistence, and TTS playback options.
+- `src/styles/global.css` owns the Text Voice panel control styling.
+- This phase must not change `TextVoiceEvent`, `TextVoiceReplayEvent`, sync clients, WebSocket messages, or server code.
+
+Recommended slider ranges:
+
+- `Rate`: `0.5` to `2`, step `0.05`, default `1`
+- `Pitch`: `0` to `2`, step `0.05`, default `1`
+- `Volume`: `0` to `1`, step `0.05`, default `1`
+
+These ranges are intentionally narrower than some browser limits so the control stays useful instead of chaotic.
+
+Implementation steps:
+
+1. In `src/screens/MainScreen.tsx`, add local storage keys near the existing Text Voice keys:
+
+   ```ts
+   const TEXT_VOICE_CUSTOM_STYLE_STORAGE_KEY = "sync_sesh_text_voice_custom_style";
+   const TEXT_VOICE_STYLE_PANEL_EXPANDED_STORAGE_KEY = "sync_sesh_text_voice_style_panel_expanded";
+   ```
+
+2. Add a shared local type:
+
+   ```ts
+   interface TextVoiceStyleSettings {
+     rate: number;
+     pitch: number;
+     volume: number;
+   }
+   ```
+
+3. Extend `TextVoiceStylePreset` to include `custom`:
+
+   ```ts
+   type TextVoiceStylePreset = "normal" | "fast" | "tiny" | "deep" | "announcer" | "robot" | "custom";
+   ```
+
+4. Keep built-in preset config separate from dynamic custom values. Recommended shape:
+
+   ```ts
+   type BuiltInTextVoiceStylePreset = Exclude<TextVoiceStylePreset, "custom">;
+   ```
+
+   Then use `Record<BuiltInTextVoiceStylePreset, ...>` for `TEXT_VOICE_STYLE_PRESETS`.
+
+5. Add `Custom` to the style options passed into `TextVoicePanel`.
+
+   Keep `Custom` as a selectable style even before the sliders are opened.
+
+6. Add helpers in `MainScreen.tsx`:
+
+   - `isTextVoiceStylePreset(value)`
+   - `sanitizeTextVoiceStyleSettings(value)`
+   - `getTextVoiceStyleConfig(style, customStyleSettings)`
+
+   `getTextVoiceStyleConfig(...)` should return the selected built-in preset or the persisted custom settings.
+
+7. Add state in `MainScreen.tsx`:
+
+   - `customTextVoiceStyle`
+   - `isTextVoiceStyleControlsExpanded`
+
+   Both should hydrate from local storage with safe fallbacks.
+
+8. Add handlers in `MainScreen.tsx`:
+
+   - `handleTextVoiceStylePanelToggle()`
+   - `handleTextVoiceCustomStyleChange(key, value)`
+
+   Changing any slider must:
+
+   - clamp/sanitize the value
+   - update and persist custom settings
+   - set selected style to `custom`
+   - persist selected style as `custom`
+
+9. Update `speakDebugConsoleLine(...)` so playback options include:
+
+   ```ts
+   {
+     voiceURI?: string;
+     style?: TextVoiceStylePreset;
+     customStyle?: TextVoiceStyleSettings;
+   }
+   ```
+
+   Use `getTextVoiceStyleConfig(...)` before creating the utterance. Custom style should not use the Robot text transform.
+
+10. Update both TTS call sites in `MainScreen.tsx`:
+
+    - `handleTextVoiceEvent(...)`
+    - `handleReplayTextVoice(...)`
+
+    Pass the selected style and custom style settings.
+
+11. Update `TextVoicePanelProps` in `src/components/TextVoicePanel.tsx`:
+
+    ```ts
+    customVoiceStyle: TextVoiceStyleSettings;
+    isVoiceStyleControlsExpanded: boolean;
+    onToggleVoiceStyleControls: () => void;
+    onCustomVoiceStyleChange: (key: keyof TextVoiceStyleSettings, value: number) => void;
+    ```
+
+    Keep the component generic by defining/exporting `TextVoiceStyleSettings` in `TextVoicePanel.tsx` or by using an equivalent local prop type.
+
+12. Update the `Style` label area in `TextVoicePanel.tsx`:
+
+    - keep the visible text `Style`
+    - add a small icon button beside it
+    - use `aria-expanded`
+    - use `aria-label` such as `Show custom voice style controls`
+    - render the triangle with CSS borders so it rotates open without relying on a text glyph
+
+13. When expanded, render the three sliders below the style selector:
+
+    - each slider should show a compact numeric value
+    - each slider should use the recommended min, max, and step
+    - sliders must not widen the panel
+    - moving a slider immediately sets the style selector to `Custom`
+
+14. Update `src/styles/global.css`:
+
+    - add styling for the style label row, triangle button, expanded slider stack, range inputs, and values
+    - preserve the current compact panel look
+    - keep controls usable on narrow widths
+
+15. After implementation:
+
+    - mark TV-2.5 `[x]`
+    - add a completed implementation section
+    - update `changelog.md`
+    - run `npm.cmd run build`
+
+### Completed Implementation
+
+- Added a CSS triangle toggle beside the Text Voice `Style` label.
+- Added an expandable custom style control area with `Rate`, `Pitch`, and `Volume` sliders.
+- Added local custom style state with sanitized values and best-effort `localStorage` persistence.
+- Added a `Custom` style option and automatically select it when any slider changes.
+- Updated Text Voice playback so received lines and local replays use the selected built-in style or custom slider values.
+- Kept custom style local-only with no sync/server payload changes.
+- Build passed with the existing Vite large-chunk warning.
+
+### Acceptance Criteria
+
+- A small triangle button appears next to the `Style` text.
+- Clicking the triangle expands and collapses custom style sliders.
+- Expanded controls show `Rate`, `Pitch`, and `Volume`.
+- Moving any slider switches the selected style to `Custom`.
+- Custom slider values affect future local speech playback.
+- Custom slider values persist across reloads in the same browser.
+- Built-in style presets still work.
+- Browser voice selection still works together with custom style.
+- No sync/server payloads change.
+- `npm.cmd run build` passes.
+
+### Non-Goals
+
+- Syncing custom style settings to other users.
+- Adding more than three sliders.
+- Cloud TTS voices or voice cloning.
+- A mute button or larger settings UI.
 
 ## [ ] TV-3 - Optional Lobby Shortcut Or Header Entry Point
 

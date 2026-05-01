@@ -7,13 +7,36 @@ export interface TextVoiceLogEntry extends TextVoiceEvent {
   replayAttributions: TextVoiceReplayEvent[];
 }
 
+export interface TextVoiceBrowserVoice {
+  name: string;
+  lang: string;
+  voiceURI: string;
+  default: boolean;
+}
+
+export interface TextVoiceStyleSettings {
+  rate: number;
+  pitch: number;
+  volume: number;
+}
+
 interface TextVoicePanelProps {
   entries: TextVoiceLogEntry[];
   syncConnection: SyncConnectionState;
   localProfileId: string;
+  browserVoices: TextVoiceBrowserVoice[];
+  selectedVoiceURI: string;
+  voiceStyleOptions: Array<{ id: string; label: string }>;
+  selectedVoiceStyle: string;
+  customVoiceStyle: TextVoiceStyleSettings;
+  isVoiceStyleControlsExpanded: boolean;
   maxLength: number;
   onSubmitText: (text: string) => boolean;
   onReplay: (id: string) => void;
+  onVoiceChange: (voiceURI: string) => void;
+  onVoiceStyleChange: (style: string) => void;
+  onToggleVoiceStyleControls: () => void;
+  onCustomVoiceStyleChange: (key: keyof TextVoiceStyleSettings, value: number) => void;
 }
 
 function formatTextVoiceTime(value: string) {
@@ -64,7 +87,24 @@ function getReplayAttributionLabel(entry: TextVoiceLogEntry, localProfileId: str
   return `Also replayed by ${replayerNames[0]} + ${replayerNames.length - 1}`;
 }
 
-export function TextVoicePanel({ entries, syncConnection, localProfileId, maxLength, onSubmitText, onReplay }: TextVoicePanelProps) {
+export function TextVoicePanel({
+  entries,
+  syncConnection,
+  localProfileId,
+  browserVoices,
+  selectedVoiceURI,
+  voiceStyleOptions,
+  selectedVoiceStyle,
+  customVoiceStyle,
+  isVoiceStyleControlsExpanded,
+  maxLength,
+  onSubmitText,
+  onReplay,
+  onVoiceChange,
+  onVoiceStyleChange,
+  onToggleVoiceStyleControls,
+  onCustomVoiceStyleChange,
+}: TextVoicePanelProps) {
   const [draftText, setDraftText] = useState("");
   const cleanDraftText = draftText.trim();
   const isConnected = syncConnection === "connected";
@@ -115,6 +155,77 @@ export function TextVoicePanel({ entries, syncConnection, localProfileId, maxLen
       <div className="text-voice-panel-note">
         <span>{cleanDraftText.length}/{maxLength}</span>
         <span>{isConnected ? "Lines speak after the room echo returns." : "Sync must reconnect before shared lines send."}</span>
+      </div>
+
+      <div className="text-voice-controls">
+        <label className="text-voice-control">
+          <span>Voice</span>
+          <select
+            className="text-voice-select"
+            value={selectedVoiceURI}
+            aria-label="Local text voice browser voice"
+            onChange={(event) => onVoiceChange(event.target.value)}
+          >
+            <option value="">Browser default</option>
+            {browserVoices.map((voice) => (
+              <option key={voice.voiceURI} value={voice.voiceURI}>
+                {voice.name} ({voice.lang || "unknown"}){voice.default ? " default" : ""}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="text-voice-control">
+          <span className="text-voice-control-heading">
+            <span>Style</span>
+            <button
+              type="button"
+              className="text-voice-style-toggle"
+              aria-label={isVoiceStyleControlsExpanded ? "Hide custom voice style controls" : "Show custom voice style controls"}
+              aria-expanded={isVoiceStyleControlsExpanded}
+              onClick={onToggleVoiceStyleControls}
+            >
+              <span className="text-voice-style-toggle-icon" aria-hidden="true" />
+            </button>
+          </span>
+          <select
+            className="text-voice-select"
+            value={selectedVoiceStyle}
+            aria-label="Local text voice style"
+            onChange={(event) => onVoiceStyleChange(event.target.value)}
+          >
+            {voiceStyleOptions.map((style) => (
+              <option key={style.id} value={style.id}>
+                {style.label}
+              </option>
+            ))}
+          </select>
+          {isVoiceStyleControlsExpanded ? (
+            <div className="text-voice-style-sliders" aria-label="Custom voice style controls">
+              {([
+                ["rate", "Rate", 0.5, 2, 0.05],
+                ["pitch", "Pitch", 0, 2, 0.05],
+                ["volume", "Volume", 0, 1, 0.05],
+              ] as const).map(([key, label, min, max, step]) => (
+                <label key={key} className="text-voice-style-slider">
+                  <span>
+                    <span>{label}</span>
+                    <strong>{customVoiceStyle[key].toFixed(2)}</strong>
+                  </span>
+                  <input
+                    className="text-voice-range"
+                    type="range"
+                    min={min}
+                    max={max}
+                    step={step}
+                    value={customVoiceStyle[key]}
+                    aria-label={`Custom voice ${label.toLowerCase()}`}
+                    onChange={(event) => onCustomVoiceStyleChange(key, Number(event.target.value))}
+                  />
+                </label>
+              ))}
+            </div>
+          ) : null}
+        </label>
       </div>
 
       <div className="text-voice-log" aria-label="Text voice log">

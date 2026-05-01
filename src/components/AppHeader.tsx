@@ -50,70 +50,76 @@ export function AppHeader({
     <header className="panel app-header">
       <span className="app-header-frame" aria-hidden="true" />
       <span className="app-header-accent" aria-hidden="true" />
-      <div className="brand-lockup">
-        {onToggleSmallMode ? (
-          <button
-            className="brand-logo-frame brand-logo-button"
-            type="button"
-            onClick={onToggleSmallMode}
-            aria-pressed={isSmallMode}
-            aria-label={isSmallMode ? "Exit small mode" : "Enter small mode"}
-          >
-            {logoFrameContent}
-          </button>
-        ) : (
-          <div className="brand-logo-frame">{logoFrameContent}</div>
-        )}
-        <div className="brand-copy">
-          <p className="eyebrow">Discord Activity</p>
-          <div
-            key={`brand-title-shell-${secretUnlockCount}-${secretErrorCount}`}
-            className={`brand-title-shell ${secretEntryProgress > 0 ? "brand-title-shell-secret" : ""} ${
-              isSecretErrorActive ? "brand-title-shell-secret-error" : ""
-            } ${
-              secretUnlockCount > 0 ? "brand-title-shell-secret-complete" : ""
-            }`}
-          >
-            <span className="brand-title-corner" aria-hidden="true" />
-            <span className="brand-title-rail" aria-hidden="true" />
-            <h1 className="brand-title">
-              {TITLE_LETTERS.map((letter, index) => {
-                if (letter === " ") {
+      {!isSmallMode ? (
+        <div className="brand-lockup">
+          {onToggleSmallMode ? (
+            <button
+              className="brand-logo-frame brand-logo-button"
+              type="button"
+              onClick={onToggleSmallMode}
+              aria-pressed={isSmallMode}
+              aria-label="Enter small mode"
+            >
+              {logoFrameContent}
+            </button>
+          ) : (
+            <div className="brand-logo-frame">{logoFrameContent}</div>
+          )}
+          <div className="brand-copy">
+            <p className="eyebrow">Discord Activity</p>
+            <div
+              key={`brand-title-shell-${secretUnlockCount}-${secretErrorCount}`}
+              className={`brand-title-shell ${secretEntryProgress > 0 ? "brand-title-shell-secret" : ""} ${
+                isSecretErrorActive ? "brand-title-shell-secret-error" : ""
+              } ${
+                secretUnlockCount > 0 ? "brand-title-shell-secret-complete" : ""
+              }`}
+            >
+              <span className="brand-title-corner" aria-hidden="true" />
+              <span className="brand-title-rail" aria-hidden="true" />
+              <h1 className="brand-title">
+                {TITLE_LETTERS.map((letter, index) => {
+                  if (letter === " ") {
+                    return (
+                      <span key={`space-${index}`} className="brand-title-space" aria-hidden="true">
+                        {" "}
+                      </span>
+                    );
+                  }
+
+                  matchedLetterCount += 1;
+                  const isActive = matchedLetterCount <= highlightedLetterCount;
+
                   return (
-                    <span key={`space-${index}`} className="brand-title-space" aria-hidden="true">
-                      {" "}
+                    <span
+                      key={`${letter}-${index}`}
+                      className={`brand-title-letter ${isActive ? "brand-title-letter-secret" : ""} ${
+                        isActive && isSecretErrorActive ? "brand-title-letter-secret-error" : ""
+                      }`}
+                    >
+                      {letter}
                     </span>
                   );
-                }
-
-                matchedLetterCount += 1;
-                const isActive = matchedLetterCount <= highlightedLetterCount;
-
-                return (
-                  <span
-                    key={`${letter}-${index}`}
-                    className={`brand-title-letter ${isActive ? "brand-title-letter-secret" : ""} ${
-                      isActive && isSecretErrorActive ? "brand-title-letter-secret-error" : ""
-                    }`}
-                  >
-                    {letter}
-                  </span>
-                );
-              })}
-            </h1>
+                })}
+              </h1>
+            </div>
           </div>
         </div>
-      </div>
+      ) : null}
       <div className="header-meta">
         {isSmallMode && countdownDisplay ? (
-          <div className="header-pill header-pill-small-timer">
-            <span className="meta-label">Timer</span>
+          <button
+            className="header-pill header-pill-small-timer header-small-timer-button"
+            type="button"
+            onClick={onToggleSmallMode}
+            aria-label="Exit small mode"
+          >
             {isSegmentDisplayValue(countdownDisplay.headline) ? (
               <SevenSegmentDisplay value={countdownDisplay.headline} className="header-small-timer-display" />
             ) : (
               <strong className="header-small-timer-text">{countdownDisplay.headline}</strong>
             )}
-          </div>
+          </button>
         ) : null}
         {!isSmallMode ? (
           <>
