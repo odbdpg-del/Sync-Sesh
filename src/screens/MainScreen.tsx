@@ -15,6 +15,7 @@ import { type SoundCloudPanelMode } from "../components/SoundCloudModeToggle";
 import { SoundCloudPanel } from "../components/SoundCloudPanel";
 import { SoundCloudWidgetPanel } from "../components/SoundCloudWidgetPanel";
 import { StatusFooter } from "../components/StatusFooter";
+import { TextVoicePanel, type TextVoiceLogEntry } from "../components/TextVoicePanel";
 import { TimerPanel } from "../components/TimerPanel";
 import type { PanelShellDragInfo } from "../components/PanelShell";
 import type {
@@ -50,7 +51,7 @@ import {
 import { getPanelDefinition } from "../lib/panels/panelRegistry";
 import { enableOfflineMode } from "../lib/startup/offlineMode";
 import type { StartupProgress, StartupProgressStep } from "../lib/startup/startupProgress";
-import type { SyncConnectionState, TextVoiceEvent } from "../types/session";
+import type { SyncConnectionState, TextVoiceEvent, TextVoiceReplayEvent } from "../types/session";
 import backgroundVideo from "../../media/202587-918431513.mp4";
 
 const RenderingStackSpike = lazy(() =>
@@ -62,9 +63,11 @@ const ThreeDModeShell = lazy(() =>
 
 type DebugConsoleDisplayMode = "fullscreen" | "fullscreen2" | "float";
 const DEBUG_CONSOLE_COMMAND_HISTORY_LIMIT = 50;
+const TEXT_VOICE_LOG_LIMIT = 30;
+const TEXT_VOICE_MAX_LENGTH = 180;
 
 const DEBUG_CONSOLE_COMMAND_HELP =
-  "Available commands: hide, clear, help, say-your message, resetlayout, small, normal, admin, hidejoin, showjoin, show globe, hide globe, force start, force stop, setround = 5, copy, snapshot, retry, radio, float, console1, console2, fullscreen, background, background 0-100, trans-text 0-100, compact, filter all, filter auth, filter sdk, filter profile, filter sync, filter network, filter ui, filter command. Example: say-note to chat speaks note to chat.";
+  "Available commands: hide, clear, help, say-your message, showt2v, resetlayout, small, normal, admin, hidejoin, showjoin, show globe, hide globe, force start, force stop, setround = 5, copy, snapshot, retry, radio, float, console1, console2, fullscreen, background, background 0-100, trans-text 0-100, compact, filter all, filter auth, filter sdk, filter profile, filter sync, filter network, filter ui, filter command. Example: say-note to chat speaks note to chat.";
 const DEBUG_CONSOLE_SET_ROUND_COMMAND_PATTERN = /^set\s*round\s*=\s*(-?\d+)$/;
 const DEBUG_CONSOLE_SAY_COMMAND_PREFIX = "say-";
 const CONSOLE2_INPUT_COMMAND_BACKGROUND_OPACITY_PERCENT = 100;
@@ -74,6 +77,7 @@ const CONSOLE2_FULL_BACKGROUND_OPACITY_PERCENT = 100;
 const CONSOLE2_FULL_TEXT_OPACITY_PERCENT = 100;
 const GLOBE_PANEL_DEFINITION = getPanelDefinition("globe");
 const ADMIN_PANEL_DEFINITION = getPanelDefinition("admin");
+const TEXT_VOICE_PANEL_DEFINITION = getPanelDefinition("text-voice");
 const SOUNDCLOUD_PANEL_IDS = ["soundcloud-radio", "soundcloud-widget", "soundcloud-decks"] as const;
 const EMPTY_CELLS_HIDDEN_STORAGE_KEY = "sync_sesh_admin_hide_empty_cells";
 const MAX_VISIBLE_EMPTY_PLAYER_SLOTS_STORAGE_KEY = "sync_sesh_admin_max_visible_empty_player_slots";
@@ -490,6 +494,7 @@ export function MainScreen() {
   const debugConsoleLastFloatingRectRef = useRef<PanelRect>(DEBUG_CONSOLE_INITIAL_RECT);
   const globeLastFloatingRectRef = useRef<PanelRect>(GLOBE_PANEL_DEFINITION.defaultFloatingRect);
   const adminLastFloatingRectRef = useRef<PanelRect>(ADMIN_PANEL_DEFINITION.defaultFloatingRect);
+  const textVoiceLastFloatingRectRef = useRef<PanelRect>(TEXT_VOICE_PANEL_DEFINITION.defaultFloatingRect);
   const soundCloudLastFloatingRectRef = useRef<Record<SoundCloudPanelId, PanelRect>>({
     "soundcloud-radio": getPanelDefinition("soundcloud-radio").defaultFloatingRect,
     "soundcloud-widget": getPanelDefinition("soundcloud-widget").defaultFloatingRect,
@@ -552,6 +557,7 @@ export function MainScreen() {
   const [soundCloudDeckMuted, setSoundCloudDeckMuted] = useState<Record<SoundCloudDeckId, boolean>>({ A: false, B: false });
   const [soundCloudDeckSyncLabels, setSoundCloudDeckSyncLabels] = useState<Record<SoundCloudDeckId, string>>({ A: "SYNC", B: "SYNC" });
   const [soundCloudBoothConsoleEvents, setSoundCloudBoothConsoleEvents] = useState<SoundCloudBoothConsoleEvent[]>([]);
+  const [textVoiceLog, setTextVoiceLog] = useState<TextVoiceLogEntry[]>([]);
   const [isStartupDebugPaused, setIsStartupDebugPaused] = useState(false);
   const [isStartupOverlayHidden, setIsStartupOverlayHidden] = useState(false);
   const [isStartupConsoleDraining, setIsStartupConsoleDraining] = useState(false);
@@ -570,12 +576,55 @@ export function MainScreen() {
   const handleTextVoiceEvent = useCallback((event: TextVoiceEvent) => {
     const result = speakDebugConsoleLine(event.text);
 
+    setTextVoiceLog((current) => {
+      if (current.some((entry) => entry.id === event.id)) {
+        return current;
+      }
+
+      return [
+        {
+          ...event,
+          receivedAt: new Date().toISOString(),
+          replayCount: 0,
+          replayAttributions: [],
+        },
+        ...current,
+      ].slice(0, TEXT_VOICE_LOG_LIMIT);
+    });
+
     handleDebugEvent({
       level: result.ok ? "info" : "warn",
       category: "command",
       label: result.ok ? "command:say:received" : "command:say:unavailable",
       detail: `${event.senderName}: ${result.detail}`,
     });
+  }, [handleDebugEvent]);
+  const handleTextVoiceReplayEvent = useCallback((event: TextVoiceReplayEvent) => {
+    let didApplyReplay = false;
+
+    setTextVoiceLog((current) => current.map((entry) => {
+      if (entry.id !== event.textVoiceEventId || entry.replayAttributions.some((attribution) => attribution.id === event.id)) {
+        return entry;
+      }
+
+      didApplyReplay = true;
+      return {
+        ...entry,
+        replayAttributions: [
+          event,
+          ...entry.replayAttributions,
+        ],
+      };
+    }));
+
+    if (didApplyReplay) {
+      handleDebugEvent({
+        level: "info",
+        category: "command",
+        label: "command:say:replay:received",
+        detail: `${event.replayerName} replayed text voice ${event.textVoiceEventId}.`,
+      });
+    }
   }, [handleDebugEvent]);
   const {
     state,
@@ -591,6 +640,7 @@ export function MainScreen() {
     startReadyHold,
     endReadyHold,
     sendTextVoice,
+    sendTextVoiceReplay,
     setTimerDuration,
     setPrecountDuration,
     forceStartRound,
@@ -619,7 +669,9 @@ export function MainScreen() {
   } = useDabSyncSession({
     onDebugEvent: handleDebugEvent,
     onTextVoiceEvent: handleTextVoiceEvent,
+    onTextVoiceReplayEvent: handleTextVoiceReplayEvent,
   });
+
   const applyConsole2ModePreset = useCallback((mode: Fullscreen2ConsoleMode) => {
     if (mode === "input") {
       setBackgroundConsoleOpacityPercent(CONSOLE2_FULL_BACKGROUND_OPACITY_PERCENT);
@@ -686,6 +738,38 @@ export function MainScreen() {
     syncStatus: state.syncStatus,
     localProfile: state.localProfile,
   });
+  const handleSubmitTextVoice = useCallback((text: string) => {
+    const cleanText = text.trim();
+
+    if (!cleanText || cleanText.length > TEXT_VOICE_MAX_LENGTH) {
+      debugConsoleState.appendCommandOutput({
+        level: "warn",
+        label: "command:showt2v",
+        detail: `Text voice must be 1-${TEXT_VOICE_MAX_LENGTH} characters.`,
+      });
+      return false;
+    }
+
+    sendTextVoice(cleanText);
+    return true;
+  }, [debugConsoleState, sendTextVoice]);
+
+  const handleReplayTextVoice = useCallback((id: string) => {
+    const entry = textVoiceLog.find((candidate) => candidate.id === id);
+
+    if (!entry) {
+      return;
+    }
+
+    const result = speakDebugConsoleLine(entry.text);
+
+    sendTextVoiceReplay(id);
+    debugConsoleState.appendCommandOutput({
+      level: result.ok ? "info" : "warn",
+      label: result.ok ? "command:say:replay" : "command:say:unavailable",
+      detail: `${entry.senderName}: ${result.detail}`,
+    });
+  }, [debugConsoleState, sendTextVoiceReplay, textVoiceLog]);
   const hideStartupOverlay = useCallback(() => {
     if (isStartupOverlayHidden) {
       return;
@@ -904,6 +988,7 @@ export function MainScreen() {
       debugConsoleLastFloatingRectRef.current = DEBUG_CONSOLE_INITIAL_RECT;
       globeLastFloatingRectRef.current = GLOBE_PANEL_DEFINITION.defaultFloatingRect;
       adminLastFloatingRectRef.current = ADMIN_PANEL_DEFINITION.defaultFloatingRect;
+      textVoiceLastFloatingRectRef.current = TEXT_VOICE_PANEL_DEFINITION.defaultFloatingRect;
       soundCloudLastFloatingRectRef.current = {
         "soundcloud-radio": getPanelDefinition("soundcloud-radio").defaultFloatingRect,
         "soundcloud-widget": getPanelDefinition("soundcloud-widget").defaultFloatingRect,
@@ -1257,6 +1342,30 @@ export function MainScreen() {
         level: "info",
         label: "command:radio",
         detail: "Radio panel enabled.",
+      });
+      return;
+    }
+
+    if (normalizedCommand === "showt2v") {
+      setCorePanelLayout((currentLayout) => {
+        const nextLayout = restorePanelInLayout(currentLayout, "text-voice");
+
+        if (nextLayout === currentLayout) {
+          return currentLayout;
+        }
+
+        corePanelLayoutRef.current = nextLayout;
+        try {
+          window.localStorage.setItem(PANEL_LAYOUT_STORAGE_KEY, serializePanelLayout(nextLayout));
+        } catch {
+          // Layout persistence is best-effort; keep the command path usable if storage is unavailable.
+        }
+        return nextLayout;
+      });
+      debugConsoleState.appendCommandOutput({
+        level: "info",
+        label: "command:showt2v",
+        detail: "Text Voice panel opened.",
       });
       return;
     }
@@ -1831,6 +1940,24 @@ export function MainScreen() {
     });
   }, []);
 
+  const handleTextVoicePanelClose = useCallback(() => {
+    setCorePanelLayout((currentLayout) => {
+      const nextLayout = removePanelFromLayout(currentLayout, "text-voice");
+
+      if (nextLayout === currentLayout) {
+        return currentLayout;
+      }
+
+      corePanelLayoutRef.current = nextLayout;
+      try {
+        window.localStorage.setItem(PANEL_LAYOUT_STORAGE_KEY, serializePanelLayout(nextLayout));
+      } catch {
+        // Layout persistence is best-effort; keep closing usable if storage is unavailable.
+      }
+      return nextLayout;
+    });
+  }, []);
+
   const handleSetEmptyCellsHidden = useCallback((hidden: boolean) => {
     setAreEmptyCellsHidden(hidden);
 
@@ -1909,8 +2036,10 @@ export function MainScreen() {
   const isDebugConsoleDocked = dockTreeHasPanel(corePanelLayout.dockRoot, "debug-console");
   const globeFloatingPanel = corePanelLayout.floating.find((panel) => panel.panelId === "globe");
   const adminFloatingPanel = corePanelLayout.floating.find((panel) => panel.panelId === "admin");
+  const textVoiceFloatingPanel = corePanelLayout.floating.find((panel) => panel.panelId === "text-voice");
   const isGlobeDocked = dockTreeHasPanel(corePanelLayout.dockRoot, "globe");
   const isAdminDocked = dockTreeHasPanel(corePanelLayout.dockRoot, "admin");
+  const isTextVoiceDocked = dockTreeHasPanel(corePanelLayout.dockRoot, "text-voice");
   const shouldShowFloatingDashboardPanels = !isSmallMode;
 
   const getPanelDropPreview = useCallback((draggedPanelId: PanelId, dragInfo: Pick<PanelShellDragInfo, "pointerX" | "pointerY">): PanelWorkspaceDropPreview | null => {
@@ -2008,6 +2137,21 @@ export function MainScreen() {
     });
   }, []);
 
+  const handleTextVoiceFloatingRectChange = useCallback((rect: PanelRect) => {
+    textVoiceLastFloatingRectRef.current = rect;
+
+    setCorePanelLayout((currentLayout) => {
+      const nextLayout = panelLayoutReducer(currentLayout, {
+        type: "update-floating-rect",
+        panelId: "text-voice",
+        rect,
+      });
+
+      corePanelLayoutRef.current = nextLayout;
+      return nextLayout;
+    });
+  }, []);
+
   const handleGlobeDock = useCallback(() => {
     setIsGlobePanelVisible(true);
     setCorePanelLayout((currentLayout) => {
@@ -2044,6 +2188,21 @@ export function MainScreen() {
     });
   }, [lobbyState.canUseAdminTools, persistCorePanelLayout]);
 
+  const handleTextVoiceDock = useCallback(() => {
+    setCorePanelLayout((currentLayout) => {
+      textVoiceLastFloatingRectRef.current = currentLayout.floating.find((panel) => panel.panelId === "text-voice")?.rect ?? textVoiceLastFloatingRectRef.current;
+      const nextLayout = panelLayoutReducer(currentLayout, {
+        type: "dock-panel",
+        panelId: "text-voice",
+        placement: "bottom",
+      });
+
+      corePanelLayoutRef.current = nextLayout;
+      persistCorePanelLayout(nextLayout);
+      return nextLayout;
+    });
+  }, [persistCorePanelLayout]);
+
   const handleGlobeFloat = useCallback(() => {
     setIsGlobePanelVisible(true);
     setCorePanelLayout((currentLayout) => {
@@ -2069,6 +2228,16 @@ export function MainScreen() {
       return nextLayout;
     });
   }, [lobbyState.canUseAdminTools, persistCorePanelLayout]);
+
+  const handleTextVoiceFloat = useCallback(() => {
+    setCorePanelLayout((currentLayout) => {
+      const nextLayout = floatPanelInLayout(currentLayout, "text-voice", textVoiceLastFloatingRectRef.current);
+
+      corePanelLayoutRef.current = nextLayout;
+      persistCorePanelLayout(nextLayout);
+      return nextLayout;
+    });
+  }, [persistCorePanelLayout]);
 
   const handleGlobeReset = useCallback(() => {
     globeLastFloatingRectRef.current = GLOBE_PANEL_DEFINITION.defaultFloatingRect;
@@ -2099,6 +2268,17 @@ export function MainScreen() {
     });
   }, [lobbyState.canUseAdminTools, persistCorePanelLayout]);
 
+  const handleTextVoiceReset = useCallback(() => {
+    textVoiceLastFloatingRectRef.current = TEXT_VOICE_PANEL_DEFINITION.defaultFloatingRect;
+    setCorePanelLayout((currentLayout) => {
+      const nextLayout = floatPanelInLayout(currentLayout, "text-voice", TEXT_VOICE_PANEL_DEFINITION.defaultFloatingRect);
+
+      corePanelLayoutRef.current = nextLayout;
+      persistCorePanelLayout(nextLayout);
+      return nextLayout;
+    });
+  }, [persistCorePanelLayout]);
+
   const handleGlobeFloatingFocus = useCallback(() => {
     setCorePanelLayout((currentLayout) => {
       const nextLayout = panelLayoutReducer(currentLayout, {
@@ -2117,6 +2297,19 @@ export function MainScreen() {
       const nextLayout = panelLayoutReducer(currentLayout, {
         type: "focus-floating-panel",
         panelId: "admin",
+      });
+
+      corePanelLayoutRef.current = nextLayout;
+      persistCorePanelLayout(nextLayout);
+      return nextLayout;
+    });
+  }, [persistCorePanelLayout]);
+
+  const handleTextVoiceFloatingFocus = useCallback(() => {
+    setCorePanelLayout((currentLayout) => {
+      const nextLayout = panelLayoutReducer(currentLayout, {
+        type: "focus-floating-panel",
+        panelId: "text-voice",
       });
 
       corePanelLayoutRef.current = nextLayout;
@@ -2244,6 +2437,10 @@ export function MainScreen() {
         return adminLastFloatingRectRef.current;
       }
 
+      if (panelId === "text-voice") {
+        return textVoiceLastFloatingRectRef.current;
+      }
+
       if (isSoundCloudPanelId(panelId)) {
         return soundCloudLastFloatingRectRef.current[panelId];
       }
@@ -2269,6 +2466,11 @@ export function MainScreen() {
       return;
     }
 
+    if (panelId === "text-voice") {
+      textVoiceLastFloatingRectRef.current = rect;
+      return;
+    }
+
     if (isSoundCloudPanelId(panelId)) {
       soundCloudLastFloatingRectRef.current[panelId] = rect;
     }
@@ -2288,6 +2490,10 @@ export function MainScreen() {
 
     if (panelId === "admin") {
       setIsAdminOpen(true);
+      return;
+    }
+
+    if (panelId === "text-voice") {
       return;
     }
 
@@ -3108,6 +3314,43 @@ export function MainScreen() {
                       </div>
                     </section>
                   ) : null;
+                case "text-voice":
+                  return (
+                    <section className="workspace-managed-panel" aria-label={TEXT_VOICE_PANEL_DEFINITION.title} data-dragging={draggingDockedPanelId === "text-voice" ? "true" : undefined}>
+                      <header
+                        className="workspace-managed-panel-header"
+                        tabIndex={0}
+                        aria-label="Drag Text Voice docked panel"
+                        onPointerDown={(event) => handleWorkspaceManagedHeaderPointerDown("text-voice", event)}
+                        onPointerMove={(event) => handleWorkspaceManagedHeaderPointerMove("text-voice", event)}
+                        onPointerUp={(event) => handleWorkspaceManagedHeaderPointerUp("text-voice", event)}
+                        onPointerCancel={(event) => handleWorkspaceManagedHeaderPointerUp("text-voice", event)}
+                      >
+                        <strong>{TEXT_VOICE_PANEL_DEFINITION.title}</strong>
+                        <div className="workspace-managed-panel-actions" onPointerDown={(event) => event.stopPropagation()}>
+                          <button type="button" aria-label="Float Text Voice panel" onClick={handleTextVoiceFloat}>
+                            Float
+                          </button>
+                          <button type="button" aria-label="Close Text Voice panel" onClick={handleTextVoicePanelClose}>
+                            Close
+                          </button>
+                          <button type="button" aria-label="Reset Text Voice panel position" onClick={handleTextVoiceReset}>
+                            Reset
+                          </button>
+                        </div>
+                      </header>
+                      <div className="workspace-managed-panel-body">
+                        <TextVoicePanel
+                          entries={textVoiceLog}
+                          syncConnection={state.syncStatus.connection}
+                          localProfileId={state.localProfile.id}
+                          maxLength={TEXT_VOICE_MAX_LENGTH}
+                          onSubmitText={handleSubmitTextVoice}
+                          onReplay={handleReplayTextVoice}
+                        />
+                      </div>
+                    </section>
+                  );
                 case "soundcloud-radio":
                 case "soundcloud-widget":
                 case "soundcloud-decks":
@@ -3252,6 +3495,43 @@ export function MainScreen() {
                 onSetLateJoinersJoinReady={setLateJoinersJoinReady}
                 onSetAutoJoinOnLoad={setAutoJoinOnLoad}
                 onSetCountdownPrecisionDigits={setCountdownPrecisionDigits}
+              />
+            </div>
+          </FloatingWindow>
+        ) : null}
+
+        {shouldShowFloatingDashboardPanels && !isTextVoiceDocked && textVoiceFloatingPanel ? (
+          <FloatingWindow
+            title={TEXT_VOICE_PANEL_DEFINITION.title}
+            isOpen={Boolean(textVoiceFloatingPanel)}
+            initialRect={TEXT_VOICE_PANEL_DEFINITION.defaultFloatingRect}
+            rect={textVoiceFloatingPanel.rect}
+            zIndex={textVoiceFloatingPanel.zIndex}
+            minWidth={TEXT_VOICE_PANEL_DEFINITION.minWidth}
+            minHeight={TEXT_VOICE_PANEL_DEFINITION.minHeight}
+            onClose={handleTextVoicePanelClose}
+            onRectChange={handleTextVoiceFloatingRectChange}
+            onInteractionEnd={handleCorePanelSplitResizeEnd}
+            onFocusPanel={handleTextVoiceFloatingFocus}
+            actions={
+              <>
+                <button type="button" className="panel-shell-action floating-window-action" aria-label="Dock Text Voice panel" onClick={handleTextVoiceDock}>
+                  Dock
+                </button>
+                <button type="button" className="panel-shell-action floating-window-action" aria-label="Reset Text Voice panel position" onClick={handleTextVoiceReset}>
+                  Reset
+                </button>
+              </>
+            }
+          >
+            <div className="workspace-managed-floating-body">
+              <TextVoicePanel
+                entries={textVoiceLog}
+                syncConnection={state.syncStatus.connection}
+                localProfileId={state.localProfile.id}
+                maxLength={TEXT_VOICE_MAX_LENGTH}
+                onSubmitText={handleSubmitTextVoice}
+                onReplay={handleReplayTextVoice}
               />
             </div>
           </FloatingWindow>

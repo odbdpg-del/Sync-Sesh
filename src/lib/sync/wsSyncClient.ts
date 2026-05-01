@@ -1,4 +1,4 @@
-import type { DabSyncState, LocalProfile, SessionEvent, SessionSnapshot, SyncStatus, TextVoiceEvent } from "../../types/session";
+import type { DabSyncState, LocalProfile, SessionEvent, SessionSnapshot, SyncStatus, TextVoiceEvent, TextVoiceReplayEvent } from "../../types/session";
 import { attachLocalProfile, createSessionSnapshot, normalizeSessionSnapshot } from "../lobby/sessionState";
 import type { SyncClient } from "./types";
 
@@ -11,6 +11,7 @@ interface WebSocketSyncClientOptions {
 type ServerMessage =
   | { type: "snapshot"; snapshot: SessionSnapshot; serverNow: number }
   | { type: "text_voice"; event: TextVoiceEvent; serverNow: number }
+  | { type: "text_voice_replay"; event: TextVoiceReplayEvent; serverNow: number }
   | { type: "text_voice_error"; message: string; serverNow: number }
   | { type: "pong"; sentAt: number; serverNow: number }
   | { type: "error"; message: string; serverNow: number };
@@ -28,6 +29,7 @@ function mergeState(snapshot: SessionSnapshot, localProfile: LocalProfile, syncS
 export class WebSocketSyncClient implements SyncClient {
   private readonly listeners = new Set<(state: DabSyncState) => void>();
   private readonly textVoiceListeners = new Set<(event: TextVoiceEvent) => void>();
+  private readonly textVoiceReplayListeners = new Set<(event: TextVoiceReplayEvent) => void>();
   private localProfile: LocalProfile;
   private readonly serverUrl: string;
   private readonly sessionId: string;
@@ -186,6 +188,21 @@ export class WebSocketSyncClient implements SyncClient {
           this.emit();
         }
 
+        if (payload.type === "text_voice_replay") {
+          this.syncStatus = {
+            ...this.syncStatus,
+            debugDetail: `Received text voice replay from ${payload.event.replayerName}.`,
+            serverTimeOffsetMs: payload.serverNow - Date.now(),
+            lastEventAt: new Date().toISOString(),
+          };
+
+          for (const listener of this.textVoiceReplayListeners) {
+            listener(payload.event);
+          }
+
+          this.emit();
+        }
+
         if (payload.type === "pong") {
           const now = Date.now();
           const latencyMs = now - payload.sentAt;
@@ -314,6 +331,28 @@ export class WebSocketSyncClient implements SyncClient {
     );
   }
 
+  sendTextVoiceReplay(textVoiceEventId: string) {
+    const socket = this.socket;
+
+    if (!socket || socket.readyState !== WebSocket.OPEN) {
+      this.syncStatus = {
+        ...this.syncStatus,
+        warning: "Text voice replay blocked while sync is disconnected.",
+      };
+      this.emit();
+      return;
+    }
+
+    socket.send(
+      JSON.stringify({
+        type: "text_voice_replay",
+        sessionId: this.sessionId,
+        textVoiceEventId,
+        localProfile: this.localProfile,
+      }),
+    );
+  }
+
   subscribe(listener: (state: DabSyncState) => void) {
     this.listeners.add(listener);
     listener(this.getSnapshot());
@@ -328,6 +367,14 @@ export class WebSocketSyncClient implements SyncClient {
 
     return () => {
       this.textVoiceListeners.delete(listener);
+    };
+  }
+
+  subscribeTextVoiceReplay(listener: (event: TextVoiceReplayEvent) => void) {
+    this.textVoiceReplayListeners.add(listener);
+
+    return () => {
+      this.textVoiceReplayListeners.delete(listener);
     };
   }
 

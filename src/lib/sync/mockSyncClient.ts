@@ -1,4 +1,4 @@
-import type { DabSyncState, LocalProfile, SessionSnapshot, SyncStatus, SessionEvent, TextVoiceEvent } from "../../types/session";
+import type { DabSyncState, LocalProfile, SessionSnapshot, SyncStatus, SessionEvent, TextVoiceEvent, TextVoiceReplayEvent } from "../../types/session";
 import { advanceSessionTime, attachLocalProfile, reduceSessionEvent } from "../lobby/sessionState";
 import { createMockSessionState } from "../../mocks/session";
 import type { SyncClient } from "./types";
@@ -12,6 +12,7 @@ function mergeState(snapshot: SessionSnapshot, localProfile: LocalProfile, syncS
 export class MockSyncClient implements SyncClient {
   private readonly listeners = new Set<(state: DabSyncState) => void>();
   private readonly textVoiceListeners = new Set<(event: TextVoiceEvent) => void>();
+  private readonly textVoiceReplayListeners = new Set<(event: TextVoiceReplayEvent) => void>();
   private localProfile: LocalProfile;
   private snapshot: SessionSnapshot;
   private syncStatus: SyncStatus;
@@ -103,6 +104,20 @@ export class MockSyncClient implements SyncClient {
     }
   }
 
+  sendTextVoiceReplay(textVoiceEventId: string) {
+    const event: TextVoiceReplayEvent = {
+      id: `mock-text-voice-replay-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      textVoiceEventId,
+      replayerId: this.localProfile.id,
+      replayerName: this.localProfile.displayName,
+      createdAt: new Date().toISOString(),
+    };
+
+    for (const listener of this.textVoiceReplayListeners) {
+      listener(event);
+    }
+  }
+
   subscribe(listener: (state: DabSyncState) => void) {
     this.listeners.add(listener);
     listener(this.getSnapshot());
@@ -117,6 +132,14 @@ export class MockSyncClient implements SyncClient {
 
     return () => {
       this.textVoiceListeners.delete(listener);
+    };
+  }
+
+  subscribeTextVoiceReplay(listener: (event: TextVoiceReplayEvent) => void) {
+    this.textVoiceReplayListeners.add(listener);
+
+    return () => {
+      this.textVoiceReplayListeners.delete(listener);
     };
   }
 

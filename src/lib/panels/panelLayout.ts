@@ -16,6 +16,7 @@ export const PANEL_IDS = [
   "soundcloud-radio",
   "soundcloud-widget",
   "soundcloud-decks",
+  "text-voice",
   "admin",
   "debug-console",
 ] as const;
@@ -127,6 +128,7 @@ const PANEL_MIN_SIZES: Record<PanelId, PanelMinSize> = {
   "soundcloud-radio": { minWidth: 1, minHeight: 1 },
   "soundcloud-widget": { minWidth: 1, minHeight: 1 },
   "soundcloud-decks": { minWidth: 1, minHeight: 1 },
+  "text-voice": { minWidth: 1, minHeight: 1 },
   admin: { minWidth: 1, minHeight: 1 },
   "debug-console": { minWidth: 1, minHeight: 1 },
 };

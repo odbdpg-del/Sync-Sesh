@@ -31,6 +31,14 @@ export interface TextVoiceEvent {
   createdAt: string;
 }
 
+export interface TextVoiceReplayEvent {
+  id: string;
+  textVoiceEventId: string;
+  replayerId: string;
+  replayerName: string;
+  createdAt: string;
+}
+
 export interface TimerConfig {
   durationSeconds: number;
   preCountSeconds: number;

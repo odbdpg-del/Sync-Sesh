@@ -8,6 +8,36 @@ Entries must be in reverse chronological order. New entries go at the top, above
 
 Use a level-two heading for every entry so the editor can fold each change.
 
+## [2609] - 2026-04-30 23:44 - `syncsesh-activity-promotion / TV-2.2 Text Voice Replay Attribution`
+
+- Added ephemeral `TextVoiceReplayEvent` support across shared types, sync clients, hook wiring, and the sync server.
+- Added a `text_voice_replay` WebSocket route with replay id validation, per-socket cooldown, and room broadcast.
+- Updated Text Voice replay so clicking Replay speaks only locally, then shares replay attribution with connected clients.
+- Updated Text Voice log rows to show local replay counts and remote replay attribution separately from the original author.
+- Closed `TV-2.2` in `docs/2d/text-to-voice-lobby-vision.md`.
+- Touched `src/types/session.ts`, `src/lib/sync/types.ts`, `src/lib/sync/wsSyncClient.ts`, `src/lib/sync/mockSyncClient.ts`, `src/hooks/useDabSyncSession.ts`, `src/screens/MainScreen.tsx`, `src/components/TextVoicePanel.tsx`, `src/styles/global.css`, `server/sync-server.ts`, `docs/2d/text-to-voice-lobby-vision.md`, and `changelog.md`.
+- Build/test: `npm.cmd run build` passed with the existing Vite large-chunk warning.
+
+## [2608] - 2026-04-30 23:32 - `syncsesh-activity-promotion / TV-2.1 Text Voice Replay Labels`
+
+- Updated Text Voice log rows to clearly mark the original author as `{senderName} said`.
+- Changed local replay status from `Replay N` to `You replayed Nx` so it does not read like a shared room replay.
+- Added local replay tooltip and accessible button label.
+- Closed `TV-2.1` in `docs/2d/text-to-voice-lobby-vision.md`.
+- Touched `src/components/TextVoicePanel.tsx`, `src/styles/global.css`, `docs/2d/text-to-voice-lobby-vision.md`, and `changelog.md`.
+- Build/test: `npm.cmd run build` passed with the existing Vite large-chunk warning.
+
+## [2607] - 2026-04-30 23:21 - `syncsesh-activity-promotion / TV-2 Text Voice Panel`
+
+- Added a hidden-by-default Text Voice panel that opens from the debug console with `showt2v`.
+- Added a panel input that sends plain text through the existing synced `text_voice` route without requiring the `say-` prefix.
+- Added a current-session text voice log with local replay buttons that do not rebroadcast audio.
+- Wired the new panel into dock, float, reset, close, focus, layout persistence, and panel registry helpers.
+- Styled the Text Voice panel to match the existing compact dark/cyan panel language.
+- Closed `TV-2` in `docs/2d/text-to-voice-lobby-vision.md`.
+- Touched `src/components/TextVoicePanel.tsx`, `src/screens/MainScreen.tsx`, `src/lib/panels/panelLayout.ts`, `src/lib/panels/panelRegistry.ts`, `src/styles/global.css`, `docs/2d/text-to-voice-lobby-vision.md`, and `changelog.md`.
+- Build/test: `npm.cmd run build` passed with the existing Vite large-chunk warning.
+
 ## [2606] - 2026-04-30 23:01 - `syncsesh-activity-promotion / Broadcast Debug Console Say`
 
 - Added an ephemeral `text_voice` WebSocket message so debug console `say-...` lines can be spoken by every client in the same sync room.

@@ -19,6 +19,7 @@ import type {
   SharedDawLiveSoundPayload,
   SharedDawTrackId,
   TextVoiceEvent,
+  TextVoiceReplayEvent,
 } from "../types/session";
 import { deriveLobbyState } from "../lib/lobby/sessionState";
 
@@ -60,10 +61,11 @@ function getDiscordStageWatchdog(authStage: DiscordAuthStage) {
 interface UseDabSyncSessionOptions {
   onDebugEvent?: (event: DebugConsoleEventInput) => void;
   onTextVoiceEvent?: (event: TextVoiceEvent) => void;
+  onTextVoiceReplayEvent?: (event: TextVoiceReplayEvent) => void;
 }
 
 export function useDabSyncSession(options: UseDabSyncSessionOptions = {}) {
-  const { onDebugEvent, onTextVoiceEvent } = options;
+  const { onDebugEvent, onTextVoiceEvent, onTextVoiceReplayEvent } = options;
   const [sdkState, setSdkState] = useState<EmbeddedAppState>({ enabled: false, buildId: __APP_BUILD_ID__, authStage: "idle" });
   const [generatedDisplayNames, setGeneratedDisplayNames] = useState<string[]>(GENERATED_PROFILE_NAMES);
   const [syncClient] = useState(() => createSyncClient());
@@ -401,6 +403,14 @@ export function useDabSyncSession(options: UseDabSyncSessionOptions = {}) {
     return syncClient.subscribeTextVoice(onTextVoiceEvent);
   }, [onTextVoiceEvent, syncClient]);
 
+  useEffect(() => {
+    if (!onTextVoiceReplayEvent) {
+      return undefined;
+    }
+
+    return syncClient.subscribeTextVoiceReplay(onTextVoiceReplayEvent);
+  }, [onTextVoiceReplayEvent, syncClient]);
+
   const retryDiscordProfile = useCallback(async () => {
     const attemptId = createDiscordAuthAttemptId();
     activeAuthAttemptIdRef.current = attemptId;
@@ -680,6 +690,10 @@ export function useDabSyncSession(options: UseDabSyncSessionOptions = {}) {
     syncClient.sendTextVoice(text);
   }, [syncClient]);
 
+  const sendTextVoiceReplay = useCallback((textVoiceEventId: string) => {
+    syncClient.sendTextVoiceReplay(textVoiceEventId);
+  }, [syncClient]);
+
   const setTimerDuration = useCallback(
     (durationSeconds: number) => {
       syncClient.send({ type: "set_timer_duration", durationSeconds });
@@ -825,6 +839,7 @@ export function useDabSyncSession(options: UseDabSyncSessionOptions = {}) {
     startReadyHold,
     endReadyHold,
     sendTextVoice,
+    sendTextVoiceReplay,
     setTimerDuration,
     setPrecountDuration,
     resetRound,

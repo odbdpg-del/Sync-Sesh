@@ -4997,6 +4997,155 @@ h2 {
   gap: 12px;
 }
 
+.text-voice-panel {
+  padding: 16px 18px 18px;
+  display: grid;
+  grid-template-rows: auto auto auto minmax(0, 1fr);
+  gap: 12px;
+  min-height: 0;
+}
+
+.text-voice-composer {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+}
+
+.text-voice-input {
+  min-width: 0;
+  width: 100%;
+  height: 42px;
+  box-sizing: border-box;
+  border: 1px solid rgba(87, 243, 255, 0.22);
+  border-radius: 10px;
+  background: rgba(5, 11, 22, 0.82);
+  color: #f4fdff;
+  font-family: var(--font-sans);
+  font-size: 0.95rem;
+  padding: 0 12px;
+  outline: none;
+}
+
+.text-voice-input:focus {
+  border-color: rgba(87, 243, 255, 0.58);
+  box-shadow: 0 0 0 3px rgba(87, 243, 255, 0.1);
+}
+
+.text-voice-send-button,
+.text-voice-replay-button {
+  min-height: 38px;
+  border: 1px solid rgba(87, 243, 255, 0.3);
+  border-radius: 999px;
+  background: rgba(7, 17, 32, 0.86);
+  color: #dffbff;
+  font-family: var(--font-display);
+  font-size: 0.76rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: border-color 160ms ease, box-shadow 160ms ease, color 160ms ease;
+}
+
+.text-voice-send-button {
+  padding: 0 18px;
+}
+
+.text-voice-replay-button {
+  padding: 0 14px;
+}
+
+.text-voice-send-button:hover,
+.text-voice-replay-button:hover {
+  border-color: rgba(87, 243, 255, 0.58);
+  color: #ffffff;
+  box-shadow: 0 0 16px rgba(87, 243, 255, 0.12);
+}
+
+.text-voice-send-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+  box-shadow: none;
+}
+
+.text-voice-panel-note {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--text-dim);
+  font-size: 0.78rem;
+}
+
+.text-voice-log {
+  min-height: 0;
+  overflow: auto;
+  display: grid;
+  align-content: start;
+  gap: 10px;
+  padding-right: 4px;
+  scrollbar-color: rgba(63, 233, 255, 0.42) rgba(8, 15, 28, 0.86);
+  scrollbar-width: thin;
+}
+
+.text-voice-entry {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  border: 1px solid rgba(87, 119, 180, 0.2);
+  border-radius: 14px;
+  background: linear-gradient(180deg, rgba(8, 18, 34, 0.62), rgba(3, 9, 20, 0.76));
+  padding: 12px;
+}
+
+.text-voice-entry-copy {
+  min-width: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.text-voice-entry-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  color: var(--text-dim);
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.text-voice-entry-meta strong {
+  color: #f4fdff;
+  font-family: var(--font-display);
+}
+
+.text-voice-local-replay {
+  color: #93fbff;
+}
+
+.text-voice-replay-attribution {
+  color: rgba(147, 251, 255, 0.74);
+  font-size: 0.75rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.text-voice-entry p,
+.text-voice-empty {
+  margin: 0;
+  color: var(--text-soft);
+  line-height: 1.35;
+}
+
+.text-voice-empty {
+  border: 1px dashed rgba(87, 119, 180, 0.24);
+  border-radius: 14px;
+  padding: 16px;
+  text-align: center;
+}
+
 .soundcloud-panel-toolbar {
   display: flex;
   align-items: center;

@@ -12,17 +12,19 @@ import {
   normalizeGeneratedProfileNames,
   parseGeneratedProfileNames,
 } from "../src/lib/session/generatedNamesCore";
-import type { LocalProfile, SessionEvent, SessionSnapshot, TextVoiceEvent } from "../src/types/session";
+import type { LocalProfile, SessionEvent, SessionSnapshot, TextVoiceEvent, TextVoiceReplayEvent } from "../src/types/session";
 
 type ClientMessage =
   | { type: "hello"; sessionId: string; localProfile: LocalProfile }
   | { type: "event"; sessionId: string; event: SessionEvent; localProfile: LocalProfile }
   | { type: "text_voice"; sessionId: string; text: string; localProfile: LocalProfile }
+  | { type: "text_voice_replay"; sessionId: string; textVoiceEventId: string; localProfile: LocalProfile }
   | { type: "ping"; sentAt: number };
 
 type ServerMessage =
   | { type: "snapshot"; snapshot: SessionSnapshot; serverNow: number }
   | { type: "text_voice"; event: TextVoiceEvent; serverNow: number }
+  | { type: "text_voice_replay"; event: TextVoiceReplayEvent; serverNow: number }
   | { type: "text_voice_error"; message: string; serverNow: number }
   | { type: "pong"; sentAt: number; serverNow: number }
   | { type: "error"; message: string; serverNow: number };
@@ -53,7 +55,10 @@ const discordRedirectUri = process.env.DISCORD_REDIRECT_URI ?? process.env.VITE_
 const buildId = `${process.env.npm_package_version ?? "0.1.0"}-${(process.env.RENDER_GIT_COMMIT ?? "dev").slice(0, 7)}`;
 const TEXT_VOICE_MAX_LENGTH = 180;
 const TEXT_VOICE_COOLDOWN_MS = 1500;
+const TEXT_VOICE_REPLAY_ID_MAX_LENGTH = 120;
+const TEXT_VOICE_REPLAY_COOLDOWN_MS = 500;
 const textVoiceLastSentAtBySocket = new Map<import("ws").WebSocket, number>();
+const textVoiceReplayLastSentAtBySocket = new Map<import("ws").WebSocket, number>();
 
 function trimDiagnosticText(value: string, maxLength = 400) {
   const compact = value.replace(/\s+/g, " ").trim();
@@ -77,6 +82,20 @@ function normalizeTextVoiceInput(value: unknown) {
   }
 
   return text;
+}
+
+function normalizeTextVoiceReplayInput(value: unknown) {
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const textVoiceEventId = value.trim();
+
+  if (!textVoiceEventId || textVoiceEventId.length > TEXT_VOICE_REPLAY_ID_MAX_LENGTH) {
+    return null;
+  }
+
+  return textVoiceEventId;
 }
 
 function parseJsonObject(text: string): Record<string, unknown> | null {
@@ -321,6 +340,24 @@ function broadcastTextVoice(sessionId: string, event: TextVoiceEvent) {
 
   const payload: ServerMessage = {
     type: "text_voice",
+    event,
+    serverNow: Date.now(),
+  };
+
+  for (const client of room.clients) {
+    send(client, payload);
+  }
+}
+
+function broadcastTextVoiceReplay(sessionId: string, event: TextVoiceReplayEvent) {
+  const room = rooms.get(sessionId);
+
+  if (!room) {
+    return;
+  }
+
+  const payload: ServerMessage = {
+    type: "text_voice_replay",
     event,
     serverNow: Date.now(),
   };
@@ -648,6 +685,48 @@ wsServer.on("connection", (socket) => {
       return;
     }
 
+    if (payload.type === "text_voice_replay") {
+      const room = getRoom(payload.sessionId);
+      const textVoiceEventId = normalizeTextVoiceReplayInput(payload.textVoiceEventId);
+
+      if (!textVoiceEventId) {
+        send(socket, {
+          type: "text_voice_error",
+          message: `Text voice replay id must be 1-${TEXT_VOICE_REPLAY_ID_MAX_LENGTH} characters.`,
+          serverNow: Date.now(),
+        });
+        return;
+      }
+
+      const now = Date.now();
+      const lastSentAt = textVoiceReplayLastSentAtBySocket.get(socket) ?? 0;
+
+      if (now - lastSentAt < TEXT_VOICE_REPLAY_COOLDOWN_MS) {
+        send(socket, {
+          type: "text_voice_error",
+          message: `Text voice replay is rate limited. Wait ${TEXT_VOICE_REPLAY_COOLDOWN_MS}ms between replays.`,
+          serverNow: now,
+        });
+        return;
+      }
+
+      const assignedProfile = assignGeneratedProfile(room, payload.localProfile);
+      socketToSessionInfo.set(socket, {
+        sessionId: payload.sessionId,
+        localProfile: assignedProfile,
+      });
+      textVoiceReplayLastSentAtBySocket.set(socket, now);
+
+      broadcastTextVoiceReplay(payload.sessionId, {
+        id: `text-voice-replay-${now}-${Math.random().toString(36).slice(2, 8)}`,
+        textVoiceEventId,
+        replayerId: assignedProfile.id,
+        replayerName: assignedProfile.displayName,
+        createdAt: new Date(now).toISOString(),
+      });
+      return;
+    }
+
     if (payload.type === "ping") {
       send(socket, {
         type: "pong",
@@ -667,6 +746,7 @@ wsServer.on("connection", (socket) => {
   socket.on("close", () => {
     const sessionInfo = socketToSessionInfo.get(socket);
     textVoiceLastSentAtBySocket.delete(socket);
+    textVoiceReplayLastSentAtBySocket.delete(socket);
 
     if (!sessionInfo) {
       return;

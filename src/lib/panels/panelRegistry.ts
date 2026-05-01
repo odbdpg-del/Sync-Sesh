@@ -86,6 +86,18 @@ export const PANEL_DEFINITIONS = {
     canDock: true,
     adapterKey: "soundcloud-decks-panel",
   },
+  "text-voice": {
+    id: "text-voice",
+    title: "Text Voice",
+    defaultDock: "bottom",
+    defaultFloatingRect: { x: 180, y: 140, width: 520, height: 420 },
+    minWidth: 1,
+    minHeight: 1,
+    canClose: true,
+    canFloat: true,
+    canDock: true,
+    adapterKey: "text-voice-panel",
+  },
   admin: {
     id: "admin",
     title: "Admin",

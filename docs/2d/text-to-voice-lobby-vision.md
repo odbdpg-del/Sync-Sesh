@@ -149,8 +149,12 @@ The server should validate the same basic constraints as the client: text length
 
 - [x] TV-0: Add Local Debug Console `say-...` Prototype.
 - [x] TV-1: Broadcast Debug Console `say-...` To The Lobby.
-- [ ] TV-2: Add Lobby Text-To-Voice Input UI.
-- [ ] TV-3: Add Ephemeral Sync Wire Message For Text Voice UI Path.
+- [x] TV-2: Add Text Voice Panel With Input, Log, And Replay.
+- [x] TV-2.1: Mark Local Replay Activity In The Text Voice Log.
+- [x] TV-2.2: Add Synced Replay Attribution Events.
+- [ ] TV-2.3: Add Local Browser Voice Picker.
+- [ ] TV-2.4: Add Local Browser Voice Style Presets.
+- [ ] TV-3: Optional Lobby Shortcut Or Header Entry Point.
 - [ ] TV-4: Add Mute And Queue Controls.
 - [ ] TV-5: Add Server-Side Validation, Cooldown, And Manual Discord Checks.
 - [ ] TV-6: Optional Voice Settings And Polish.
@@ -354,24 +358,612 @@ Status: Completed on 2026-04-30.
 - Server-generated audio.
 - Discord bot or voice-channel audio output.
 
-## [ ] TV-2 - Add Lobby Text-To-Voice Input UI
+## [x] TV-2 - Add Text Voice Panel With Input, Log, And Replay
 
 ### Summary
 
-Add a compact input to the lobby UI so users can type a voice line and submit with `Enter`.
+Add a dedicated dockable/floating Text Voice panel instead of putting the first user-facing UI directly into the Lobby panel.
+
+The panel must stay hidden by default. Users open it by typing `showt2v` in the debug console.
+
+The panel should let users:
+
+- type a spoken line without the `say-` prefix
+- press `Enter` to send it through the existing `text_voice` sync path
+- see a local log of text voice lines received during the current app session
+- click a replay button on a log row to hear that line locally again
+
+### Implementation Spec
+
+Status: Completed on 2026-04-30.
+
+Code seams verified:
+
+- `src/lib/panels/panelLayout.ts` owns the `PANEL_IDS` tuple, `PanelId` type, default layout helpers, min size map, and persisted layout validation.
+- `src/lib/panels/panelRegistry.ts` owns panel metadata and adapter keys.
+- `src/screens/MainScreen.tsx` owns layout visibility, `restorePanelInLayout(...)`, `removePanelFromLayout(...)`, docked/floating rendering, and debug console commands.
+- `src/screens/MainScreen.tsx` already receives `sendTextVoice(...)` from `useDabSyncSession`.
+- `src/screens/MainScreen.tsx` already receives incoming `TextVoiceEvent` through `handleTextVoiceEvent`.
+- `src/screens/MainScreen.tsx` already has `speakDebugConsoleLine(text)` for local TTS/replay.
+- `src/components` is the right place for a new `TextVoicePanel.tsx`.
+- `src/styles/global.css` holds panel styles. Existing SoundCloud and lobby panel styles provide reusable patterns.
+- Current `TV-1` text voice events are ephemeral and not stored in `SessionSnapshot`, so the panel log must be local UI state only.
+
+Implementation steps:
+
+1. Add a local UI log type in `MainScreen.tsx`, near nearby local types:
+
+   ```ts
+   interface TextVoiceLogEntry extends TextVoiceEvent {
+     receivedAt: string;
+     replayCount: number;
+   }
+   ```
+
+2. Add a local state buffer in `MainScreen.tsx`:
+
+   ```ts
+   const [textVoiceLog, setTextVoiceLog] = useState<TextVoiceLogEntry[]>([]);
+   ```
+
+   Keep the buffer bounded to the latest 30 entries.
+
+3. Update `handleTextVoiceEvent(event)` in `MainScreen.tsx`:
+
+   - speak `event.text` locally through `speakDebugConsoleLine(...)`
+   - append the event to `textVoiceLog`
+   - use event `id` as the stable key
+   - if a duplicate id arrives, do not duplicate the row
+   - keep existing debug console logging
+
+4. Add a `handleReplayTextVoice(id)` callback in `MainScreen.tsx`:
+
+   - find the matching log entry
+   - call `speakDebugConsoleLine(entry.text)`
+   - increment that entry's `replayCount`
+   - append/log a debug console command output such as `command:say:replay`
+
+5. Add a `handleSubmitTextVoice(text)` callback in `MainScreen.tsx`:
+
+   - trim the text
+   - reject empty text locally
+   - enforce the same 180-character max as server validation
+   - call `sendTextVoice(cleanText)`
+   - leave speaking to the server echo, same as the console command
+
+6. Add a new panel id:
+
+   - In `src/lib/panels/panelLayout.ts`, add `"text-voice"` to `PANEL_IDS`.
+   - Add `"text-voice": { minWidth: 1, minHeight: 1 }` to `PANEL_MIN_SIZES`.
+   - Do not add it to `createDefaultPanelLayout()`. This panel should be optional for now.
+   - Do not auto-open this panel during app startup.
+
+7. Add a registry definition:
+
+   - In `src/lib/panels/panelRegistry.ts`, add:
+
+     ```ts
+     "text-voice": {
+       id: "text-voice",
+       title: "Text Voice",
+       defaultDock: "bottom",
+       defaultFloatingRect: { x: 180, y: 140, width: 520, height: 420 },
+       minWidth: 1,
+       minHeight: 1,
+       canClose: true,
+       canFloat: true,
+       canDock: true,
+       adapterKey: "text-voice-panel",
+     }
+     ```
+
+8. Add `src/components/TextVoicePanel.tsx`:
+
+   Props:
+
+   ```ts
+   interface TextVoicePanelProps {
+     entries: TextVoiceLogEntry[];
+     syncConnection: SyncConnectionState;
+     maxLength: number;
+     onSubmitText: (text: string) => boolean;
+     onReplay: (id: string) => void;
+   }
+   ```
+
+   Component behavior:
+
+   - render as `<section className="panel text-voice-panel">`
+   - header title: `Text Voice`
+   - status pill: connected/standby using `syncConnection`
+   - single-line controlled input
+   - pressing `Enter` sends
+   - button sends the current input too
+   - clear input after successful local submit
+   - show latest entries newest-last or newest-first; recommended newest-first so replay stays visible
+   - each row shows sender name, message text, local received time, and a replay icon/text button
+   - empty state should be short and functional, such as `No voice lines yet.`
+
+   Import `SyncConnectionState` from `src/types/session`.
+
+9. Wire the panel in `MainScreen.tsx`:
+
+   - import `TextVoicePanel`
+   - create `TEXT_VOICE_PANEL_DEFINITION = getPanelDefinition("text-voice")`
+   - add `const textVoiceFloatingPanel = corePanelLayout.floating.find((panel) => panel.panelId === "text-voice");`
+   - add `const isTextVoiceDocked = dockTreeHasPanel(corePanelLayout.dockRoot, "text-voice");`
+   - add `handleTextVoicePanelClose`, `handleTextVoiceFloat`, `handleTextVoiceDock`, `handleTextVoiceReset`, `handleTextVoiceFloatingRectChange`, and `handleTextVoiceFloatingFocus` following the Globe/Admin/SoundCloud patterns
+   - update `getLastFloatingRectForPanel(...)`, `setLastFloatingRectForPanel(...)`, and `ensurePanelVisibleForDockedDrag(...)` for `"text-voice"`
+   - add a `case "text-voice"` inside `PanelWorkspace` render switch
+   - add floating render block following the Globe/Admin pattern
+
+10. Add a debug console command so testers can open it before a visible nav entry exists:
+
+    - command: `showt2v`
+    - action: restore/open `"text-voice"` panel
+    - update `DEBUG_CONSOLE_COMMAND_HELP`
+    - output label: `command:showt2v`
+
+11. Style in `src/styles/global.css`:
+
+    - `.text-voice-panel`
+    - `.text-voice-composer`
+    - `.text-voice-input`
+    - `.text-voice-send-button`
+    - `.text-voice-log`
+    - `.text-voice-entry`
+    - `.text-voice-entry-meta`
+    - `.text-voice-replay-button`
+    - `.text-voice-empty`
+
+    Keep the visual language aligned with existing panels: dark elevated surfaces, cyan borders, compact typography, no large marketing copy.
+
+12. Update this doc after implementation:
+
+    - mark TV-2 `[x]`
+    - fill checklist/completed sections
+    - keep TV-3 as optional visible entry point work
+
+13. Update `changelog.md` and run `npm.cmd run build`.
+
+### Checklist Items Achieved
+
+- Added the optional `"text-voice"` panel id, min sizes, and panel registry definition without adding it to the default startup layout.
+- Added `TextVoicePanel.tsx` with a compact input, connection status pill, current-session log, and row-level replay action.
+- Wired `showt2v` into the debug console to restore/open the hidden panel on demand.
+- Stored received text voice events in a bounded local log and deduped rows by event id.
+- Kept sending through the existing `text_voice` sync path so the sender hears the server echo once.
+- Added local replay through `speakDebugConsoleLine(...)` without rebroadcasting.
+- Added dock, float, reset, focus, close, and layout persistence branches for the new panel.
+- Styled the panel in the existing dark/cyan panel language.
+
+### Completed Implementation
+
+TV-2 now gives testers a hidden-by-default Text Voice panel opened by `showt2v`. The panel can send plain text voice lines without the `say-` prefix, logs received lines for the current app session, and replays a selected row locally. Build verification passed with the existing Vite large-chunk warning.
+
+### Acceptance Criteria
+
+- Text Voice panel is not visible by default on fresh load.
+- Running debug console command `showt2v` opens the Text Voice panel.
+- The Text Voice panel can be docked, floated, reset, and closed like other optional panels.
+- Typing `note to chat` in the panel and pressing `Enter` sends the same text voice event used by console `say-note to chat`.
+- The sender hears the message once through the server echo, not once locally and once through echo.
+- Received text voice events appear in the panel log for the current app session.
+- Clicking replay on a log row speaks that row locally only and does not broadcast.
+- Empty text is rejected locally.
+- Over 180 characters is rejected locally.
+- Existing console `say-...` still works.
+- Existing panel layout persistence remains valid when older saved layouts do not include `"text-voice"`.
+- `npm.cmd run build` passes.
+
+### Build And Manual Checks
+
+- Run `npm.cmd run build`.
+- Manual single-client mock check:
+  - open debug console
+  - run `showt2v`
+  - type `note to chat` in the panel
+  - confirm the app speaks `note to chat`
+  - confirm the row appears in the log
+  - click replay and confirm it speaks locally again
+- Manual two-client WebSocket check:
+  - open the panel in both clients
+  - submit from client A
+  - confirm both clients speak once
+  - confirm both logs receive the same line
+  - click replay on client B and confirm only client B speaks again
+
+### Risks
+
+- The panel system has several helper branches for optional panels; missing `"text-voice"` in one branch could make dock/float behavior inconsistent.
+- Existing saved panel layouts may be parsed against the updated `PANEL_IDS`; validation should remain permissive for layouts that simply do not include the new panel.
+- Browser TTS may still require user activation on receiving clients.
+
+### Wishlist Mapping
+
+- Turns the console-only feature into a user-facing panel.
+- Adds a current-session log of what everyone has said.
+- Adds local replay without rebroadcasting.
+
+### Non-Goals
+
+- Mute button.
+- Voice picker.
+- Volume/rate controls.
+- Persistent log across reloads.
+- Discord voice-channel output.
+
+## [x] TV-2.1 - Mark Local Replay Activity In The Text Voice Log
+
+### Summary
+
+Make replay status clearer without changing sync behavior.
+
+Right now replay increments a local `replayCount`, but the row needs to stay clear about two separate facts:
+
+- who wrote/spoke the original message
+- whether the current user replayed that message locally
+
+This phase should keep the original author as the canonical row identity and make any replay marker explicitly local/private to the current user.
+
+### Implementation Spec
+
+Status: Completed on 2026-04-30.
+
+Recommended implementation:
+
+- Keep replay local-only.
+- Do not add server messages.
+- Keep the original message author visually primary, using `entry.senderName`.
+- Suggested row structure: `Written by Sean Brown` or `Sean Brown said`, then the message text, then an optional local marker like `You replayed 1x`.
+- Rename the displayed replay label from `Replay 1` to something like `You replayed 1x`.
+- Optionally add a short tooltip or `aria-label` on the Replay button that says replay is local only.
+- Keep `TextVoiceLogEntry.replayCount` as local UI state.
+- Do not replace the original sender label with replay information.
+
+### Completed Implementation
+
+- Text voice rows now render the original author as `{senderName} said`.
+- Local replay status now renders separately as `You replayed {count}x`.
+- The Replay button now has an accessible label and tooltip that clarify replay is local.
+- No sync or server behavior changed.
+- Build passed with the existing Vite large-chunk warning.
+
+### Acceptance Criteria
+
+- Clicking Replay still speaks only on the current client.
+- Each text voice row clearly marks who wrote the original message.
+- The row visibly marks local replay activity as `You replayed 1x`, `You replayed 2x`, or similar.
+- Replay information does not obscure or replace the original author.
+- Other connected clients do not see the replay count change.
+- No new sync/server event is added.
+- `npm.cmd run build` passes.
+
+### Non-Goals
+
+- Showing which remote user replayed a line.
+- Broadcasting replay clicks.
+- Persisting replay history.
+
+## [x] TV-2.2 - Add Synced Replay Attribution Events
+
+### Summary
+
+Add an optional shared room event for replay attribution, so the log can show who replayed a line.
+
+This is intentionally separate from TV-2.1 because it changes replay from private/local UI state into a canonical room activity. The original spoken line should remain the canonical `TextVoiceEvent`; replay attribution should be a separate ephemeral event that references the original line id.
+
+### Implementation Spec
+
+Status: Completed on 2026-04-30.
+
+Code seams verified:
+
+- `src/types/session.ts` already exports `TextVoiceEvent`; replay attribution should live beside it as another shared ephemeral event type.
+- `src/lib/sync/types.ts` owns the `SyncClient` contract and currently exposes `sendTextVoice(...)` plus `subscribeTextVoice(...)`.
+- `src/lib/sync/wsSyncClient.ts` owns browser WebSocket text voice send/receive behavior and should add a second listener set for replay attribution.
+- `src/lib/sync/mockSyncClient.ts` should mirror replay attribution locally for offline/direct testing.
+- `server/sync-server.ts` already broadcasts ephemeral `text_voice` messages and can add a parallel `text_voice_replay` route without touching `SessionSnapshot`.
+- `src/hooks/useDabSyncSession.ts` bridges sync client events into `MainScreen` through callback options.
+- `src/screens/MainScreen.tsx` owns `textVoiceLog`, `handleReplayTextVoice(...)`, and incoming text voice event handling.
+- `src/components/TextVoicePanel.tsx` renders the author, message text, local replay marker, and Replay button.
+- `src/styles/global.css` owns the Text Voice row styling.
+
+Recommended event shape:
+
+```ts
+export interface TextVoiceReplayEvent {
+  id: string;
+  textVoiceEventId: string;
+  replayerId: string;
+  replayerName: string;
+  createdAt: string;
+}
+```
+
+Implementation steps:
+
+1. In `src/types/session.ts`, add:
+
+   ```ts
+   export interface TextVoiceReplayEvent {
+     id: string;
+     textVoiceEventId: string;
+     replayerId: string;
+     replayerName: string;
+     createdAt: string;
+   }
+   ```
+
+2. In `src/lib/sync/types.ts`, extend `SyncClient`:
+
+   ```ts
+   sendTextVoiceReplay: (textVoiceEventId: string) => void;
+   subscribeTextVoiceReplay: (listener: (event: TextVoiceReplayEvent) => void) => () => void;
+   ```
+
+   Import `TextVoiceReplayEvent` beside `TextVoiceEvent`.
+
+3. In `src/lib/sync/wsSyncClient.ts`:
+
+   - add a `textVoiceReplayListeners` set
+   - add `sendTextVoiceReplay(textVoiceEventId)` that sends:
+
+     ```ts
+     {
+       type: "text_voice_replay",
+       sessionId: this.sessionId,
+       textVoiceEventId,
+       localProfile: this.localProfile
+     }
+     ```
+
+   - block disconnected sends the same way `sendTextVoice(...)` does
+   - extend `ServerMessage` with `{ type: "text_voice_replay"; event: TextVoiceReplayEvent; serverNow: number }`
+   - emit incoming replay events to subscribers
+   - do not speak audio or mutate snapshots on receipt
+
+4. In `src/lib/sync/mockSyncClient.ts`:
+
+   - add `textVoiceReplayListeners`
+   - implement `sendTextVoiceReplay(textVoiceEventId)` by creating a local `TextVoiceReplayEvent`
+   - implement `subscribeTextVoiceReplay(...)`
+   - keep this local-only in mock mode
+
+5. In `server/sync-server.ts`:
+
+   - import `TextVoiceReplayEvent`
+   - extend `ClientMessage` with `{ type: "text_voice_replay"; sessionId: string; textVoiceEventId: string; localProfile: LocalProfile }`
+   - extend `ServerMessage` with `{ type: "text_voice_replay"; event: TextVoiceReplayEvent; serverNow: number }`
+   - add a helper to validate `textVoiceEventId`:
+     - trim
+     - reject empty
+     - reject over 120 characters
+   - optionally add a small replay cooldown per socket, roughly `500ms`, to prevent rapid spam
+   - create a `TextVoiceReplayEvent` from the assigned/current socket profile and broadcast it to all sockets in the same room
+   - do not verify the referenced `textVoiceEventId` against server history; text voice rows are intentionally ephemeral
+   - do not call `reduceSessionEvent(...)`
+   - do not add replay attribution to `SessionSnapshot`
+
+6. In `src/hooks/useDabSyncSession.ts`:
+
+   - accept a new callback option, `onTextVoiceReplayEvent?: (event: TextVoiceReplayEvent) => void`
+   - expose `sendTextVoiceReplay(textVoiceEventId)` from the hook result
+   - subscribe/unsubscribe to `syncClient.subscribeTextVoiceReplay(...)` near the existing text voice subscription
+
+7. In `src/components/TextVoicePanel.tsx`:
+
+   - update `TextVoiceLogEntry` to include replay attribution rows:
+
+     ```ts
+     replayAttributions: TextVoiceReplayEvent[];
+     ```
+
+   - keep `replayCount` if useful for the local count, or derive display from attribution rows
+   - add enough local profile context to render `You` for the current user's replays, either by passing `localProfileId` or preformatted labels from `MainScreen`
+   - render attribution separately from the original author, such as:
+     - `Replayed by You`
+     - `Replayed by Action Lonson`
+     - `Replayed by You + 2`
+   - keep the existing `{senderName} said` author label
+
+8. In `src/screens/MainScreen.tsx`:
+
+   - destructure `sendTextVoiceReplay` from `useDabSyncSession`
+   - add `handleTextVoiceReplayEvent(event)` before the hook call, similar to `handleTextVoiceEvent(...)`
+   - on incoming replay attribution, update the matching `textVoiceLog` row by `event.textVoiceEventId`
+   - if the original row is not present locally, ignore the attribution; new joiners should not reconstruct old rows
+   - dedupe replay attribution rows by replay event `id`
+   - update `handleReplayTextVoice(id)` so it:
+     - speaks the row locally immediately
+     - sends `sendTextVoiceReplay(id)` after local speech is attempted
+     - does not increment local replay state directly unless needed for instant optimistic UI
+   - avoid speaking audio when receiving a remote replay attribution
+   - log replay attribution to the debug console with a label like `command:say:replay:received`
+
+9. In `src/styles/global.css`:
+
+   - add a compact replay attribution style, for example `.text-voice-replay-attribution`
+   - keep it visually secondary to the original author and message text
+
+10. Update this doc after implementation:
+
+    - mark TV-2.2 `[x]`
+    - add a completed implementation section
+    - leave TV-3 as the next optional user-facing entry point
+
+11. Update `changelog.md` and run `npm.cmd run build`.
+
+### Completed Implementation
+
+- Added shared `TextVoiceReplayEvent` typing.
+- Added `sendTextVoiceReplay(...)` and `subscribeTextVoiceReplay(...)` to the sync client contract.
+- Added WebSocket and mock-client support for ephemeral `text_voice_replay` events.
+- Added server-side `text_voice_replay` handling with replay id validation, per-socket cooldown, and room broadcast.
+- Added hook wiring through `onTextVoiceReplayEvent`.
+- Updated the Text Voice panel log entries to store replay attributions.
+- Updated Replay so it still speaks only on the clicking client, then sends attribution to the room.
+- Rendered local replay counts as `You replayed Nx` and remote replay attribution as `Also replayed by Name`.
+- Build passed with the existing Vite large-chunk warning.
+
+### Acceptance Criteria
+
+- Clicking Replay still speaks locally for the clicking user.
+- Connected clients receive replay attribution for that row.
+- The text voice log can show which user replayed a line.
+- Replay attribution does not cause other clients to speak the line again.
+- New joiners do not receive old replay attributions.
+- Existing `text_voice` send/receive behavior still works.
+- `npm.cmd run build` passes.
+
+### Non-Goals
+
+- Persisting replay history across reloads.
+- Replaying audio on every client when one user clicks Replay.
+- Turning the panel into a durable chat transcript.
+
+## [ ] TV-2.3 - Add Local Browser Voice Picker
+
+### Summary
+
+Let each user choose which browser-provided text-to-speech voice they hear locally.
+
+This phase should stay fully client-side. It should not add server-generated audio, API keys, cloud TTS, or shared voice synchronization. Because browser voices are device-dependent, each user may see and hear a different list of voices.
 
 ### Implementation Spec
 
 Pending.
 
+Code seams:
+
+- `src/screens/MainScreen.tsx` owns `speakDebugConsoleLine(...)`, which currently creates `SpeechSynthesisUtterance` with default voice, rate, pitch, and volume.
+- `src/components/TextVoicePanel.tsx` is the first UI surface for a compact local voice selector.
+- Local preferences should use `localStorage`, similar to other local-only UI preferences.
+
+Recommended implementation:
+
+1. Add a small hook or helper to load browser voices:
+   - call `window.speechSynthesis.getVoices()`
+   - listen for `voiceschanged`
+   - normalize each voice to `{ name, lang, voiceURI, default }`
+   - handle empty voice lists gracefully
+
+2. Add local state in `MainScreen.tsx`:
+   - `availableTextVoiceVoices`
+   - `selectedTextVoiceURI`
+   - persist selected voice URI in local storage
+
+3. Update `speakDebugConsoleLine(...)` or replace it with a configurable helper:
+   - find the selected voice by `voiceURI`
+   - set `utterance.voice = selectedVoice`
+   - fall back to browser default if the selected voice is unavailable
+
+4. Add a compact selector to `TextVoicePanel.tsx`:
+   - label can be short: `Voice`
+   - options should show `voice.name` and `voice.lang`
+   - include `Browser default`
+   - disable or show fallback text if no voices are available yet
+
+5. Keep all voice choice behavior local:
+   - do not send selected voice through `text_voice`
+   - do not store voice choice in `SessionSnapshot`
+   - do not imply everyone hears the same voice
+
 ### Acceptance Criteria
 
-- The input appears in the lobby without crowding the player cards.
-- `Enter` submits a trimmed single-line message.
-- Empty messages do not submit.
-- The UI shows unsupported/muted/cooldown status without blocking normal lobby controls.
+- The Text Voice panel exposes a local browser voice selector.
+- Selecting a voice changes future local TTS playback on that client.
+- The selected voice persists across reloads on the same browser.
+- If a selected voice is missing on a future load, playback falls back to browser default.
+- No sync/server payloads change.
+- `npm.cmd run build` passes.
 
-## [ ] TV-3 - Add Ephemeral Sync Wire Message For Text Voice UI Path
+### Non-Goals
+
+- Shared voice selection for the whole room.
+- Cloud/server TTS.
+- Custom AI voice models.
+- Voice cloning.
+
+## [ ] TV-2.4 - Add Local Browser Voice Style Presets
+
+### Summary
+
+Add simple local voice style presets using browser TTS controls.
+
+This phase should make the feature more playful without adding cloud TTS. Styles should be implemented through `SpeechSynthesisUtterance` settings like `rate`, `pitch`, and `volume`, plus small text-prep transforms only if needed.
+
+### Implementation Spec
+
+Pending.
+
+Recommended presets:
+
+- `Normal`: rate `1`, pitch `1`, volume `1`
+- `Fast`: higher rate, normal pitch
+- `Tiny`: higher pitch, slightly faster rate
+- `Deep`: lower pitch, slightly slower rate
+- `Announcer`: slightly slower, strong/default volume
+- `Robot`: flatter feel using lower pitch plus punctuation/text transform if useful
+
+Recommended implementation:
+
+1. Add a local `TextVoiceStylePreset` type:
+
+   ```ts
+   type TextVoiceStylePreset = "normal" | "fast" | "tiny" | "deep" | "announcer" | "robot";
+   ```
+
+2. Add a preset config map near the TTS helper:
+
+   ```ts
+   const TEXT_VOICE_STYLE_PRESETS = {
+     normal: { label: "Normal", rate: 1, pitch: 1, volume: 1 },
+     fast: { label: "Fast", rate: 1.35, pitch: 1, volume: 1 },
+     tiny: { label: "Tiny", rate: 1.15, pitch: 1.55, volume: 1 },
+     deep: { label: "Deep", rate: 0.9, pitch: 0.65, volume: 1 },
+     announcer: { label: "Announcer", rate: 0.92, pitch: 0.95, volume: 1 },
+     robot: { label: "Robot", rate: 0.95, pitch: 0.8, volume: 1 },
+   };
+   ```
+
+3. Add local state in `MainScreen.tsx`:
+   - `selectedTextVoiceStyle`
+   - persist in local storage
+
+4. Update the TTS helper:
+   - apply selected preset to each `SpeechSynthesisUtterance`
+   - keep selected voice from TV-2.3 working if present
+   - do not change the shared text event
+
+5. Add a compact style selector to `TextVoicePanel.tsx`:
+   - label: `Style`
+   - show preset labels
+   - keep UI small and secondary to the input/log
+
+6. Keep styles local:
+   - do not sync selected style
+   - do not store in `SessionSnapshot`
+   - do not describe it as a real shared voice model
+
+### Acceptance Criteria
+
+- The Text Voice panel exposes local style presets.
+- Selecting a style changes future local TTS playback on that client.
+- Style choice persists across reloads on the same browser.
+- Voice picker and style preset can be used together.
+- Other users are not affected by the local style choice.
+- No sync/server payloads change.
+- `npm.cmd run build` passes.
+
+### Non-Goals
+
+- Server-generated audio.
+- Cloud TTS voice models.
+- Per-message synced style selection.
+- Guaranteed identical playback across all clients.
+
+## [ ] TV-3 - Optional Lobby Shortcut Or Header Entry Point
 
 ### Summary
 
