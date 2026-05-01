@@ -294,20 +294,23 @@ textarea {
   min-height: 100vh;
   min-height: 100dvh;
   margin: 0;
-  padding: 16px;
+  padding: 8px;
   gap: 0;
-  place-items: center;
+  align-content: start;
+  align-items: start;
+  justify-content: start;
+  justify-items: start;
 }
 
 .app-shell[data-small-mode="true"] .app-header {
   min-height: 0;
-  width: min(92vw, 720px);
+  width: min(92vw, 520px);
   max-width: 100%;
-  padding: 10px;
+  padding: 8px;
   justify-content: center;
   align-items: center;
   gap: 0;
-  border-radius: 24px;
+  border-radius: 18px;
 }
 
 .app-shell[data-small-mode="true"] .app-header::before,
@@ -2513,9 +2516,9 @@ textarea {
 .app-shell[data-small-mode="true"] .header-pill-small-timer {
   width: 100%;
   min-width: 0;
-  min-height: clamp(112px, 26vw, 196px);
-  padding: clamp(18px, 4vw, 34px);
-  border-radius: 20px;
+  min-height: clamp(88px, 22vw, 156px);
+  padding: clamp(14px, 3vw, 24px);
+  border-radius: 14px;
 }
 
 .header-small-timer-button {
@@ -2546,9 +2549,9 @@ textarea {
 }
 
 .app-shell[data-small-mode="true"] .seven-segment-display.header-small-timer-display {
-  --segment-width: clamp(0.32rem, 2.4vw, 1.02rem);
-  --segment-length: clamp(1.18rem, 7.6vw, 4.1rem);
-  gap: clamp(0.16rem, 1.1vw, 0.54rem);
+  --segment-width: clamp(0.28rem, 2vw, 0.78rem);
+  --segment-length: clamp(1rem, 6vw, 3.1rem);
+  gap: clamp(0.14rem, 0.9vw, 0.42rem);
   filter:
     drop-shadow(0 0 10px rgba(196, 252, 255, 0.32))
     drop-shadow(0 0 24px rgba(63, 233, 255, 0.2));
