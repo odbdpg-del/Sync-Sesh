@@ -8,6 +8,44 @@ Entries must be in reverse chronological order. New entries go at the top, above
 
 Use a level-two heading for every entry so the editor can fold each change.
 
+## [2606] - 2026-04-30 23:01 - `syncsesh-activity-promotion / Broadcast Debug Console Say`
+
+- Added an ephemeral `text_voice` WebSocket message so debug console `say-...` lines can be spoken by every client in the same sync room.
+- Added shared `TextVoiceEvent` typing plus WebSocket and mock sync client send/subscribe support.
+- Added server-side text validation, per-socket cooldown, and non-fatal text voice rejection messages.
+- Routed incoming text voice events through browser text-to-speech and debug console logging.
+- Closed `TV-1` in `docs/2d/text-to-voice-lobby-vision.md`.
+- Touched `src/types/session.ts`, `src/lib/sync/types.ts`, `src/lib/sync/wsSyncClient.ts`, `src/lib/sync/mockSyncClient.ts`, `src/hooks/useDabSyncSession.ts`, `src/screens/MainScreen.tsx`, `server/sync-server.ts`, `docs/2d/text-to-voice-lobby-vision.md`, and `changelog.md`.
+- Build/test: `npm.cmd run build` passed with the existing Vite large-chunk warning.
+
+## [2605] - 2026-04-30 22:55 - `syncsesh-activity-promotion / Strip Say Command Prefix`
+
+- Updated the debug console `say-...` command so `say-` is command syntax and only the text after the prefix is spoken.
+- Added an empty-message guard for `say-` with no message.
+- Updated the text-to-voice vision so the shared broadcast phase sends/spoken text without the `say-` prefix.
+- Touched `src/screens/MainScreen.tsx`, `docs/2d/text-to-voice-lobby-vision.md`, and `changelog.md`.
+- Build/test: `npm.cmd run build` passed with the existing Vite large-chunk warning.
+
+## [2604] - 2026-04-30 22:50 - `syncsesh-activity-promotion / Debug Console Say Command`
+
+- Added a `say-...` debug console command that speaks the submitted command text locally through browser text-to-speech.
+- Updated debug console help and the text-to-voice vision with the console prototype path.
+- Touched `src/screens/MainScreen.tsx`, `docs/2d/text-to-voice-lobby-vision.md`, and `changelog.md`.
+- Build/test: `npm.cmd run build` passed with the existing Vite large-chunk warning.
+
+## [2603] - 2026-04-30 22:43 - `syncsesh-activity-promotion / Player Card Hover Glow`
+
+- Removed the lobby player-card hover lift so cards no longer overlap neighboring borders.
+- Added a contained border and glow hover treatment for player cards while keeping empty slots flat.
+- Touched `src/styles/global.css` and `changelog.md`.
+- Build/test: `npm.cmd run build` passed with the existing Vite large-chunk warning.
+
+## [2602] - 2026-04-30 22:20 - `syncsesh-activity-promotion / Tighten Player Card Avatar Padding`
+
+- Matched the lobby player-card horizontal padding to its top and bottom padding so the avatar sits closer to the left edge.
+- Touched `src/styles/global.css` and `changelog.md`.
+- Build/test: `npm.cmd run build` passed with the existing Vite large-chunk warning.
+
 ## [2601] - 2026-04-30 22:14 - `syncsesh-activity-promotion / Inline Custom Player Name Edit`
 
 - Added double-click inline editing for the local player's lobby-card display name.

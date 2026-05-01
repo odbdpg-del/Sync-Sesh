@@ -12,15 +12,18 @@ import {
   normalizeGeneratedProfileNames,
   parseGeneratedProfileNames,
 } from "../src/lib/session/generatedNamesCore";
-import type { LocalProfile, SessionEvent, SessionSnapshot } from "../src/types/session";
+import type { LocalProfile, SessionEvent, SessionSnapshot, TextVoiceEvent } from "../src/types/session";
 
 type ClientMessage =
   | { type: "hello"; sessionId: string; localProfile: LocalProfile }
   | { type: "event"; sessionId: string; event: SessionEvent; localProfile: LocalProfile }
+  | { type: "text_voice"; sessionId: string; text: string; localProfile: LocalProfile }
   | { type: "ping"; sentAt: number };
 
 type ServerMessage =
   | { type: "snapshot"; snapshot: SessionSnapshot; serverNow: number }
+  | { type: "text_voice"; event: TextVoiceEvent; serverNow: number }
+  | { type: "text_voice_error"; message: string; serverNow: number }
   | { type: "pong"; sentAt: number; serverNow: number }
   | { type: "error"; message: string; serverNow: number };
 
@@ -48,6 +51,9 @@ const discordClientId = process.env.DISCORD_CLIENT_ID ?? process.env.VITE_DISCOR
 const discordClientSecret = process.env.DISCORD_CLIENT_SECRET;
 const discordRedirectUri = process.env.DISCORD_REDIRECT_URI ?? process.env.VITE_DISCORD_REDIRECT_URI ?? "https://127.0.0.1";
 const buildId = `${process.env.npm_package_version ?? "0.1.0"}-${(process.env.RENDER_GIT_COMMIT ?? "dev").slice(0, 7)}`;
+const TEXT_VOICE_MAX_LENGTH = 180;
+const TEXT_VOICE_COOLDOWN_MS = 1500;
+const textVoiceLastSentAtBySocket = new Map<import("ws").WebSocket, number>();
 
 function trimDiagnosticText(value: string, maxLength = 400) {
   const compact = value.replace(/\s+/g, " ").trim();
@@ -57,6 +63,20 @@ function trimDiagnosticText(value: string, maxLength = 400) {
   }
 
   return `${compact.slice(0, maxLength - 3)}...`;
+}
+
+function normalizeTextVoiceInput(value: unknown) {
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const text = value.replace(/\s+/g, " ").trim();
+
+  if (!text || text.length > TEXT_VOICE_MAX_LENGTH) {
+    return null;
+  }
+
+  return text;
 }
 
 function parseJsonObject(text: string): Record<string, unknown> | null {
@@ -284,6 +304,24 @@ function broadcast(sessionId: string) {
   const payload: ServerMessage = {
     type: "snapshot",
     snapshot: room.snapshot,
+    serverNow: Date.now(),
+  };
+
+  for (const client of room.clients) {
+    send(client, payload);
+  }
+}
+
+function broadcastTextVoice(sessionId: string, event: TextVoiceEvent) {
+  const room = rooms.get(sessionId);
+
+  if (!room) {
+    return;
+  }
+
+  const payload: ServerMessage = {
+    type: "text_voice",
+    event,
     serverNow: Date.now(),
   };
 
@@ -568,6 +606,48 @@ wsServer.on("connection", (socket) => {
       return;
     }
 
+    if (payload.type === "text_voice") {
+      const room = getRoom(payload.sessionId);
+      const text = normalizeTextVoiceInput(payload.text);
+
+      if (!text) {
+        send(socket, {
+          type: "text_voice_error",
+          message: `Text voice must be 1-${TEXT_VOICE_MAX_LENGTH} characters.`,
+          serverNow: Date.now(),
+        });
+        return;
+      }
+
+      const now = Date.now();
+      const lastSentAt = textVoiceLastSentAtBySocket.get(socket) ?? 0;
+
+      if (now - lastSentAt < TEXT_VOICE_COOLDOWN_MS) {
+        send(socket, {
+          type: "text_voice_error",
+          message: `Text voice is rate limited. Wait ${TEXT_VOICE_COOLDOWN_MS}ms between lines.`,
+          serverNow: now,
+        });
+        return;
+      }
+
+      const assignedProfile = assignGeneratedProfile(room, payload.localProfile);
+      socketToSessionInfo.set(socket, {
+        sessionId: payload.sessionId,
+        localProfile: assignedProfile,
+      });
+      textVoiceLastSentAtBySocket.set(socket, now);
+
+      broadcastTextVoice(payload.sessionId, {
+        id: `text-voice-${now}-${Math.random().toString(36).slice(2, 8)}`,
+        senderId: assignedProfile.id,
+        senderName: assignedProfile.displayName,
+        text,
+        createdAt: new Date(now).toISOString(),
+      });
+      return;
+    }
+
     if (payload.type === "ping") {
       send(socket, {
         type: "pong",
@@ -586,6 +666,7 @@ wsServer.on("connection", (socket) => {
 
   socket.on("close", () => {
     const sessionInfo = socketToSessionInfo.get(socket);
+    textVoiceLastSentAtBySocket.delete(socket);
 
     if (!sessionInfo) {
       return;

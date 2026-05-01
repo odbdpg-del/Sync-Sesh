@@ -18,6 +18,7 @@ import type {
   SharedDawClipPublishPayload,
   SharedDawLiveSoundPayload,
   SharedDawTrackId,
+  TextVoiceEvent,
 } from "../types/session";
 import { deriveLobbyState } from "../lib/lobby/sessionState";
 
@@ -58,10 +59,11 @@ function getDiscordStageWatchdog(authStage: DiscordAuthStage) {
 
 interface UseDabSyncSessionOptions {
   onDebugEvent?: (event: DebugConsoleEventInput) => void;
+  onTextVoiceEvent?: (event: TextVoiceEvent) => void;
 }
 
 export function useDabSyncSession(options: UseDabSyncSessionOptions = {}) {
-  const { onDebugEvent } = options;
+  const { onDebugEvent, onTextVoiceEvent } = options;
   const [sdkState, setSdkState] = useState<EmbeddedAppState>({ enabled: false, buildId: __APP_BUILD_ID__, authStage: "idle" });
   const [generatedDisplayNames, setGeneratedDisplayNames] = useState<string[]>(GENERATED_PROFILE_NAMES);
   const [syncClient] = useState(() => createSyncClient());
@@ -391,6 +393,14 @@ export function useDabSyncSession(options: UseDabSyncSessionOptions = {}) {
     };
   }, [onDebugEvent, syncClient]);
 
+  useEffect(() => {
+    if (!onTextVoiceEvent) {
+      return undefined;
+    }
+
+    return syncClient.subscribeTextVoice(onTextVoiceEvent);
+  }, [onTextVoiceEvent, syncClient]);
+
   const retryDiscordProfile = useCallback(async () => {
     const attemptId = createDiscordAuthAttemptId();
     activeAuthAttemptIdRef.current = attemptId;
@@ -666,6 +676,10 @@ export function useDabSyncSession(options: UseDabSyncSessionOptions = {}) {
     syncClient.send({ type: "ready_hold_end" });
   }, [syncClient]);
 
+  const sendTextVoice = useCallback((text: string) => {
+    syncClient.sendTextVoice(text);
+  }, [syncClient]);
+
   const setTimerDuration = useCallback(
     (durationSeconds: number) => {
       syncClient.send({ type: "set_timer_duration", durationSeconds });
@@ -810,6 +824,7 @@ export function useDabSyncSession(options: UseDabSyncSessionOptions = {}) {
     useDiscordDisplayName,
     startReadyHold,
     endReadyHold,
+    sendTextVoice,
     setTimerDuration,
     setPrecountDuration,
     resetRound,

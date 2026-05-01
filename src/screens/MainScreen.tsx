@@ -50,7 +50,7 @@ import {
 import { getPanelDefinition } from "../lib/panels/panelRegistry";
 import { enableOfflineMode } from "../lib/startup/offlineMode";
 import type { StartupProgress, StartupProgressStep } from "../lib/startup/startupProgress";
-import type { SyncConnectionState } from "../types/session";
+import type { SyncConnectionState, TextVoiceEvent } from "../types/session";
 import backgroundVideo from "../../media/202587-918431513.mp4";
 
 const RenderingStackSpike = lazy(() =>
@@ -64,8 +64,9 @@ type DebugConsoleDisplayMode = "fullscreen" | "fullscreen2" | "float";
 const DEBUG_CONSOLE_COMMAND_HISTORY_LIMIT = 50;
 
 const DEBUG_CONSOLE_COMMAND_HELP =
-  "Available commands: hide, clear, help, resetlayout, small, normal, admin, hidejoin, showjoin, show globe, hide globe, force start, force stop, setround = 5, copy, snapshot, retry, radio, float, console1, console2, fullscreen, background, background 0-100, trans-text 0-100, compact, filter all, filter auth, filter sdk, filter profile, filter sync, filter network, filter ui, filter command.";
+  "Available commands: hide, clear, help, say-your message, resetlayout, small, normal, admin, hidejoin, showjoin, show globe, hide globe, force start, force stop, setround = 5, copy, snapshot, retry, radio, float, console1, console2, fullscreen, background, background 0-100, trans-text 0-100, compact, filter all, filter auth, filter sdk, filter profile, filter sync, filter network, filter ui, filter command. Example: say-note to chat speaks note to chat.";
 const DEBUG_CONSOLE_SET_ROUND_COMMAND_PATTERN = /^set\s*round\s*=\s*(-?\d+)$/;
+const DEBUG_CONSOLE_SAY_COMMAND_PREFIX = "say-";
 const CONSOLE2_INPUT_COMMAND_BACKGROUND_OPACITY_PERCENT = 100;
 const CONSOLE2_COMPACT_BACKGROUND_OPACITY_PERCENT = 20;
 const CONSOLE2_COMPACT_TEXT_OPACITY_PERCENT = 75;
@@ -119,6 +120,28 @@ function getStartupDebugLevel(status: StartupProgressStep["status"]) {
   }
 
   return "info";
+}
+
+function speakDebugConsoleLine(text: string) {
+  if (typeof window === "undefined" || !("speechSynthesis" in window) || !("SpeechSynthesisUtterance" in window)) {
+    return {
+      ok: false,
+      detail: "Text-to-speech is unavailable in this browser.",
+    };
+  }
+
+  window.speechSynthesis.cancel();
+
+  const utterance = new SpeechSynthesisUtterance(text);
+  utterance.rate = 1;
+  utterance.pitch = 1;
+  utterance.volume = 1;
+  window.speechSynthesis.speak(utterance);
+
+  return {
+    ok: true,
+    detail: `Speaking: ${text}`,
+  };
 }
 
 function hasRenderingSpikeParam() {
@@ -544,6 +567,16 @@ export function MainScreen() {
   const handleDebugEvent = useCallback((event: DebugConsoleEventInput) => {
     debugEventHandlerRef.current?.(event);
   }, []);
+  const handleTextVoiceEvent = useCallback((event: TextVoiceEvent) => {
+    const result = speakDebugConsoleLine(event.text);
+
+    handleDebugEvent({
+      level: result.ok ? "info" : "warn",
+      category: "command",
+      label: result.ok ? "command:say:received" : "command:say:unavailable",
+      detail: `${event.senderName}: ${result.detail}`,
+    });
+  }, [handleDebugEvent]);
   const {
     state,
     lobbyState,
@@ -557,6 +590,7 @@ export function MainScreen() {
     useDiscordDisplayName,
     startReadyHold,
     endReadyHold,
+    sendTextVoice,
     setTimerDuration,
     setPrecountDuration,
     forceStartRound,
@@ -584,6 +618,7 @@ export function MainScreen() {
     dropStudioGuitar,
   } = useDabSyncSession({
     onDebugEvent: handleDebugEvent,
+    onTextVoiceEvent: handleTextVoiceEvent,
   });
   const applyConsole2ModePreset = useCallback((mode: Fullscreen2ConsoleMode) => {
     if (mode === "input") {
@@ -800,6 +835,28 @@ export function MainScreen() {
         level: "info",
         label: "command:help",
         detail: DEBUG_CONSOLE_COMMAND_HELP,
+      });
+      return;
+    }
+
+    if (submittedCommand.toLowerCase().startsWith(DEBUG_CONSOLE_SAY_COMMAND_PREFIX)) {
+      const sayText = submittedCommand.slice(DEBUG_CONSOLE_SAY_COMMAND_PREFIX.length).trim();
+
+      if (!sayText) {
+        debugConsoleState.appendCommandOutput({
+          level: "warn",
+          label: "command:say",
+          detail: "Use say-your message to speak a line.",
+        });
+        return;
+      }
+
+      sendTextVoice(sayText);
+
+      debugConsoleState.appendCommandOutput({
+        level: "info",
+        label: "command:say",
+        detail: `Text voice queued: ${sayText}`,
       });
       return;
     }
@@ -1265,7 +1322,7 @@ export function MainScreen() {
       label: "command:unknown",
       detail: `Unknown command: ${rawCommand}. ${DEBUG_CONSOLE_COMMAND_HELP}`,
     });
-  }, [debugConsoleDisplayMode, debugConsoleState, forceStartRound, forceStopRound, lobbyState.canUseAdminTools, openDebugConsole, retryDiscordProfile, setRoundNumber]);
+  }, [debugConsoleDisplayMode, debugConsoleState, forceStartRound, forceStopRound, lobbyState.canUseAdminTools, openDebugConsole, retryDiscordProfile, sendTextVoice, setRoundNumber]);
   const countdownDisplay = useCountdownDisplay(state);
   const { playCue, playSecretCodeStep } = useSoundEffects(state, lobbyState, countdownDisplay);
   const frontEndSoundCloudPlayer = useSoundCloudPlayer({

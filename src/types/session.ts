@@ -23,6 +23,14 @@ export interface LocalProfile {
   avatarUrl?: string;
 }
 
+export interface TextVoiceEvent {
+  id: string;
+  senderId: string;
+  senderName: string;
+  text: string;
+  createdAt: string;
+}
+
 export interface TimerConfig {
   durationSeconds: number;
   preCountSeconds: number;

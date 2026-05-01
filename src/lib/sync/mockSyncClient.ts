@@ -1,4 +1,4 @@
-import type { DabSyncState, LocalProfile, SessionSnapshot, SyncStatus, SessionEvent } from "../../types/session";
+import type { DabSyncState, LocalProfile, SessionSnapshot, SyncStatus, SessionEvent, TextVoiceEvent } from "../../types/session";
 import { advanceSessionTime, attachLocalProfile, reduceSessionEvent } from "../lobby/sessionState";
 import { createMockSessionState } from "../../mocks/session";
 import type { SyncClient } from "./types";
@@ -11,6 +11,7 @@ function mergeState(snapshot: SessionSnapshot, localProfile: LocalProfile, syncS
 
 export class MockSyncClient implements SyncClient {
   private readonly listeners = new Set<(state: DabSyncState) => void>();
+  private readonly textVoiceListeners = new Set<(event: TextVoiceEvent) => void>();
   private localProfile: LocalProfile;
   private snapshot: SessionSnapshot;
   private syncStatus: SyncStatus;
@@ -88,12 +89,34 @@ export class MockSyncClient implements SyncClient {
     this.emit();
   }
 
+  sendTextVoice(text: string) {
+    const event: TextVoiceEvent = {
+      id: `mock-text-voice-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      senderId: this.localProfile.id,
+      senderName: this.localProfile.displayName,
+      text,
+      createdAt: new Date().toISOString(),
+    };
+
+    for (const listener of this.textVoiceListeners) {
+      listener(event);
+    }
+  }
+
   subscribe(listener: (state: DabSyncState) => void) {
     this.listeners.add(listener);
     listener(this.getSnapshot());
 
     return () => {
       this.listeners.delete(listener);
+    };
+  }
+
+  subscribeTextVoice(listener: (event: TextVoiceEvent) => void) {
+    this.textVoiceListeners.add(listener);
+
+    return () => {
+      this.textVoiceListeners.delete(listener);
     };
   }
 
