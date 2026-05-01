@@ -12,7 +12,7 @@ Use a level-two heading for every entry so the editor can fold each change.
 
 - Changed Small Mode header rendering so the Sync Sesh title and logo are hidden while compacted.
 - Made the compact timer itself a button that exits Small Mode and returns the normal dashboard.
-- Reduced Small Mode shell/header padding and shrank the header timer display.
+- Reframed Small Mode as a full-viewport centered timer card for phone/app-switcher previews.
 - Touched `src/components/AppHeader.tsx`, `src/styles/global.css`, and `changelog.md`.
 - Build/test: `npm.cmd run build` passed with the existing Vite large-chunk warning.
 
